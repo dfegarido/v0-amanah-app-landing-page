@@ -20,12 +20,11 @@ export default function AmanahLanding() {
             </div>
 
             <h2 className="mb-4 text-4xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl text-balance">
-              Your trusted Muslim community platform
+              Amanah is not just an app
             </h2>
 
-            <p className="mx-auto mb-8 max-w-2xl text-lg text-muted-foreground md:text-xl leading-relaxed">
-              Connect with your local masjid, discover trusted Muslim businesses, and strengthen your ummah through
-              Amanah — built on the foundation of trust.
+            <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground md:text-xl leading-relaxed">
+              It's a movement to rebuild trust, inspire excellence, and uplift communities through innovation.
             </p>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
@@ -36,6 +35,26 @@ export default function AmanahLanding() {
                 Download for Android
               </Button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mission Statement Section */}
+      <section className="px-4 py-20 bg-secondary/50">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center mb-12">
+            <h3 className="mb-6 text-3xl font-bold text-foreground md:text-4xl">Mission Statement</h3>
+            <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl mx-auto">
+              Amanah App exists to revive the legacy of trust-based commerce that once spread Islam across continents,
+              through the integrity of Muslim merchants. Our mission is to build a digital ecosystem where verified
+              Muslim-owned businesses thrive, mosques are empowered, and communities reconnect through shared values of
+              honesty, service, and social impact.
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-xl font-semibold text-primary mb-2">
+              Join the movement. Build trust. Empower your community.
+            </p>
           </div>
         </div>
       </section>
@@ -138,26 +157,47 @@ export default function AmanahLanding() {
               Amanah means trust, and it's at the heart of everything we do. We're committed to creating a safe,
               authentic space where Muslims can connect, support each other, and strengthen their faith together.
             </p>
-            <div className="grid gap-8 md:grid-cols-3 w-full">
-              <div>
-                <div className="mb-2 text-4xl font-bold text-primary">100%</div>
-                <div className="text-sm text-muted-foreground">Verified Muslim Businesses</div>
+            <p className="mb-8 max-w-2xl text-lg font-semibold text-foreground">We never sell your information</p>
+            <div className="grid gap-8 md:grid-cols-3 max-w-4xl w-full">
+              <div className="text-center">
+                <div className="mb-2 text-5xl font-bold text-primary">25%</div>
+                <p className="text-lg text-muted-foreground">Of all profit is donated</p>
               </div>
-              <div>
-                <div className="mb-2 text-4xl font-bold text-primary">30%</div>
-                <div className="text-sm text-muted-foreground">Of all profits goes back to the mosques</div>
+              <div className="text-center">
+                <div className="mb-2 text-5xl font-bold text-primary">10%</div>
+                <p className="text-lg text-muted-foreground">To the mosque of your choice</p>
               </div>
-              <div>
-                <div className="mb-2 text-4xl font-bold text-primary">50K+</div>
-                <div className="text-sm text-muted-foreground">Active Community Members</div>
+              <div className="text-center">
+                <div className="mb-2 text-5xl font-bold text-primary">15%</div>
+                <p className="text-lg text-muted-foreground">To Amanah Org for Muslim children's education</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Screenshot Section */}
+      {/* Hadith Section */}
       <section className="px-4 py-20">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-center p-8 md:p-12 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl border border-primary/20">
+            <h3 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">Prophetic Hadith</h3>
+            <blockquote className="mb-6">
+              <p className="text-xl md:text-2xl text-foreground font-semibold italic mb-4 leading-relaxed">
+                "The honest and trustworthy merchant will be with the Prophets, the truthful, and the martyrs."
+              </p>
+              <cite className="text-muted-foreground text-lg">— Reported by At-Tirmidhi</cite>
+            </blockquote>
+            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
+              This Hadith honors those who conduct business with sincerity and trust, placing them among the most
+              revered in the Hereafter. It's a direct affirmation of the spiritual value behind our mission: that
+              commerce, when rooted in Amanah, becomes a path to divine reward.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Screenshot Section */}
+      <section className="px-4 py-20 bg-secondary/30">
         <div className="mx-auto max-w-7xl">
           <div className="mb-16 text-center">
             <h3 className="mb-4 text-3xl font-bold text-foreground md:text-5xl">See Amanah in action</h3>
