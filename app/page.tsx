@@ -1,38 +1,161 @@
-import { MSquare as Mosque, Store, MapPin, Heart, Calendar, MessageCircle, Shield } from "lucide-react"
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { MSquare as Mosque, Store, MapPin, Heart, Calendar, MessageCircle, Shield, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { AddMosqueForm } from "@/components/add-mosque-form"
+import { LanguageToggle } from "@/components/language-toggle"
+
+const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
+const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
+
+const translations = {
+  en: {
+    heroTitle: "Amanah is not just an app",
+    heroSubtitle: "It's a movement to rebuild trust, inspire excellence, and uplift communities through innovation.",
+    downloadIOS: "Download for iOS",
+    downloadAndroid: "Download for Android",
+    missionTitle: "Mission Statement",
+    missionText:
+      "Amanah App exists to revive the legacy of trust-based commerce that once spread Islam across continents, through the integrity of Muslim merchants. Our mission is to build a digital ecosystem where verified Muslim-owned businesses thrive, mosques are empowered, and communities reconnect through shared values of honesty, service, and social impact.",
+    missionCTA: "Join the movement. Build trust. Empower your community.",
+    featuresTitle: "Everything your Muslim community needs",
+    featuresSubtitle: "Amanah brings together the essential tools to keep you connected with your faith and community.",
+    connectMosque: "Connect With Your Mosque",
+    connectMosqueDesc:
+      "Access your favorite mosque's app, stay updated with prayer times, events, and community announcements in one place.",
+    businessDirectory: "Muslim Business Directory",
+    businessDirectoryDesc:
+      "Discover and support trusted Muslim-owned businesses in your area. Build economic strength within the ummah.",
+    mosqueNearMe: "Mosque Near Me",
+    mosqueNearMeDesc: "Find nearby masjids wherever you are. Never miss a prayer with our comprehensive mosque finder.",
+    events: "Events & Gatherings",
+    eventsDesc:
+      "Discover community events, Islamic classes, and gatherings. Stay engaged with your local Muslim community.",
+    supportMasjid: "Support Your Masjid",
+    supportMasjidDesc:
+      "Make donations easily and securely. Support your local mosque and Islamic institutions with just a few taps.",
+    directComm: "Direct Communication",
+    directCommDesc: "Chat directly with your mosque administration. Ask questions, get updates, and stay connected.",
+    trustTitle: "Built on Amanah — Trust",
+    trustDesc:
+      "Amanah means trust, and it's at the heart of everything we do. We're committed to creating a safe, authentic space where Muslims can connect, support each other, and strengthen their faith together.",
+    noSellInfo: "We never sell your information",
+    profitDonated: "Of all profit is donated",
+    toMosque: "To the mosque of your choice",
+    toEducation: "To Amanah Org for Muslim children's education",
+    hadithTitle: "Prophetic Hadith",
+    hadithText: '"The honest and trustworthy merchant will be with the Prophets, the truthful, and the martyrs."',
+    hadithSource: "— Reported by At-Tirmidhi",
+    hadithExplanation:
+      "This Hadith honors those who conduct business with sincerity and trust, placing them among the most revered in the Hereafter. It's a direct affirmation of the spiritual value behind our mission: that commerce, when rooted in Amanah, becomes a path to divine reward.",
+    screenshotsTitle: "See Amanah in action",
+    screenshotsSubtitle: "A seamless experience designed for the modern Muslim community.",
+    ctaTitle: "Join thousands of Muslims strengthening their community",
+    ctaSubtitle: "Download Amanah today and stay connected with your faith, your mosque, and your ummah.",
+    addMosqueTitle: "Is your mosque not listed?",
+    addMosqueSubtitle: "Help us grow our community by adding your local masjid to the Amanah network.",
+  },
+  ar: {
+    heroTitle: "أمانة ليست مجرد تطبيق",
+    heroSubtitle: "إنها حركة لإعادة بناء الثقة، وإلهام التميز، ورفع المجتمعات من خلال الابتكار.",
+    downloadIOS: "تحميل لـ iOS",
+    downloadAndroid: "تحميل لـ Android",
+    missionTitle: "بيان المهمة",
+    missionText:
+      "يوجد تطبيق أمانة لإحياء إرث التجارة القائمة على الثقة التي نشرت الإسلام عبر القارات من خلال نزاهة التجار المسلمين. مهمتنا هي بناء نظام بيئي رقمي حيث تزدهر الأعمال المملوكة للمسلمين والتي تم التحقق منها، وتمكين المساجد، وإعادة ربط المجتمعات من خلال القيم المشتركة للصدق والخدمة والتأثير الاجتماعي.",
+    missionCTA: "انضم إلى الحركة. ابنِ الثقة. مكّن مجتمعك.",
+    featuresTitle: "كل ما يحتاجه مجتمعك المسلم",
+    featuresSubtitle: "تجمع أمانة الأدوات الأساسية لإبقائك على اتصال بإيمانك ومجتمعك.",
+    connectMosque: "تواصل مع مسجدك",
+    connectMosqueDesc:
+      "الوصول إلى تطبيق مسجدك المفضل، والبقاء على اطلاع بأوقات الصلاة والفعاليات وإعلانات المجتمع في مكان واحد.",
+    businessDirectory: "دليل الأعمال الإسلامية",
+    businessDirectoryDesc: "اكتشف ودعم الأعمال الموثوقة المملوكة للمسلمين في منطقتك. بناء القوة الاقتصادية داخل الأمة.",
+    mosqueNearMe: "مسجد بالقرب مني",
+    mosqueNearMeDesc: "ابحث عن المساجد القريبة أينما كنت. لا تفوت صلاة مع الباحث الشامل عن المساجد.",
+    events: "الفعاليات والتجمعات",
+    eventsDesc: "اكتشف الفعاليات المجتمعية والدروس الإسلامية والتجمعات. ابقَ منخرطًا مع مجتمعك المسلم المحلي.",
+    supportMasjid: "ادعم مسجدك",
+    supportMasjidDesc: "تبرع بسهولة وأمان. ادعم مسجدك المحلي والمؤسسات الإسلامية ببضع نقرات فقط.",
+    directComm: "التواصل المباشر",
+    directCommDesc: "تحدث مباشرة مع إدارة مسجدك. اطرح الأسئلة واحصل على التحديثات وابقَ على اتصال.",
+    trustTitle: "مبني على الأمانة — الثقة",
+    trustDesc:
+      "الأمانة تعني الثقة، وهي في صميم كل ما نقوم به. نحن ملتزمون بخلق مساحة آمنة وأصيلة حيث يمكن للمسلمين التواصل ودعم بعضهم البعض وتقوية إيمانهم معًا.",
+    noSellInfo: "نحن لا نبيع معلوماتك أبدًا",
+    profitDonated: "من جميع الأرباح يتم التبرع بها",
+    toMosque: "إلى المسجد الذي تختاره",
+    toEducation: "إلى منظمة أمانة لتعليم الأطفال المسلمين",
+    hadithTitle: "حديث نبوي",
+    hadithText: '"التاجر الصدوق الأمين مع النبيين والصديقين والشهداء."',
+    hadithSource: "— رواه الترمذي",
+    hadithExplanation:
+      "هذا الحديث يُكرّم أولئك الذين يمارسون التجارة بإخلاص وأمانة، ويضعهم بين الأكثر تبجيلاً في الآخرة. إنه تأكيد مباشر على القيمة الروحية وراء مهمتنا: أن التجارة، عندما تكون متجذرة في الأمانة، تصبح طريقًا إلى الثواب الإلهي.",
+    screenshotsTitle: "شاهد أمانة في العمل",
+    screenshotsSubtitle: "تجربة سلسة مصممة للمجتمع المسلم الحديث.",
+    ctaTitle: "انضم إلى آلاف المسلمين الذين يقوون مجتمعهم",
+    ctaSubtitle: "حمّل أمانة اليوم وابقَ على اتصال بإيمانك ومسجدك وأمتك.",
+    addMosqueTitle: "هل مسجدك غير مدرج؟",
+    addMosqueSubtitle: "ساعدنا في تنمية مجتمعنا بإضافة مسجدك المحلي إلى شبكة أمانة.",
+  },
+}
 
 export default function AmanahLanding() {
+  const [language, setLanguage] = useState<"en" | "ar">("en")
+  const t = translations[language]
+  const isRTL = language === "ar"
+
+  const toggleLanguage = () => {
+    setLanguage(language === "en" ? "ar" : "en")
+  }
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
+      <LanguageToggle language={language} onToggle={toggleLanguage} />
+
+      <div className="fixed top-4 left-4 z-50">
+        <Button asChild variant="outline" className="bg-background/80 backdrop-blur-sm">
+          <Link href="/login">
+            <LogIn className="mr-2 h-4 w-4" />
+            {language === "en" ? "Login" : "تسجيل الدخول"}
+          </Link>
+        </Button>
+      </div>
+
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-background to-secondary/30 px-4 py-20 md:py-32">
         <div className="mx-auto max-w-7xl">
           <div className="text-center">
             {/* Logo/Branding */}
             <div className="mb-8 flex justify-center">
-              <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/logo%20amanaah-s8mAT9ZqRo2I3IbnijQZzTT6t6kevY.png"
-                alt="Amanah Logo"
-                className="h-32 w-auto md:h-40"
-              />
+              <img src="/images/logo-20amanaah.png" alt="Amanah Logo" className="h-32 w-auto md:h-40" />
             </div>
 
             <h2 className="mb-4 text-4xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl text-balance">
-              Amanah is not just an app
+              {t.heroTitle}
             </h2>
 
             <p className="mx-auto mb-8 max-w-3xl text-lg text-muted-foreground md:text-xl leading-relaxed">
-              It's a movement to rebuild trust, inspire excellence, and uplift communities through innovation.
+              {t.heroSubtitle}
             </p>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
-              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6">
-                Download for iOS
+              <Button
+                size="lg"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6"
+                asChild
+              >
+                <a href={IOS_APP_URL} target="_blank" rel="noopener noreferrer">
+                  {t.downloadIOS}
+                </a>
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 py-6 bg-transparent">
-                Download for Android
+              <Button size="lg" variant="outline" className="text-lg px-8 py-6 bg-transparent" asChild>
+                <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer">
+                  {t.downloadAndroid}
+                </a>
               </Button>
             </div>
           </div>
@@ -43,18 +166,11 @@ export default function AmanahLanding() {
       <section className="px-4 py-20 bg-secondary/50">
         <div className="mx-auto max-w-5xl">
           <div className="text-center mb-12">
-            <h3 className="mb-6 text-3xl font-bold text-foreground md:text-4xl">Mission Statement</h3>
-            <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl mx-auto">
-              Amanah App exists to revive the legacy of trust-based commerce that once spread Islam across continents,
-              through the integrity of Muslim merchants. Our mission is to build a digital ecosystem where verified
-              Muslim-owned businesses thrive, mosques are empowered, and communities reconnect through shared values of
-              honesty, service, and social impact.
-            </p>
+            <h3 className="mb-6 text-3xl font-bold text-foreground md:text-4xl">{t.missionTitle}</h3>
+            <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl mx-auto">{t.missionText}</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-semibold text-primary mb-2">
-              Join the movement. Build trust. Empower your community.
-            </p>
+            <p className="text-xl font-semibold text-primary mb-2">{t.missionCTA}</p>
           </div>
         </div>
       </section>
@@ -63,12 +179,8 @@ export default function AmanahLanding() {
       <section className="px-4 py-20">
         <div className="mx-auto max-w-7xl">
           <div className="mb-16 text-center">
-            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-5xl">
-              Everything your Muslim community needs
-            </h3>
-            <p className="mx-auto max-w-2xl text-lg text-muted-foreground leading-relaxed">
-              Amanah brings together the essential tools to keep you connected with your faith and community.
-            </p>
+            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-5xl">{t.featuresTitle}</h3>
+            <p className="mx-auto max-w-2xl text-lg text-muted-foreground leading-relaxed">{t.featuresSubtitle}</p>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -77,11 +189,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <Mosque className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Connect With Your Mosque</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Access your favorite mosque's app, stay updated with prayer times, events, and community announcements
-                in one place.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.connectMosque}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.connectMosqueDesc}</p>
             </Card>
 
             {/* Feature 2 */}
@@ -89,11 +198,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <Store className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Muslim Business Directory</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Discover and support trusted Muslim-owned businesses in your area. Build economic strength within the
-                ummah.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.businessDirectory}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.businessDirectoryDesc}</p>
             </Card>
 
             {/* Feature 3 */}
@@ -101,10 +207,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <MapPin className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Mosque Near Me</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Find nearby masjids wherever you are. Never miss a prayer with our comprehensive mosque finder.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.mosqueNearMe}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.mosqueNearMeDesc}</p>
             </Card>
 
             {/* Feature 4 */}
@@ -112,11 +216,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <Calendar className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Events & Gatherings</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Discover community events, Islamic classes, and gatherings. Stay engaged with your local Muslim
-                community.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.events}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.eventsDesc}</p>
             </Card>
 
             {/* Feature 5 */}
@@ -124,11 +225,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <Heart className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Support Your Masjid</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Make donations easily and securely. Support your local mosque and Islamic institutions with just a few
-                taps.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.supportMasjid}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.supportMasjidDesc}</p>
             </Card>
 
             {/* Feature 6 */}
@@ -136,10 +234,8 @@ export default function AmanahLanding() {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <MessageCircle className="h-7 w-7 text-primary" />
               </div>
-              <h4 className="mb-3 text-xl font-bold text-card-foreground">Direct Communication</h4>
-              <p className="text-muted-foreground leading-relaxed">
-                Chat directly with your mosque administration. Ask questions, get updates, and stay connected.
-              </p>
+              <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.directComm}</h4>
+              <p className="text-muted-foreground leading-relaxed">{t.directCommDesc}</p>
             </Card>
           </div>
         </div>
@@ -152,24 +248,21 @@ export default function AmanahLanding() {
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary">
               <Shield className="h-10 w-10 text-primary-foreground" />
             </div>
-            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">Built on Amanah — Trust</h3>
-            <p className="mb-8 max-w-2xl text-lg text-muted-foreground leading-relaxed">
-              Amanah means trust, and it's at the heart of everything we do. We're committed to creating a safe,
-              authentic space where Muslims can connect, support each other, and strengthen their faith together.
-            </p>
-            <p className="mb-8 max-w-2xl text-lg font-semibold text-foreground">We never sell your information</p>
+            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">{t.trustTitle}</h3>
+            <p className="mb-8 max-w-2xl text-lg text-muted-foreground leading-relaxed">{t.trustDesc}</p>
+            <p className="mb-8 max-w-2xl text-lg font-semibold text-foreground">{t.noSellInfo}</p>
             <div className="grid gap-8 md:grid-cols-3 max-w-4xl w-full">
               <div className="text-center">
                 <div className="mb-2 text-5xl font-bold text-primary">25%</div>
-                <p className="text-lg text-muted-foreground">Of all profit is donated</p>
+                <p className="text-lg text-muted-foreground">{t.profitDonated}</p>
               </div>
               <div className="text-center">
                 <div className="mb-2 text-5xl font-bold text-primary">10%</div>
-                <p className="text-lg text-muted-foreground">To the mosque of your choice</p>
+                <p className="text-lg text-muted-foreground">{t.toMosque}</p>
               </div>
               <div className="text-center">
                 <div className="mb-2 text-5xl font-bold text-primary">15%</div>
-                <p className="text-lg text-muted-foreground">To Amanah Org for Muslim children's education</p>
+                <p className="text-lg text-muted-foreground">{t.toEducation}</p>
               </div>
             </div>
           </div>
@@ -180,18 +273,14 @@ export default function AmanahLanding() {
       <section className="px-4 py-20">
         <div className="mx-auto max-w-4xl">
           <div className="text-center p-8 md:p-12 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl border border-primary/20">
-            <h3 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">Prophetic Hadith</h3>
+            <h3 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">{t.hadithTitle}</h3>
             <blockquote className="mb-6">
               <p className="text-xl md:text-2xl text-foreground font-semibold italic mb-4 leading-relaxed">
-                "The honest and trustworthy merchant will be with the Prophets, the truthful, and the martyrs."
+                {t.hadithText}
               </p>
-              <cite className="text-muted-foreground text-lg">— Reported by At-Tirmidhi</cite>
+              <cite className="text-muted-foreground text-lg">{t.hadithSource}</cite>
             </blockquote>
-            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              This Hadith honors those who conduct business with sincerity and trust, placing them among the most
-              revered in the Hereafter. It's a direct affirmation of the spiritual value behind our mission: that
-              commerce, when rooted in Amanah, becomes a path to divine reward.
-            </p>
+            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">{t.hadithExplanation}</p>
           </div>
         </div>
       </section>
@@ -200,30 +289,28 @@ export default function AmanahLanding() {
       <section className="px-4 py-20 bg-secondary/30">
         <div className="mx-auto max-w-7xl">
           <div className="mb-16 text-center">
-            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-5xl">See Amanah in action</h3>
-            <p className="mx-auto max-w-2xl text-lg text-muted-foreground leading-relaxed">
-              A seamless experience designed for the modern Muslim community.
-            </p>
+            <h3 className="mb-4 text-3xl font-bold text-foreground md:text-5xl">{t.screenshotsTitle}</h3>
+            <p className="mx-auto max-w-2xl text-lg text-muted-foreground leading-relaxed">{t.screenshotsSubtitle}</p>
           </div>
 
           <div className="grid gap-8 md:grid-cols-3">
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
               <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Amanah%20home%20scree-6bFrJlAOH0M6YZqzAOqlIkDYRPdeWF.png"
+                src="/images/amanah-20home-20scree.png"
                 alt="Amanah home screen showing main features"
                 className="h-full w-full object-cover"
               />
             </div>
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
               <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/mosque%20home-6iy1Ecv04RICNXa2VBWXyjb20f5Y2P.png"
+                src="/images/mosque-20home.png"
                 alt="Mosque profile showing prayer times and events"
                 className="h-full w-full object-cover"
               />
             </div>
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
               <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/mosque%20near%20me-gLZbe6Zaq5PsdhszIGakNEkh0y9slN.png"
+                src="/images/mosque-20near-20me.png"
                 alt="Mosque finder showing nearby masjids"
                 className="h-full w-full object-cover"
               />
@@ -235,22 +322,23 @@ export default function AmanahLanding() {
       {/* CTA Section */}
       <section className="px-4 py-20 bg-primary">
         <div className="mx-auto max-w-4xl text-center">
-          <h3 className="mb-4 text-3xl font-bold text-primary-foreground md:text-5xl text-balance">
-            Join thousands of Muslims strengthening their community
-          </h3>
-          <p className="mb-8 text-lg text-primary-foreground/90 leading-relaxed">
-            Download Amanah today and stay connected with your faith, your mosque, and your ummah.
-          </p>
+          <h3 className="mb-4 text-3xl font-bold text-primary-foreground md:text-5xl text-balance">{t.ctaTitle}</h3>
+          <p className="mb-8 text-lg text-primary-foreground/90 leading-relaxed">{t.ctaSubtitle}</p>
           <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <Button size="lg" variant="secondary" className="text-lg px-8 py-6">
-              Download for iOS
+            <Button size="lg" variant="secondary" className="text-lg px-8 py-6" asChild>
+              <a href={IOS_APP_URL} target="_blank" rel="noopener noreferrer">
+                {t.downloadIOS}
+              </a>
             </Button>
             <Button
               size="lg"
               variant="outline"
               className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary text-lg px-8 py-6 bg-transparent"
+              asChild
             >
-              Download for Android
+              <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer">
+                {t.downloadAndroid}
+              </a>
             </Button>
           </div>
         </div>
@@ -259,11 +347,9 @@ export default function AmanahLanding() {
       {/* Add Mosque Section */}
       <section className="px-4 py-20 bg-secondary/30">
         <div className="mx-auto max-w-4xl text-center">
-          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">Is your mosque not listed?</h3>
-          <p className="mb-8 text-lg text-muted-foreground leading-relaxed">
-            Help us grow our community by adding your local masjid to the Amanah network.
-          </p>
-          <AddMosqueForm />
+          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">{t.addMosqueTitle}</h3>
+          <p className="mb-8 text-lg text-muted-foreground leading-relaxed">{t.addMosqueSubtitle}</p>
+          <AddMosqueForm language={language} />
         </div>
       </section>
     </div>

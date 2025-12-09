@@ -1,0 +1,316 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { useParams } from "next/navigation"
+import { ArrowLeft, Building2, Store, Ticket, Upload, FileText, Trash2, Edit, Save, X, Key } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { mockMembers } from "@/lib/mock-data"
+
+export default function SubscriptionDetailPage() {
+  const params = useParams()
+  const subscriptionId = params.id as string
+
+  // Find the subscription
+  const member = mockMembers.find((m) => m.subscriptions.some((s) => s.id === subscriptionId))
+  const subscription = member?.subscriptions.find((s) => s.id === subscriptionId)
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [editData, setEditData] = useState(subscription || {})
+
+  if (!subscription) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Subscription Not Found</h1>
+          <Link href="/member" className="text-primary hover:underline">
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const getSubscriptionIcon = (type: string) => {
+    switch (type) {
+      case "mosque":
+        return <Building2 className="h-6 w-6" />
+      case "business":
+        return <Store className="h-6 w-6" />
+      case "coupon":
+        return <Ticket className="h-6 w-6" />
+      default:
+        return <FileText className="h-6 w-6" />
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Active</Badge>
+      case "pending":
+        return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Pending</Badge>
+      case "cancelled":
+        return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Cancelled</Badge>
+      case "past_due":
+        return <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20">Past Due</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="flex items-center gap-4 px-6 py-4">
+          <Link href="/member" className="text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              {getSubscriptionIcon(subscription.type)}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold text-foreground">{subscription.name}</h1>
+                {getStatusBadge(subscription.status)}
+              </div>
+              <p className="text-sm text-muted-foreground capitalize">{subscription.type} Subscription</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="p-6 max-w-4xl mx-auto">
+        {/* Subscription Details */}
+        <Card className="mb-6">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Subscription Details</CardTitle>
+              <CardDescription>Manage your {subscription.type} listing information</CardDescription>
+            </div>
+            {!isEditing ? (
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+                <Button onClick={() => setIsEditing(false)}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {subscription.type === "coupon" && (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Coupon Name</Label>
+                    {isEditing ? (
+                      <Input defaultValue={subscription.name} />
+                    ) : (
+                      <p className="text-foreground">{subscription.name}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Business Name</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).businessName} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).businessName}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Offer Description</Label>
+                  {isEditing ? (
+                    <Textarea defaultValue={(subscription as any).offer} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).offer}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Location</Label>
+                  {isEditing ? (
+                    <Input defaultValue={(subscription as any).location} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).location}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Coupon Photo</Label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Click or drag to upload coupon image</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {subscription.type === "business" && (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Business Name</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).businessName} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).businessName}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Category</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).category} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).category}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Location</Label>
+                  {isEditing ? (
+                    <Input defaultValue={(subscription as any).location} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).location}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  {isEditing ? (
+                    <Textarea defaultValue={(subscription as any).description} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).description}</p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {subscription.type === "mosque" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Mosque Name</Label>
+                  {isEditing ? (
+                    <Input defaultValue={subscription.name} />
+                  ) : (
+                    <p className="text-foreground">{subscription.name}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Location</Label>
+                  {isEditing ? (
+                    <Input defaultValue={(subscription as any).location} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).location}</p>
+                  )}
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Price</Label>
+                <p className="text-foreground font-semibold">${subscription.price}/month</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Next Billing Date</Label>
+                <p className="text-foreground">{new Date(subscription.nextBillingDate).toLocaleDateString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Third Party Logins - Mosque Only */}
+        {subscription.type === "mosque" && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5" />
+                Third Party App Logins
+              </CardTitle>
+              <CardDescription>Login credentials for connected services (managed by admin)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(subscription as any).thirdPartyLogins?.length > 0 ? (
+                <div className="space-y-3">
+                  {(subscription as any).thirdPartyLogins.map((login: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-foreground">{login.platform}</p>
+                        <p className="text-sm text-muted-foreground">Username: {login.username}</p>
+                      </div>
+                      <Badge variant="outline">Admin Managed</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-4">
+                  No third party logins configured. Contact admin to set up.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Documents */}
+        {(subscription.type === "mosque" || subscription.type === "business") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Documents
+              </CardTitle>
+              <CardDescription>Upload required documents for verification</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Upload Area */}
+              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center mb-4">
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground mb-2">Click or drag to upload documents</p>
+                <p className="text-xs text-muted-foreground">PDF, PNG, JPG up to 10MB</p>
+              </div>
+
+              {/* Document List */}
+              {(subscription as any).documents?.length > 0 && (
+                <div className="space-y-2">
+                  {(subscription as any).documents.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-foreground">{doc.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </main>
+    </div>
+  )
+}
