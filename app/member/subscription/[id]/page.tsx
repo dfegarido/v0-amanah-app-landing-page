@@ -2,8 +2,21 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ArrowLeft, Building2, Store, Ticket, Upload, FileText, Trash2, Edit, Save, X, Key } from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
+import {
+  ArrowLeft,
+  Building2,
+  Store,
+  Ticket,
+  Upload,
+  FileText,
+  Trash2,
+  Edit,
+  Save,
+  X,
+  Key,
+  AlertTriangle,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,10 +24,22 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { mockMembers } from "@/lib/mock-data"
 
 export default function SubscriptionDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const subscriptionId = params.id as string
 
   // Find the subscription
@@ -23,6 +48,13 @@ export default function SubscriptionDetailPage() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState(subscription || {})
+
+  const handleCancelSubscription = () => {
+    console.log("[v0] Cancelling subscription:", subscriptionId)
+    // In a real app, this would call an API
+    alert("Subscription cancelled successfully. You will retain access until the end of your billing period.")
+    router.push("/member")
+  }
 
   if (!subscription) {
     return (
@@ -232,6 +264,10 @@ export default function SubscriptionDetailPage() {
                 <Label className="text-muted-foreground">Next Billing Date</Label>
                 <p className="text-foreground">{new Date(subscription.nextBillingDate).toLocaleDateString()}</p>
               </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Payment Started</Label>
+                <p className="text-foreground">{new Date(subscription.paymentStartDate).toLocaleDateString()}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -307,6 +343,43 @@ export default function SubscriptionDetailPage() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {subscription.status === "active" && (
+          <Card className="border-destructive/50">
+            <CardHeader>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Cancel Subscription
+              </CardTitle>
+              <CardDescription>
+                Cancel your subscription. You will retain access until the end of your current billing period.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">Cancel Subscription</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will cancel your subscription for <strong>{subscription.name}</strong>. You will retain
+                      access until <strong>{new Date(subscription.nextBillingDate).toLocaleDateString()}</strong> and no
+                      further charges will be made.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleCancelSubscription} className="bg-destructive">
+                      Yes, Cancel Subscription
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         )}

@@ -39,6 +39,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans antialiased`}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', e => {
+                if (e.message === 'ResizeObserver loop completed with undelivered notifications.' || 
+                    e.message === 'ResizeObserver loop limit exceeded') {
+                  e.stopImmediatePropagation();
+                  e.preventDefault();
+                }
+              });
+            `,
+          }}
+        />
         {children}
         <Analytics />
       </body>

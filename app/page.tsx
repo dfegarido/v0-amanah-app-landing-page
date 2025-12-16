@@ -2,10 +2,9 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { MSquare as Mosque, Store, MapPin, Heart, Calendar, MessageCircle, Shield, LogIn } from "lucide-react"
+import { MSquare as Mosque, Store, MapPin, Heart, Calendar, MessageCircle, Shield, LogIn, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { AddMosqueForm } from "@/components/add-mosque-form"
 import { LanguageToggle } from "@/components/language-toggle"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
@@ -55,8 +54,8 @@ const translations = {
     screenshotsSubtitle: "A seamless experience designed for the modern Muslim community.",
     ctaTitle: "Join thousands of Muslims strengthening their community",
     ctaSubtitle: "Download Amanah today and stay connected with your faith, your mosque, and your ummah.",
-    addMosqueTitle: "Is your mosque not listed?",
-    addMosqueSubtitle: "Help us grow our community by adding your local masjid to the Amanah network.",
+    addMosqueTitle: "Looking to list your business, mosque, or feature a coupon?",
+    addMosqueSubtitle: "Create an account to get started and join the Amanah network.",
   },
   ar: {
     heroTitle: "أمانة ليست مجرد تطبيق",
@@ -98,8 +97,8 @@ const translations = {
     screenshotsSubtitle: "تجربة سلسة مصممة للمجتمع المسلم الحديث.",
     ctaTitle: "انضم إلى آلاف المسلمين الذين يقوون مجتمعهم",
     ctaSubtitle: "حمّل أمانة اليوم وابقَ على اتصال بإيمانك ومسجدك وأمتك.",
-    addMosqueTitle: "هل مسجدك غير مدرج؟",
-    addMosqueSubtitle: "ساعدنا في تنمية مجتمعنا بإضافة مسجدك المحلي إلى شبكة أمانة.",
+    addMosqueTitle: "تبحث عن إدراج عملك أو مسجدك أو عرض قسيمة؟",
+    addMosqueSubtitle: "أنشئ حسابًا للبدء والانضمام إلى شبكة أمانة.",
   },
 }
 
@@ -347,9 +346,26 @@ export default function AmanahLanding() {
       {/* Add Mosque Section */}
       <section className="px-4 py-20 bg-secondary/30">
         <div className="mx-auto max-w-4xl text-center">
-          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">{t.addMosqueTitle}</h3>
-          <p className="mb-8 text-lg text-muted-foreground leading-relaxed">{t.addMosqueSubtitle}</p>
-          <AddMosqueForm language={language} />
+          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
+            {language === "en"
+              ? "Looking to list your business, mosque, or feature a coupon?"
+              : "تبحث عن إدراج عملك أو مسجدك أو عرض قسيمة؟"}
+          </h3>
+          <p className="mb-8 text-lg text-muted-foreground leading-relaxed">
+            {language === "en"
+              ? "Create an account to get started and join the Amanah network."
+              : "أنشئ حسابًا للبدء والانضمام إلى شبكة أمانة."}
+          </p>
+          <Button
+            size="lg"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6"
+            asChild
+          >
+            <Link href="/login">
+              <Plus className="h-5 w-5 me-2" />
+              {language === "en" ? "Create Account" : "إنشاء حساب"}
+            </Link>
+          </Button>
         </div>
       </section>
     </div>

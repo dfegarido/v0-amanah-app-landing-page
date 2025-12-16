@@ -15,9 +15,24 @@ export interface Subscription {
 
 export interface MosqueSubscription extends Subscription {
   type: "mosque"
-  location: string
-  photo?: string
+  mosqueCode: number // Unique mosque identifier starting at 1
+  address: string
+  email: string
+  phone: string
+  website?: string
+  socialMedia?: {
+    facebook?: string
+    twitter?: string
+    instagram?: string
+    other?: string
+  }
+  logo?: string
   photos?: string[]
+  donateLink?: string
+  prayerTimesLink?: string
+  sundaySchool?: string
+  services?: string
+  committeeMembers?: string
   description?: string
   contactName?: string
   thirdPartyLogins?: {
@@ -30,25 +45,55 @@ export interface MosqueSubscription extends Subscription {
 
 export interface CouponSubscription extends Subscription {
   type: "coupon"
-  businessName: string
-  offer: string
+  affiliatedMosqueCode?: number // The mosque code this coupon is affiliated with
+  title: string
+  phone: string
+  email: string
+  website?: string
+  merchant: string
+  redeemLimit?: number
+  userRedeemLimit?: number
+  userMonthlyRedeemLimit?: number
+  userWeeklyRedeemLimit?: number
+  discountAmount?: string
+  discountPercentage?: string
+  couponCode?: string
+  redeemCode?: string
+  prefix?: string
+  nextNo?: string
+  startDate: string
+  endDate?: string
+  description?: string
+  thumbnailDescription?: string
+  popUpText?: string
   photo?: string
   photos?: string[]
-  location: string
-  expiryDate?: string
-  terms?: string
+  address: string
 }
 
 export interface BusinessSubscription extends Subscription {
   type: "business"
-  businessName: string
-  category: string
-  location: string
+  affiliatedMosqueCode?: number // The mosque code this business is affiliated with
+  title: string
   description: string
-  photo?: string
+  categories: string[]
+  subCategories?: string[]
   photos?: string[]
+  zip: string
+  address: string
+  country: string
+  state: string
+  city: string
+  phone: string
+  fax?: string
   website?: string
-  contactName?: string
+  email: string
+  socialMedia?: {
+    facebook?: string
+    twitter?: string
+    instagram?: string
+    other?: string
+  }
   documents: Document[]
 }
 
@@ -82,4 +127,52 @@ export interface PaymentAlert {
   resolved: boolean
   resolvedAt?: string
   notes?: string
+}
+
+export interface AffiliateEarning {
+  id: string
+  mosqueCode: number
+  mosqueName: string
+  affiliateType: "business" | "coupon"
+  affiliateName: string
+  affiliateId: string
+  monthlyFee: number
+  kickbackAmount: number // 10% of monthly fee
+  month: string // YYYY-MM format
+  status: "pending" | "paid" | "cancelled"
+  paidDate?: string
+}
+
+export interface FinancialRecord {
+  id: string
+  date: string
+  type: "mosque" | "business" | "coupon"
+  subscriptionId: string
+  subscriptionName: string
+  amount: number
+  mosqueKickback?: number
+  amanahOrgDonation?: number // 15% for education
+  mosqueCodeKickback?: number // 10% to mosque of choice
+  netRevenue: number
+}
+
+export interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  body: string
+  variables: string[]
+  lastModified: string
+  active: boolean
+}
+
+export interface EmailLog {
+  id: string
+  to: string
+  recipientName: string
+  template: string
+  subject: string
+  sentAt: string
+  status: "sent" | "failed" | "pending"
+  error?: string
 }

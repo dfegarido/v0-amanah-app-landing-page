@@ -3,13 +3,15 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check } from "lucide-react"
+import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { getAllMosquesWithCodes, getNextMosqueCode } from "@/lib/mock-data"
 
 const subscriptionInfo = {
   mosque: {
@@ -39,8 +41,15 @@ export default function SubscribePage() {
 
   const [step, setStep] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [uploadedLogo, setUploadedLogo] = useState<string | null>(null)
+  const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
+
   const info = subscriptionInfo[type]
   const Icon = info?.icon || Building2
+
+  const availableMosques = getAllMosquesWithCodes().filter((m) => m.status === "active")
+  const nextMosqueCode = getNextMosqueCode()
 
   if (!info) {
     return (
@@ -55,9 +64,23 @@ export default function SubscribePage() {
     )
   }
 
+  const handleImageUpload = () => {
+    setUploadedImages([
+      ...uploadedImages,
+      `/placeholder.svg?height=300&width=400&query=uploaded image ${uploadedImages.length + 1}`,
+    ])
+  }
+
+  const removeImage = (index: number) => {
+    setUploadedImages(uploadedImages.filter((_, i) => i !== index))
+  }
+
+  const handleLogoUpload = () => {
+    setUploadedLogo("/mosque-logo.png")
+  }
+
   const handleSubmit = async () => {
     setIsProcessing(true)
-    // Simulate payment processing
     await new Promise((resolve) => setTimeout(resolve, 2000))
     setStep(3)
     setIsProcessing(false)
@@ -83,7 +106,7 @@ export default function SubscribePage() {
         </div>
       </header>
 
-      <main className="p-6 max-w-2xl mx-auto">
+      <main className="p-6 max-w-3xl mx-auto">
         {/* Progress Steps */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center">
@@ -114,71 +137,519 @@ export default function SubscribePage() {
               <CardTitle>Enter Details</CardTitle>
               <CardDescription>{info.description}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               {type === "mosque" && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Mosque Name</Label>
-                    <Input id="name" placeholder="Enter mosque name" />
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Info className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-primary">Your Mosque Code</h3>
+                    </div>
+                    <p className="text-3xl font-bold text-primary mb-2">#{nextMosqueCode}</p>
+                    <p className="text-sm text-muted-foreground">
+                      This unique code will be assigned to your mosque. Share it with local businesses and they can
+                      affiliate with your mosque. You{"'"}ll earn 10% of their monthly subscription fee as a kickback!
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" placeholder="City, State" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Basic Information</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Mosque Name *</Label>
+                        <Input id="name" placeholder="Enter mosque name" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address">Address *</Label>
+                        <Input id="address" placeholder="Full address" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address *</Label>
+                        <Input id="email" type="email" placeholder="mosque@example.com" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone Number *</Label>
+                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="website">Website</Label>
+                        <Input id="website" placeholder="https://www.yourmasjid.org" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="contactName">Contact Name (Leader) *</Label>
+                        <Input id="contactName" placeholder="Imam name or administrator" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Contact Phone</Label>
-                    <Input id="phone" placeholder="+1 (555) 000-0000" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Social Media</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="facebook">Facebook</Label>
+                        <Input id="facebook" placeholder="https://facebook.com/yourmasjid" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="instagram">Instagram</Label>
+                        <Input id="instagram" placeholder="https://instagram.com/yourmasjid" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="twitter">X (Twitter)</Label>
+                        <Input id="twitter" placeholder="https://twitter.com/yourmasjid" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="otherSocial">Other Social Media</Label>
+                        <Input id="otherSocial" placeholder="Any other social links" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="leader">Contact Name (Leader)</Label>
-                    <Input id="leader" placeholder="Imam name or administrator" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Logo & Images</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Logo (PNG File)</Label>
+                        <div className="flex items-center gap-4">
+                          {uploadedLogo ? (
+                            <div className="relative">
+                              <img
+                                src={uploadedLogo || "/placeholder.svg"}
+                                alt="Logo"
+                                className="h-20 w-20 object-contain rounded-lg border"
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="absolute -top-2 -right-2 h-6 w-6"
+                                onClick={() => setUploadedLogo(null)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button variant="outline" onClick={handleLogoUpload}>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload Logo
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Images (PNG or JPG Files)</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {uploadedImages.map((img, idx) => (
+                            <div key={idx} className="relative">
+                              <img
+                                src={img || "/placeholder.svg"}
+                                alt={`Upload ${idx + 1}`}
+                                className="h-24 w-full object-cover rounded-lg"
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="absolute -top-2 -right-2 h-6 w-6"
+                                onClick={() => removeImage(idx)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+                            <Plus className="h-6 w-6" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Links & Services</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="donateLink">Donate Link</Label>
+                        <Input id="donateLink" placeholder="https://yourmasjid.org/donate" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="prayerTimesLink">Prayer Times Link</Label>
+                        <Input id="prayerTimesLink" placeholder="https://yourmasjid.org/prayer-times" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sundaySchool">Sunday School</Label>
+                      <Textarea id="sundaySchool" placeholder="Describe your Sunday School program, timings, etc." />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="services">Services</Label>
+                      <Textarea
+                        id="services"
+                        placeholder="List services offered (Jummah, Nikah, Funeral, Counseling, etc.)"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="committee">Committee Members</Label>
+                      <Textarea id="committee" placeholder="List committee members and their roles" />
+                    </div>
                   </div>
                 </>
               )}
 
               {type === "business" && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Business Name</Label>
-                    <Input id="name" placeholder="Enter business name" />
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-primary">Mosque Affiliation (Optional)</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Enter a mosque code to support your local mosque. 10% of your monthly fee ($1) will go to the
+                      mosque as a kickback.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="mosqueCode">Mosque Code</Label>
+                      <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a mosque or enter code" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Affiliation</SelectItem>
+                          {availableMosques.map((mosque) => (
+                            <SelectItem key={mosque.code} value={mosque.code.toString()}>
+                              #{mosque.code} - {mosque.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Input id="category" placeholder="e.g., Restaurant, Retail, Services" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Basic Information</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="title">Business Title *</Label>
+                        <Input id="title" placeholder="Enter business name" />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="description">Description *</Label>
+                        <Textarea id="description" placeholder="Describe your business..." rows={4} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="categories">Categories *</Label>
+                        <Input id="categories" placeholder="e.g., Restaurant, Retail, Services (comma separated)" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="subCategories">Sub Categories</Label>
+                        <Input id="subCategories" placeholder="e.g., Halal, Mediterranean (comma separated)" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" placeholder="Address" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Photos (Image Size: 4/3 ratio – 400*300)</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {uploadedImages.map((img, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={img || "/placeholder.svg"}
+                            alt={`Upload ${idx + 1}`}
+                            className="h-24 w-full object-cover rounded-lg"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6"
+                            onClick={() => removeImage(idx)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+                        <Plus className="h-6 w-6" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" placeholder="Describe your business..." />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Location</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="address">Address *</Label>
+                        <Input id="address" placeholder="Street address" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">City *</Label>
+                        <Input id="city" placeholder="City" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">State *</Label>
+                        <Input id="state" placeholder="State" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="zip">Zip *</Label>
+                        <Input id="zip" placeholder="Zip code" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="country">Country *</Label>
+                        <Input id="country" placeholder="Country" defaultValue="USA" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Contact Information</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone *</Label>
+                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="fax">Fax</Label>
+                        <Input id="fax" placeholder="+1 (555) 000-0000" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email *</Label>
+                        <Input id="email" type="email" placeholder="business@example.com" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="website">Website</Label>
+                        <Input id="website" placeholder="https://www.yourbusiness.com" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Social Media</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="facebook">Facebook</Label>
+                        <Input id="facebook" placeholder="https://facebook.com/yourbusiness" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="instagram">Instagram</Label>
+                        <Input id="instagram" placeholder="https://instagram.com/yourbusiness" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="twitter">X (Twitter)</Label>
+                        <Input id="twitter" placeholder="https://twitter.com/yourbusiness" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="otherSocial">Other</Label>
+                        <Input id="otherSocial" placeholder="Any other social links" />
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
 
               {type === "coupon" && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Coupon Name</Label>
-                    <Input id="name" placeholder="e.g., 10% Off First Order" />
+                  <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-primary">Mosque Affiliation (Optional)</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Enter a mosque code to support your local mosque. 10% of your monthly fee ($1) will go to the
+                      mosque as a kickback.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="mosqueCode">Mosque Code</Label>
+                      <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a mosque or enter code" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Affiliation</SelectItem>
+                          {availableMosques.map((mosque) => (
+                            <SelectItem key={mosque.code} value={mosque.code.toString()}>
+                              #{mosque.code} - {mosque.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="business">Business Name</Label>
-                    <Input id="business" placeholder="Your business name" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Basic Information</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="title">Title *</Label>
+                        <Input id="title" placeholder="e.g., 10% Off First Order" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="merchant">Merchant *</Label>
+                        <Input id="merchant" placeholder="Your business name" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone *</Label>
+                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email *</Label>
+                        <Input id="email" type="email" placeholder="coupons@yourbusiness.com" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="website">Website</Label>
+                        <Input id="website" placeholder="https://www.yourbusiness.com" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="offer">Offer Details</Label>
-                    <Textarea id="offer" placeholder="Describe the offer..." />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Redemption Limits</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="redeemLimit">Total Redeem Limit</Label>
+                        <Input id="redeemLimit" type="number" placeholder="e.g., 500" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="userRedeemLimit">User Redeem Limit</Label>
+                        <Input id="userRedeemLimit" type="number" placeholder="e.g., 1" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="userMonthlyLimit">User Monthly Redeem Limit</Label>
+                        <Input id="userMonthlyLimit" type="number" placeholder="e.g., 2" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="userWeeklyLimit">User Weekly Redeem Limit</Label>
+                        <Input id="userWeeklyLimit" type="number" placeholder="e.g., 1" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" placeholder="Where can this be redeemed?" />
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Discount Details</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="discountAmount">Discount Amount (or)</Label>
+                        <Input id="discountAmount" placeholder="e.g., $5 off, Free Item" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="discountPercentage">Discount Percentage</Label>
+                        <Input id="discountPercentage" placeholder="e.g., 10%, 20%" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="couponCode">Coupon/Voucher Code</Label>
+                        <Input id="couponCode" placeholder="e.g., SAVE10" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="redeemCode">Redeem Code</Label>
+                        <Input id="redeemCode" placeholder="e.g., RD001" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="prefix">Prefix</Label>
+                        <Input id="prefix" placeholder="e.g., HD" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nextNo">Next No.</Label>
+                        <Input id="nextNo" placeholder="e.g., 001" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Validity Period</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="startDate">Start Date *</Label>
+                        <Input id="startDate" type="date" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="endDate">End Date</Label>
+                        <Input id="endDate" type="date" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Description & Display</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Description *</Label>
+                        <Textarea id="description" placeholder="Full description of the offer..." rows={3} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="thumbnailDescription">Thumbnail Description</Label>
+                        <Input id="thumbnailDescription" placeholder="Short text for thumbnail display" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="popUpText">Pop Up Text</Label>
+                        <Textarea id="popUpText" placeholder="Text to show in pop-up..." rows={2} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Image (Recommended: 320px width)</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {uploadedImages.map((img, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={img || "/placeholder.svg"}
+                            alt={`Upload ${idx + 1}`}
+                            className="h-24 w-full object-cover rounded-lg"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6"
+                            onClick={() => removeImage(idx)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+                        <Plus className="h-6 w-6" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-foreground">Location</h3>
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Address *</Label>
+                      <Input id="address" placeholder="Full address where coupon can be redeemed" />
+                    </div>
                   </div>
                 </>
               )}
 
-              <Button className="w-full" onClick={() => setStep(2)}>
+              <Button onClick={() => setStep(2)} className="w-full">
                 Continue to Payment
               </Button>
             </CardContent>
@@ -190,25 +661,33 @@ export default function SubscribePage() {
           <Card>
             <CardHeader>
               <CardTitle>Payment Details</CardTitle>
-              <CardDescription>Set up your monthly subscription</CardDescription>
+              <CardDescription>Complete your subscription with a secure payment</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-secondary/50 rounded-lg">
-                <div className="flex justify-between items-center">
+            <CardContent className="space-y-6">
+              <div className="p-4 rounded-lg bg-secondary">
+                <div className="flex items-center justify-between mb-2">
                   <span className="text-muted-foreground">{info.title}</span>
                   <span className="font-semibold">${info.price}/month</span>
                 </div>
+                {(type === "business" || type === "coupon") &&
+                  affiliatedMosqueCode &&
+                  affiliatedMosqueCode !== "none" && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Mosque Kickback (10%)</span>
+                      <span className="text-primary">$1 to Mosque #{affiliatedMosqueCode}</span>
+                    </div>
+                  )}
+                <Separator className="my-2" />
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Total</span>
+                  <span className="font-bold text-lg">${info.price}/month</span>
+                </div>
               </div>
-
-              <Separator />
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="card">Card Number</Label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input id="card" placeholder="4242 4242 4242 4242" className="pl-10" />
-                  </div>
+                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Input id="cardNumber" placeholder="4242 4242 4242 4242" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -220,23 +699,34 @@ export default function SubscribePage() {
                     <Input id="cvc" placeholder="123" />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nameOnCard">Name on Card</Label>
+                  <Input id="nameOnCard" placeholder="Full name" />
+                </div>
               </div>
 
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  This is a simulated payment. In production, this would connect to Stripe for secure payment
-                  processing.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setStep(1)}>
+              <div className="flex gap-4">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
                   Back
                 </Button>
-                <Button className="flex-1" onClick={handleSubmit} disabled={isProcessing}>
-                  {isProcessing ? "Processing..." : `Subscribe for $${info.price}/mo`}
+                <Button onClick={handleSubmit} disabled={isProcessing} className="flex-1">
+                  {isProcessing ? (
+                    <>
+                      <span className="animate-spin mr-2">⏳</span>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pay ${info.price}/month
+                    </>
+                  )}
                 </Button>
               </div>
+
+              <p className="text-xs text-center text-muted-foreground">
+                This is a simulated payment for demonstration purposes.
+              </p>
             </CardContent>
           </Card>
         )}
@@ -244,16 +734,28 @@ export default function SubscribePage() {
         {/* Step 3: Success */}
         {step === 3 && (
           <Card>
-            <CardContent className="pt-8 text-center">
+            <CardContent className="pt-6 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 mx-auto mb-4">
                 <Check className="h-8 w-8 text-green-500" />
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-2">Subscription Active!</h2>
               <p className="text-muted-foreground mb-6">
-                Your {type} listing has been created. You can now upload documents and manage your listing.
+                Your {type} subscription has been successfully activated.
+                {type === "mosque" && (
+                  <span className="block mt-2 text-primary font-semibold">
+                    Your mosque code is #{nextMosqueCode}. Share it with local businesses!
+                  </span>
+                )}
+                {(type === "business" || type === "coupon") &&
+                  affiliatedMosqueCode &&
+                  affiliatedMosqueCode !== "none" && (
+                    <span className="block mt-2 text-primary">
+                      10% of your fee will support Mosque #{affiliatedMosqueCode}
+                    </span>
+                  )}
               </p>
               <Button asChild>
-                <Link href="/member">Go to Dashboard</Link>
+                <Link href="/member">Return to Dashboard</Link>
               </Button>
             </CardContent>
           </Card>
