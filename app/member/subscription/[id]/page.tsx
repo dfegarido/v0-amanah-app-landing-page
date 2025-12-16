@@ -47,21 +47,55 @@ export default function SubscriptionDetailPage() {
   const subscription = member?.subscriptions.find((s) => s.id === subscriptionId)
 
   const [isEditing, setIsEditing] = useState(false)
-  const [editData, setEditData] = useState(subscription || {})
+
+  const [formData, setFormData] = useState({
+    name: (subscription as any)?.name || "",
+    address: (subscription as any)?.address || "",
+    email: (subscription as any)?.email || "",
+    phone: (subscription as any)?.phone || "",
+    website: (subscription as any)?.website || "",
+    socialMedia: (subscription as any)?.socialMedia
+      ? typeof (subscription as any).socialMedia === "object"
+        ? Object.entries((subscription as any).socialMedia)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("\n")
+        : (subscription as any).socialMedia
+      : "",
+    description: (subscription as any)?.description || "",
+    title: (subscription as any)?.title || "",
+    category: (subscription as any)?.category || "",
+    subCategory: (subscription as any)?.subCategory || "",
+    fax: (subscription as any)?.fax || "",
+    zip: (subscription as any)?.zip || "",
+    city: (subscription as any)?.city || "",
+    state: (subscription as any)?.state || "",
+    country: (subscription as any)?.country || "",
+    merchant: (subscription as any)?.merchant || "",
+    discount: (subscription as any)?.discount || "",
+    redeemCode: (subscription as any)?.redeemCode || "",
+    redeemLimit: (subscription as any)?.redeemLimit || "",
+    startDate: (subscription as any)?.startDate || "",
+    endDate: (subscription as any)?.endDate || "",
+    donateLink: (subscription as any)?.donateLink || "",
+    prayerTimesLink: (subscription as any)?.prayerTimesLink || "",
+    sundaySchool: (subscription as any)?.sundaySchool || "",
+    services: (subscription as any)?.services || "",
+    committeeMembers: (subscription as any)?.committeeMembers || "",
+    about: (subscription as any)?.about || "",
+  })
 
   const handleCancelSubscription = () => {
-    console.log("[v0] Cancelling subscription:", subscriptionId)
-    // In a real app, this would call an API
     alert("Subscription cancelled successfully. You will retain access until the end of your billing period.")
     router.push("/member")
   }
 
   const handleSaveChanges = () => {
-    console.log("[v0] Saving subscription changes, triggering update pending status")
-    // In a real app, this would call an API and send notification email to admin
     alert("Changes saved successfully! Your updates will be reviewed and applied within 1-2 business days.")
     setIsEditing(false)
-    // This would set the subscription status to 'update_pending' in the backend
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   if (!subscription) {
@@ -164,73 +198,91 @@ export default function SubscriptionDetailPage() {
                 <div className="space-y-2">
                   <Label>Organization Name</Label>
                   {isEditing ? (
-                    <Input
-                      defaultValue={subscription.name}
-                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                    />
+                    <Input value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{subscription.name}</p>
+                    <p className="text-foreground">{formData.name}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).address} />
+                    <Input value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).address}</p>
+                    <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Email Address</Label>
                     {isEditing ? (
-                      <Input type="email" defaultValue={(subscription as any).email} />
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).email}</p>
+                      <p className="text-foreground">{formData.email}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
                     {isEditing ? (
-                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                      <Input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange("phone", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).phone}</p>
+                      <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Website</Label>
                   {isEditing ? (
-                    <Input type="url" defaultValue={(subscription as any).website} />
+                    <Input
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => handleInputChange("website", e.target.value)}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).website}</p>
+                    <p className="text-foreground">{formData.website}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Social Media Links</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).socialMedia}
-                      placeholder="Facebook, Instagram, Twitter links..."
+                      value={formData.socialMedia}
+                      onChange={(e) => handleInputChange("socialMedia", e.target.value)}
+                      placeholder="facebook: https://...\ninstagram: https://..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
+                    <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || "Not provided"}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Donate Link</Label>
                   {isEditing ? (
-                    <Input type="url" defaultValue={(subscription as any).donateLink} />
+                    <Input
+                      type="url"
+                      value={formData.donateLink}
+                      onChange={(e) => handleInputChange("donateLink", e.target.value)}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).donateLink}</p>
+                    <p className="text-foreground">{formData.donateLink}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>About Organization</Label>
                   {isEditing ? (
-                    <Textarea defaultValue={(subscription as any).about} rows={4} />
+                    <Textarea
+                      value={formData.about}
+                      onChange={(e) => handleInputChange("about", e.target.value)}
+                      rows={4}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).about}</p>
+                    <p className="text-foreground">{formData.about}</p>
                   )}
                 </div>
               </>
@@ -242,99 +294,137 @@ export default function SubscriptionDetailPage() {
                   <div className="space-y-2">
                     <Label>Title</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).title} />
+                      <Input value={formData.title} onChange={(e) => handleInputChange("title", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).title}</p>
+                      <p className="text-foreground">{formData.title}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Merchant</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).merchant} />
+                      <Input
+                        value={formData.merchant}
+                        onChange={(e) => handleInputChange("merchant", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).merchant}</p>
+                      <p className="text-foreground">{formData.merchant}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Phone</Label>
                     {isEditing ? (
-                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                      <Input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange("phone", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).phone}</p>
+                      <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
                     {isEditing ? (
-                      <Input type="email" defaultValue={(subscription as any).email} />
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).email}</p>
+                      <p className="text-foreground">{formData.email}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Website</Label>
                     {isEditing ? (
-                      <Input type="url" defaultValue={(subscription as any).website} />
+                      <Input
+                        type="url"
+                        value={formData.website}
+                        onChange={(e) => handleInputChange("website", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).website}</p>
+                      <p className="text-foreground">{formData.website}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Discount</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).discount} placeholder="20% off or $10 off" />
+                      <Input
+                        value={formData.discount}
+                        onChange={(e) => handleInputChange("discount", e.target.value)}
+                        placeholder="20% off or $10 off"
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).discount}</p>
+                      <p className="text-foreground">{formData.discount}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Redeem Code</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).redeemCode} />
+                      <Input
+                        value={formData.redeemCode}
+                        onChange={(e) => handleInputChange("redeemCode", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).redeemCode}</p>
+                      <p className="text-foreground">{formData.redeemCode}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Redeem Limit</Label>
                     {isEditing ? (
-                      <Input type="number" defaultValue={(subscription as any).redeemLimit} />
+                      <Input
+                        type="number"
+                        value={formData.redeemLimit}
+                        onChange={(e) => handleInputChange("redeemLimit", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).redeemLimit}</p>
+                      <p className="text-foreground">{formData.redeemLimit}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
                   {isEditing ? (
-                    <Textarea defaultValue={(subscription as any).description} rows={3} />
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => handleInputChange("description", e.target.value)}
+                      rows={3}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).description}</p>
+                    <p className="text-foreground">{formData.description}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).address} />
+                    <Input value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).address}</p>
+                    <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Start Date</Label>
                     {isEditing ? (
-                      <Input type="date" defaultValue={(subscription as any).startDate} />
+                      <Input
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => handleInputChange("startDate", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).startDate}</p>
+                      <p className="text-foreground">{formData.startDate}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>End Date</Label>
                     {isEditing ? (
-                      <Input type="date" defaultValue={(subscription as any).endDate} />
+                      <Input
+                        type="date"
+                        value={formData.endDate}
+                        onChange={(e) => handleInputChange("endDate", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).endDate}</p>
+                      <p className="text-foreground">{formData.endDate}</p>
                     )}
                   </div>
                 </div>
@@ -347,119 +437,142 @@ export default function SubscriptionDetailPage() {
                   <div className="space-y-2">
                     <Label>Business Title</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).title} />
+                      <Input value={formData.title} onChange={(e) => handleInputChange("title", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).title}</p>
+                      <p className="text-foreground">{formData.title}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Category</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).category} />
+                      <Input
+                        value={formData.category}
+                        onChange={(e) => handleInputChange("category", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).category}</p>
+                      <p className="text-foreground">{formData.category}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Sub Category</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).subCategory} />
+                      <Input
+                        value={formData.subCategory}
+                        onChange={(e) => handleInputChange("subCategory", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).subCategory}</p>
+                      <p className="text-foreground">{formData.subCategory}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Phone</Label>
                     {isEditing ? (
-                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                      <Input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange("phone", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).phone}</p>
+                      <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Fax</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).fax} />
+                      <Input value={formData.fax} onChange={(e) => handleInputChange("fax", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).fax}</p>
+                      <p className="text-foreground">{formData.fax}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
                     {isEditing ? (
-                      <Input type="email" defaultValue={(subscription as any).email} />
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).email}</p>
+                      <p className="text-foreground">{formData.email}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Website</Label>
                     {isEditing ? (
-                      <Input type="url" defaultValue={(subscription as any).website} />
+                      <Input
+                        type="url"
+                        value={formData.website}
+                        onChange={(e) => handleInputChange("website", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).website}</p>
+                      <p className="text-foreground">{formData.website}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Zip Code</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).zip} />
+                      <Input value={formData.zip} onChange={(e) => handleInputChange("zip", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).zip}</p>
+                      <p className="text-foreground">{formData.zip}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).address} />
+                    <Input value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).address}</p>
+                    <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label>City</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).city} />
+                      <Input value={formData.city} onChange={(e) => handleInputChange("city", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).city}</p>
+                      <p className="text-foreground">{formData.city}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>State</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).state} />
+                      <Input value={formData.state} onChange={(e) => handleInputChange("state", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).state}</p>
+                      <p className="text-foreground">{formData.state}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Country</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).country} />
+                      <Input value={formData.country} onChange={(e) => handleInputChange("country", e.target.value)} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).country}</p>
+                      <p className="text-foreground">{formData.country}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
                   {isEditing ? (
-                    <Textarea defaultValue={(subscription as any).description} rows={4} />
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => handleInputChange("description", e.target.value)}
+                      rows={4}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).description}</p>
+                    <p className="text-foreground">{formData.description}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Social Media Links</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).socialMedia}
-                      placeholder="Facebook, Instagram, Twitter links..."
+                      value={formData.socialMedia}
+                      onChange={(e) => handleInputChange("socialMedia", e.target.value)}
+                      placeholder="facebook: https://...\ninstagram: https://..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
+                    <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || "Not provided"}</p>
                   )}
                 </div>
               </>
@@ -470,103 +583,127 @@ export default function SubscriptionDetailPage() {
                 <div className="space-y-2">
                   <Label>Mosque Name</Label>
                   {isEditing ? (
-                    <Input defaultValue={subscription.name} />
+                    <Input value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{subscription.name}</p>
+                    <p className="text-foreground">{formData.name}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).address} />
+                    <Input value={formData.address} onChange={(e) => handleInputChange("address", e.target.value)} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).address}</p>
+                    <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Email Address</Label>
                     {isEditing ? (
-                      <Input type="email" defaultValue={(subscription as any).email} />
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).email}</p>
+                      <p className="text-foreground">{formData.email}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
                     {isEditing ? (
-                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                      <Input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange("phone", e.target.value)}
+                      />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).phone}</p>
+                      <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Website</Label>
                   {isEditing ? (
-                    <Input type="url" defaultValue={(subscription as any).website} />
+                    <Input
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => handleInputChange("website", e.target.value)}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).website}</p>
+                    <p className="text-foreground">{formData.website}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Social Media Links</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).socialMedia}
-                      placeholder="Facebook, Instagram, Twitter links..."
+                      value={formData.socialMedia}
+                      onChange={(e) => handleInputChange("socialMedia", e.target.value)}
+                      placeholder="facebook: https://...\ninstagram: https://..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
+                    <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || "Not provided"}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Donate Link</Label>
                   {isEditing ? (
-                    <Input type="url" defaultValue={(subscription as any).donateLink} />
+                    <Input
+                      type="url"
+                      value={formData.donateLink}
+                      onChange={(e) => handleInputChange("donateLink", e.target.value)}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).donateLink}</p>
+                    <p className="text-foreground">{formData.donateLink}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Prayer Times Link</Label>
                   {isEditing ? (
-                    <Input type="url" defaultValue={(subscription as any).prayerTimesLink} />
+                    <Input
+                      type="url"
+                      value={formData.prayerTimesLink}
+                      onChange={(e) => handleInputChange("prayerTimesLink", e.target.value)}
+                    />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).prayerTimesLink}</p>
+                    <p className="text-foreground">{formData.prayerTimesLink}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Sunday School</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).sundaySchool}
+                      value={formData.sundaySchool}
+                      onChange={(e) => handleInputChange("sundaySchool", e.target.value)}
                       placeholder="Sunday school information..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).sundaySchool}</p>
+                    <p className="text-foreground">{formData.sundaySchool}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Services Offered</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).services}
+                      value={formData.services}
+                      onChange={(e) => handleInputChange("services", e.target.value)}
                       placeholder="Prayer services, classes, events..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).services}</p>
+                    <p className="text-foreground">{formData.services}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label>Committee Members</Label>
                   {isEditing ? (
                     <Textarea
-                      defaultValue={(subscription as any).committeeMembers}
+                      value={formData.committeeMembers}
+                      onChange={(e) => handleInputChange("committeeMembers", e.target.value)}
                       placeholder="List of committee members..."
                     />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).committeeMembers}</p>
+                    <p className="text-foreground">{formData.committeeMembers}</p>
                   )}
                 </div>
               </>
@@ -667,7 +804,7 @@ export default function SubscriptionDetailPage() {
         )}
 
         {subscription.status === "active" && (
-          <Card className="border-destructive/50">
+          <Card className="border-destructive/50 mt-6">
             <CardHeader>
               <CardTitle className="text-destructive flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
