@@ -55,23 +55,47 @@ export default function AdminDashboard() {
   const [payoutsMonth, setPayoutsMonth] = useState(new Date())
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
+  const markAsAdded = (subscriptionId: string) => {
+    console.log("[v0] Marking subscription as added to app:", subscriptionId)
+    // In a real app, this would update the database
+    alert(`Subscription ${subscriptionId} marked as added to the app!`)
+  }
+
   const allMosques = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "mosque")
       .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
-  ) as (MosqueSubscription & { memberName: string; memberEmail: string; memberPhone?: string; memberId: string })[]
+  ) as (MosqueSubscription & {
+    memberName: string
+    memberEmail: string
+    memberPhone?: string
+    memberId: string
+    addedToApp?: boolean
+  })[]
 
   const allBusinesses = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "business")
       .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
-  ) as (BusinessSubscription & { memberName: string; memberEmail: string; memberPhone?: string; memberId: string })[]
+  ) as (BusinessSubscription & {
+    memberName: string
+    memberEmail: string
+    memberPhone?: string
+    memberId: string
+    addedToApp?: boolean
+  })[]
 
   const allCoupons = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "coupon")
       .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
-  ) as (CouponSubscription & { memberName: string; memberEmail: string; memberPhone?: string; memberId: string })[]
+  ) as (CouponSubscription & {
+    memberName: string
+    memberEmail: string
+    memberPhone?: string
+    memberId: string
+    addedToApp?: boolean
+  })[]
 
   const totalMosques = allMosques.length
   const totalBusinesses = allBusinesses.length
@@ -364,7 +388,11 @@ export default function AdminDashboard() {
                       open={expandedItems[mosque.id]}
                       onOpenChange={() => toggleExpanded(mosque.id)}
                     >
-                      <div className="border border-border rounded-lg overflow-hidden">
+                      <div
+                        className={`border rounded-lg overflow-hidden ${
+                          !mosque.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
+                        }`}
+                      >
                         <CollapsibleTrigger asChild>
                           <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                             <div className="flex items-center gap-4">
@@ -386,6 +414,14 @@ export default function AdminDashboard() {
                                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                                     Code: #{mosque.mosqueCode}
                                   </Badge>
+                                  {!mosque.addedToApp && (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                    >
+                                      🆕 Pending Verification
+                                    </Badge>
+                                  )}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                                   <MapPin className="h-3 w-3" />
@@ -394,6 +430,20 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
+                              {!mosque.addedToApp && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    markAsAdded(mosque.id)
+                                  }}
+                                >
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Mark as Added
+                                </Button>
+                              )}
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-foreground">${mosque.price}/mo</p>
                                 <p className="text-xs text-muted-foreground">
@@ -597,7 +647,11 @@ export default function AdminDashboard() {
                     open={expandedItems[business.id]}
                     onOpenChange={() => toggleExpanded(business.id)}
                   >
-                    <div className="border border-border rounded-lg overflow-hidden">
+                    <div
+                      className={`border rounded-lg overflow-hidden ${
+                        !business.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
+                      }`}
+                    >
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                           <div className="flex items-center gap-4">
@@ -624,11 +678,33 @@ export default function AdminDashboard() {
                                     Mosque #{business.affiliatedMosqueCode}
                                   </Badge>
                                 )}
+                                {!business.addedToApp && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                  >
+                                    🆕 Pending Verification
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground">{business.categories?.join(", ")}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
+                            {!business.addedToApp && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  markAsAdded(business.id)
+                                }}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Mark as Added
+                              </Button>
+                            )}
                             <div className="text-right">
                               <p className="text-sm font-semibold text-foreground">${business.price}/mo</p>
                               <p className="text-xs text-muted-foreground">
@@ -790,7 +866,11 @@ export default function AdminDashboard() {
                     open={expandedItems[coupon.id]}
                     onOpenChange={() => toggleExpanded(coupon.id)}
                   >
-                    <div className="border border-border rounded-lg overflow-hidden">
+                    <div
+                      className={`border rounded-lg overflow-hidden ${
+                        !coupon.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
+                      }`}
+                    >
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                           <div className="flex items-center gap-4">
@@ -817,11 +897,33 @@ export default function AdminDashboard() {
                                     Mosque #{coupon.affiliatedMosqueCode}
                                   </Badge>
                                 )}
+                                {!coupon.addedToApp && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                  >
+                                    🆕 Pending Verification
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground">{coupon.merchant}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
+                            {!coupon.addedToApp && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  markAsAdded(coupon.id)
+                                }}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Mark as Added
+                              </Button>
+                            )}
                             <div className="text-right">
                               <p className="text-sm font-semibold text-foreground">${coupon.price}/mo</p>
                               <p className="text-xs text-muted-foreground">

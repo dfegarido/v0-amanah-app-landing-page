@@ -3,8 +3,8 @@ import type { Member, PaymentAlert, AffiliateEarning, FinancialRecord, EmailTemp
 export const mockMembers: Member[] = [
   {
     id: "1",
-    email: "mosque@epma.org",
-    name: "Easton Phillipsburg Muslim Association",
+    email: "admin@epma.org",
+    name: "Imam Ahmad Hassan",
     phone: "+1 555-123-4567",
     subscriptions: [
       {
@@ -17,6 +17,8 @@ export const mockMembers: Member[] = [
         startDate: "2024-01-01",
         paymentStartDate: "2024-01-01",
         nextBillingDate: "2025-01-01",
+        addedToApp: true,
+        addedToAppDate: "2024-01-02",
         address: "123 Islamic Way, Easton, PA 18042",
         email: "info@epma.org",
         phone: "+1 555-123-4567",
@@ -66,6 +68,7 @@ export const mockMembers: Member[] = [
         startDate: "2024-06-01",
         paymentStartDate: "2024-06-01",
         nextBillingDate: "2025-01-01",
+        addedToApp: false,
         categories: ["Restaurant", "Food & Dining"],
         subCategories: ["Mediterranean", "Middle Eastern", "Halal Certified"],
         address: "123 Main Street",
@@ -105,6 +108,8 @@ export const mockMembers: Member[] = [
         startDate: "2024-06-01",
         paymentStartDate: "2024-06-01",
         nextBillingDate: "2025-01-01",
+        addedToApp: true,
+        addedToAppDate: "2024-06-02",
         phone: "+1 555-987-6543",
         email: "coupons@halaldelights.com",
         website: "https://www.halaldelights.com/coupons",
@@ -136,6 +141,7 @@ export const mockMembers: Member[] = [
         startDate: "2024-06-01",
         paymentStartDate: "2024-06-15",
         nextBillingDate: "2025-01-01",
+        addedToApp: false,
         phone: "+1 555-987-6543",
         email: "coupons@halaldelights.com",
         merchant: "Halal Delights Restaurant",
@@ -159,8 +165,8 @@ export const mockMembers: Member[] = [
   },
   {
     id: "3",
-    email: "admin@isbr.org",
-    name: "Islamic Society of Basking Ridge",
+    email: "contact@isbr.org",
+    name: "Dr. Yusuf Ibrahim",
     phone: "+1 555-456-7890",
     subscriptions: [
       {
@@ -173,6 +179,8 @@ export const mockMembers: Member[] = [
         startDate: "2024-03-01",
         paymentStartDate: "2024-03-01",
         nextBillingDate: "2024-12-01",
+        addedToApp: true,
+        addedToAppDate: "2024-03-03",
         address: "456 Faith Lane, Basking Ridge, NJ 07920",
         email: "info@isbr.org",
         phone: "+1 555-456-7890",
@@ -194,8 +202,8 @@ export const mockMembers: Member[] = [
   },
   {
     id: "4",
-    email: "info@crescentbooks.com",
-    name: "Crescent Islamic Books",
+    email: "contact@crescentbooks.com",
+    name: "Sarah Ali",
     phone: "+1 555-321-9876",
     subscriptions: [
       {
@@ -209,6 +217,7 @@ export const mockMembers: Member[] = [
         startDate: "2024-08-01",
         paymentStartDate: "2024-08-01",
         nextBillingDate: "2025-01-01",
+        addedToApp: false,
         categories: ["Retail", "Books & Media"],
         subCategories: ["Islamic Books", "Qurans", "Prayer Items", "Gifts"],
         address: "456 Oak Avenue",
@@ -243,6 +252,8 @@ export const mockMembers: Member[] = [
         startDate: "2024-08-01",
         paymentStartDate: "2024-08-15",
         nextBillingDate: "2025-01-01",
+        addedToApp: true,
+        addedToAppDate: "2024-08-16",
         phone: "+1 555-321-9876",
         email: "sales@crescentbooks.com",
         merchant: "Crescent Islamic Books & Gifts",
@@ -263,21 +274,21 @@ export const mockMembers: Member[] = [
   },
   {
     id: "5",
-    email: "contact@noorclothing.com",
-    name: "Noor Modest Fashion",
+    email: "info@modestfashion.com",
+    name: "Aisha Rahman",
     phone: "+1 555-654-3210",
     subscriptions: [
       {
         id: "sub-8",
         type: "business",
-        name: "Noor Fashion",
-        title: "Noor Modest Fashion",
-        affiliatedMosqueCode: 1,
+        name: "Modest Fashion",
+        title: "Modest Fashion Boutique",
         status: "active",
         price: 10,
-        startDate: "2024-09-15",
-        paymentStartDate: "2024-09-15",
-        nextBillingDate: "2025-01-15",
+        startDate: "2024-09-01",
+        paymentStartDate: "2024-09-01",
+        nextBillingDate: "2025-01-01",
+        addedToApp: false,
         categories: ["Clothing", "Fashion"],
         subCategories: ["Modest Wear", "Hijabs", "Abayas", "Women's Fashion"],
         address: "789 Fashion Blvd",
@@ -302,12 +313,12 @@ export const mockMembers: Member[] = [
           "/islamic-modest-wear.jpg",
         ],
         documents: [
-          { id: "doc-7", name: "Business License", url: "#", uploadedAt: "2024-09-15", type: "pdf" },
-          { id: "doc-8", name: "Vendor Agreement", url: "#", uploadedAt: "2024-09-15", type: "pdf" },
+          { id: "doc-7", name: "Business License", url: "#", uploadedAt: "2024-09-01", type: "pdf" },
+          { id: "doc-8", name: "Vendor Agreement", url: "#", uploadedAt: "2024-09-01", type: "pdf" },
         ],
       },
     ],
-    createdAt: "2024-09-15",
+    createdAt: "2024-09-01",
   },
 ]
 

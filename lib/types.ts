@@ -11,6 +11,8 @@ export interface Subscription {
   startDate: string
   nextBillingDate: string
   paymentStartDate: string
+  addedToApp: boolean
+  addedToAppDate?: string
 }
 
 export interface MosqueSubscription extends Subscription {

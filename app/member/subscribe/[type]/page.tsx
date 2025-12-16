@@ -739,7 +739,7 @@ export default function SubscribePage() {
                 <Check className="h-8 w-8 text-green-500" />
               </div>
               <h2 className="text-2xl font-bold text-foreground mb-2">Subscription Active!</h2>
-              <p className="text-muted-foreground mb-6">
+              <p className="text-muted-foreground mb-4">
                 Your {type} subscription has been successfully activated.
                 {type === "mosque" && (
                   <span className="block mt-2 text-primary font-semibold">
@@ -754,6 +754,13 @@ export default function SubscribePage() {
                     </span>
                   )}
               </p>
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">📋 Verification in Progress</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your {type} will be reviewed and added to the Amanah app within 1-2 business days after verification
+                  by our staff team.
+                </p>
+              </div>
               <Button asChild>
                 <Link href="/member">Return to Dashboard</Link>
               </Button>
