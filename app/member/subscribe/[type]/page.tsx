@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -44,6 +46,7 @@ export default function SubscribePage() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null)
   const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
+  const [formData, setFormData] = useState({ name: "" }) // Added to store form data
 
   const info = subscriptionInfo[type]
   const Icon = info?.icon || Building2
@@ -82,8 +85,25 @@ export default function SubscribePage() {
   const handleSubmit = async () => {
     setIsProcessing(true)
     await new Promise((resolve) => setTimeout(resolve, 2000))
+
+    // Simulate sending notification email to admin
+    const newEmailLog = {
+      id: `log-${Date.now()}`,
+      to: "josh@mobileappcity.com",
+      recipientName: "Amanah Admin",
+      template: "Admin Alert - New Subscription",
+      subject: `New ${type} subscription added: ${formData.name || "Unnamed"}`,
+      sentAt: new Date().toISOString(),
+      status: "sent" as const,
+    }
+    console.log("[v0] Notification email sent to admin:", newEmailLog)
+
     setStep(3)
     setIsProcessing(false)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.id]: e.target.value })
   }
 
   return (
@@ -159,27 +179,27 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="name">Mosque Name *</Label>
-                        <Input id="name" placeholder="Enter mosque name" />
+                        <Input id="name" placeholder="Enter mosque name" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="address">Address *</Label>
-                        <Input id="address" placeholder="Full address" />
+                        <Input id="address" placeholder="Full address" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="email">Email Address *</Label>
-                        <Input id="email" type="email" placeholder="mosque@example.com" />
+                        <Input id="email" type="email" placeholder="mosque@example.com" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone">Phone Number *</Label>
-                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                        <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="website">Website</Label>
-                        <Input id="website" placeholder="https://www.yourmasjid.org" />
+                        <Input id="website" placeholder="https://www.yourmasjid.org" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="contactName">Contact Name (Leader) *</Label>
-                        <Input id="contactName" placeholder="Imam name or administrator" />
+                        <Input id="contactName" placeholder="Imam name or administrator" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -191,19 +211,27 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="facebook">Facebook</Label>
-                        <Input id="facebook" placeholder="https://facebook.com/yourmasjid" />
+                        <Input
+                          id="facebook"
+                          placeholder="https://facebook.com/yourmasjid"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="instagram">Instagram</Label>
-                        <Input id="instagram" placeholder="https://instagram.com/yourmasjid" />
+                        <Input
+                          id="instagram"
+                          placeholder="https://instagram.com/yourmasjid"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="twitter">X (Twitter)</Label>
-                        <Input id="twitter" placeholder="https://twitter.com/yourmasjid" />
+                        <Input id="twitter" placeholder="https://twitter.com/yourmasjid" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="otherSocial">Other Social Media</Label>
-                        <Input id="otherSocial" placeholder="Any other social links" />
+                        <Input id="otherSocial" placeholder="Any other social links" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -275,27 +303,44 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="donateLink">Donate Link</Label>
-                        <Input id="donateLink" placeholder="https://yourmasjid.org/donate" />
+                        <Input
+                          id="donateLink"
+                          placeholder="https://yourmasjid.org/donate"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="prayerTimesLink">Prayer Times Link</Label>
-                        <Input id="prayerTimesLink" placeholder="https://yourmasjid.org/prayer-times" />
+                        <Input
+                          id="prayerTimesLink"
+                          placeholder="https://yourmasjid.org/prayer-times"
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sundaySchool">Sunday School</Label>
-                      <Textarea id="sundaySchool" placeholder="Describe your Sunday School program, timings, etc." />
+                      <Textarea
+                        id="sundaySchool"
+                        placeholder="Describe your Sunday School program, timings, etc."
+                        onChange={handleInputChange}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="services">Services</Label>
                       <Textarea
                         id="services"
                         placeholder="List services offered (Jummah, Nikah, Funeral, Counseling, etc.)"
+                        onChange={handleInputChange}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="committee">Committee Members</Label>
-                      <Textarea id="committee" placeholder="List committee members and their roles" />
+                      <Textarea
+                        id="committee"
+                        placeholder="List committee members and their roles"
+                        onChange={handleInputChange}
+                      />
                     </div>
                   </div>
                 </>
@@ -337,19 +382,32 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2 md:col-span-2">
                         <Label htmlFor="title">Business Title *</Label>
-                        <Input id="title" placeholder="Enter business name" />
+                        <Input id="title" placeholder="Enter business name" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2 md:col-span-2">
                         <Label htmlFor="description">Description *</Label>
-                        <Textarea id="description" placeholder="Describe your business..." rows={4} />
+                        <Textarea
+                          id="description"
+                          placeholder="Describe your business..."
+                          rows={4}
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="categories">Categories *</Label>
-                        <Input id="categories" placeholder="e.g., Restaurant, Retail, Services (comma separated)" />
+                        <Input
+                          id="categories"
+                          placeholder="e.g., Restaurant, Retail, Services (comma separated)"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="subCategories">Sub Categories</Label>
-                        <Input id="subCategories" placeholder="e.g., Halal, Mediterranean (comma separated)" />
+                        <Input
+                          id="subCategories"
+                          placeholder="e.g., Halal, Mediterranean (comma separated)"
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                   </div>
@@ -389,23 +447,23 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2 md:col-span-2">
                         <Label htmlFor="address">Address *</Label>
-                        <Input id="address" placeholder="Street address" />
+                        <Input id="address" placeholder="Street address" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="city">City *</Label>
-                        <Input id="city" placeholder="City" />
+                        <Input id="city" placeholder="City" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="state">State *</Label>
-                        <Input id="state" placeholder="State" />
+                        <Input id="state" placeholder="State" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="zip">Zip *</Label>
-                        <Input id="zip" placeholder="Zip code" />
+                        <Input id="zip" placeholder="Zip code" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="country">Country *</Label>
-                        <Input id="country" placeholder="Country" defaultValue="USA" />
+                        <Input id="country" placeholder="Country" defaultValue="USA" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -417,19 +475,24 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="phone">Phone *</Label>
-                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                        <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="fax">Fax</Label>
-                        <Input id="fax" placeholder="+1 (555) 000-0000" />
+                        <Input id="fax" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="email">Email *</Label>
-                        <Input id="email" type="email" placeholder="business@example.com" />
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="business@example.com"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="website">Website</Label>
-                        <Input id="website" placeholder="https://www.yourbusiness.com" />
+                        <Input id="website" placeholder="https://www.yourbusiness.com" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -441,19 +504,31 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="facebook">Facebook</Label>
-                        <Input id="facebook" placeholder="https://facebook.com/yourbusiness" />
+                        <Input
+                          id="facebook"
+                          placeholder="https://facebook.com/yourbusiness"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="instagram">Instagram</Label>
-                        <Input id="instagram" placeholder="https://instagram.com/yourbusiness" />
+                        <Input
+                          id="instagram"
+                          placeholder="https://instagram.com/yourbusiness"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="twitter">X (Twitter)</Label>
-                        <Input id="twitter" placeholder="https://twitter.com/yourbusiness" />
+                        <Input
+                          id="twitter"
+                          placeholder="https://twitter.com/yourbusiness"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="otherSocial">Other</Label>
-                        <Input id="otherSocial" placeholder="Any other social links" />
+                        <Input id="otherSocial" placeholder="Any other social links" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -496,23 +571,28 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2 md:col-span-2">
                         <Label htmlFor="title">Title *</Label>
-                        <Input id="title" placeholder="e.g., 10% Off First Order" />
+                        <Input id="title" placeholder="e.g., 10% Off First Order" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="merchant">Merchant *</Label>
-                        <Input id="merchant" placeholder="Your business name" />
+                        <Input id="merchant" placeholder="Your business name" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone">Phone *</Label>
-                        <Input id="phone" placeholder="+1 (555) 000-0000" />
+                        <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="email">Email *</Label>
-                        <Input id="email" type="email" placeholder="coupons@yourbusiness.com" />
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="coupons@yourbusiness.com"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="website">Website</Label>
-                        <Input id="website" placeholder="https://www.yourbusiness.com" />
+                        <Input id="website" placeholder="https://www.yourbusiness.com" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -524,19 +604,19 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="redeemLimit">Total Redeem Limit</Label>
-                        <Input id="redeemLimit" type="number" placeholder="e.g., 500" />
+                        <Input id="redeemLimit" type="number" placeholder="e.g., 500" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="userRedeemLimit">User Redeem Limit</Label>
-                        <Input id="userRedeemLimit" type="number" placeholder="e.g., 1" />
+                        <Input id="userRedeemLimit" type="number" placeholder="e.g., 1" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="userMonthlyLimit">User Monthly Redeem Limit</Label>
-                        <Input id="userMonthlyLimit" type="number" placeholder="e.g., 2" />
+                        <Input id="userMonthlyLimit" type="number" placeholder="e.g., 2" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="userWeeklyLimit">User Weekly Redeem Limit</Label>
-                        <Input id="userWeeklyLimit" type="number" placeholder="e.g., 1" />
+                        <Input id="userWeeklyLimit" type="number" placeholder="e.g., 1" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -548,27 +628,27 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="discountAmount">Discount Amount (or)</Label>
-                        <Input id="discountAmount" placeholder="e.g., $5 off, Free Item" />
+                        <Input id="discountAmount" placeholder="e.g., $5 off, Free Item" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="discountPercentage">Discount Percentage</Label>
-                        <Input id="discountPercentage" placeholder="e.g., 10%, 20%" />
+                        <Input id="discountPercentage" placeholder="e.g., 10%, 20%" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="couponCode">Coupon/Voucher Code</Label>
-                        <Input id="couponCode" placeholder="e.g., SAVE10" />
+                        <Input id="couponCode" placeholder="e.g., SAVE10" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="redeemCode">Redeem Code</Label>
-                        <Input id="redeemCode" placeholder="e.g., RD001" />
+                        <Input id="redeemCode" placeholder="e.g., RD001" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="prefix">Prefix</Label>
-                        <Input id="prefix" placeholder="e.g., HD" />
+                        <Input id="prefix" placeholder="e.g., HD" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="nextNo">Next No.</Label>
-                        <Input id="nextNo" placeholder="e.g., 001" />
+                        <Input id="nextNo" placeholder="e.g., 001" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -580,11 +660,11 @@ export default function SubscribePage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="startDate">Start Date *</Label>
-                        <Input id="startDate" type="date" />
+                        <Input id="startDate" type="date" onChange={handleInputChange} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="endDate">End Date</Label>
-                        <Input id="endDate" type="date" />
+                        <Input id="endDate" type="date" onChange={handleInputChange} />
                       </div>
                     </div>
                   </div>
@@ -596,15 +676,29 @@ export default function SubscribePage() {
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor="description">Description *</Label>
-                        <Textarea id="description" placeholder="Full description of the offer..." rows={3} />
+                        <Textarea
+                          id="description"
+                          placeholder="Full description of the offer..."
+                          rows={3}
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="thumbnailDescription">Thumbnail Description</Label>
-                        <Input id="thumbnailDescription" placeholder="Short text for thumbnail display" />
+                        <Input
+                          id="thumbnailDescription"
+                          placeholder="Short text for thumbnail display"
+                          onChange={handleInputChange}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="popUpText">Pop Up Text</Label>
-                        <Textarea id="popUpText" placeholder="Text to show in pop-up..." rows={2} />
+                        <Textarea
+                          id="popUpText"
+                          placeholder="Text to show in pop-up..."
+                          rows={2}
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                   </div>
@@ -643,7 +737,11 @@ export default function SubscribePage() {
                     <h3 className="font-semibold text-foreground">Location</h3>
                     <div className="space-y-2">
                       <Label htmlFor="address">Address *</Label>
-                      <Input id="address" placeholder="Full address where coupon can be redeemed" />
+                      <Input
+                        id="address"
+                        placeholder="Full address where coupon can be redeemed"
+                        onChange={handleInputChange}
+                      />
                     </div>
                   </div>
                 </>

@@ -29,6 +29,7 @@ import {
   PieChart,
   ArrowUpRight,
   Ban,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,7 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { mockMembers, mockPaymentAlerts, mockFinancialRecords } from "@/lib/mock-data"
-import type { MosqueSubscription, BusinessSubscription, CouponSubscription } from "@/lib/types"
+import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -55,46 +56,73 @@ export default function AdminDashboard() {
   const [payoutsMonth, setPayoutsMonth] = useState(new Date())
   const [cancellingId, setCancellingId] = useState<string | null>(null)
 
-  const markAsAdded = (subscriptionId: string) => {
-    console.log("[v0] Marking subscription as added to app:", subscriptionId)
-    // In a real app, this would update the database
-    alert(`Subscription ${subscriptionId} marked as added to the app!`)
+  // REMOVED: markAsAdded function
+
+  // ADDED: updateAppStatus function
+  const updateAppStatus = (subscriptionId: string, newStatus: "active" | "removed") => {
+    console.log(`[v0] Updating subscription ${subscriptionId} to status: ${newStatus}`)
+    // In a real app, this would make an API call to update the status
+    alert(`Subscription marked as ${newStatus === "active" ? "Added to App" : "Removed from App"}`)
+    // This would typically involve re-fetching data or updating the local state
+    // For demonstration purposes, we'll just log and alert.
   }
 
   const allMosques = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "mosque")
-      .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
+      .map((s) => ({
+        ...s,
+        memberName: m.name,
+        memberEmail: m.email,
+        memberPhone: m.phone,
+        memberId: m.id,
+        // Added default appStatus for demonstration, in a real app this would come from the backend
+        appStatus: s.appStatus || "active",
+      })),
   ) as (MosqueSubscription & {
     memberName: string
     memberEmail: string
     memberPhone?: string
     memberId: string
-    addedToApp?: boolean
+    appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
   const allBusinesses = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "business")
-      .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
+      .map((s) => ({
+        ...s,
+        memberName: m.name,
+        memberEmail: m.email,
+        memberPhone: m.phone,
+        memberId: m.id,
+        appStatus: s.appStatus || "active",
+      })),
   ) as (BusinessSubscription & {
     memberName: string
     memberEmail: string
     memberPhone?: string
     memberId: string
-    addedToApp?: boolean
+    appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
   const allCoupons = mockMembers.flatMap((m) =>
     m.subscriptions
       .filter((s) => s.type === "coupon")
-      .map((s) => ({ ...s, memberName: m.name, memberEmail: m.email, memberPhone: m.phone, memberId: m.id })),
+      .map((s) => ({
+        ...s,
+        memberName: m.name,
+        memberEmail: m.email,
+        memberPhone: m.phone,
+        memberId: m.id,
+        appStatus: s.appStatus || "active",
+      })),
   ) as (CouponSubscription & {
     memberName: string
     memberEmail: string
     memberPhone?: string
     memberId: string
-    addedToApp?: boolean
+    appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
   const totalMosques = allMosques.length
@@ -144,6 +172,130 @@ export default function AdminDashboard() {
     setAlerts(
       alerts.map((a) => (a.id === alertId ? { ...a, resolved: true, resolvedAt: new Date().toISOString() } : a)),
     )
+  }
+
+  // ADDED: getCardStyle helper function
+  const getCardStyle = (subscription: Subscription) => {
+    if (subscription.status === "cancelled" || subscription.appStatus === "cancelled") {
+      return "border-red-500 bg-red-500/5"
+    }
+    if (subscription.appStatus === "removed") {
+      return "border-gray-400 bg-gray-400/5"
+    }
+    if (subscription.appStatus === "pending_verification") {
+      return "border-green-500 bg-green-500/5"
+    }
+    return "border-border"
+  }
+
+  // ADDED: getAppStatusBadge helper function
+  const getAppStatusBadge = (subscription: Subscription) => {
+    if (subscription.status === "cancelled" || subscription.appStatus === "cancelled") {
+      return (
+        <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">
+          🔴 Cancelled - To Be Removed
+        </Badge>
+      )
+    }
+    if (subscription.appStatus === "removed") {
+      return (
+        <Badge variant="outline" className="bg-gray-400/10 text-gray-600 border-gray-400/20">
+          ⚫ Removed from App
+        </Badge>
+      )
+    }
+    if (subscription.appStatus === "pending_verification") {
+      return (
+        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+          🆕 New - Pending Verification
+        </Badge>
+      )
+    }
+    if (subscription.appStatus === "active") {
+      return (
+        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+          ✓ Active in App
+        </Badge>
+      )
+    }
+    return null
+  }
+
+  // ADDED: getActionButton helper function
+  const getActionButton = (subscription: Subscription) => {
+    // If cancelled or removed, show "Mark as Removed" to clear and turn gray
+    if (subscription.status === "cancelled" && subscription.appStatus !== "removed") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-gray-400/10 hover:bg-gray-400/20 text-gray-600 border-gray-400/20"
+          onClick={(e) => {
+            e.stopPropagation()
+            updateAppStatus(subscription.id, "removed")
+          }}
+        >
+          <X className="h-4 w-4 mr-1" />
+          Mark as Removed
+        </Button>
+      )
+    }
+
+    // If removed, show "Mark as Added" to bring back online
+    if (subscription.appStatus === "removed") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+          onClick={(e) => {
+            e.stopPropagation()
+            updateAppStatus(subscription.id, "active")
+          }}
+        >
+          <Check className="h-4 w-4 mr-1" />
+          Mark as Added
+        </Button>
+      )
+    }
+
+    // If pending verification, show "Mark as Added"
+    if (subscription.appStatus === "pending_verification") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+          onClick={(e) => {
+            e.stopPropagation()
+            updateAppStatus(subscription.id, "active")
+          }}
+        >
+          <Check className="h-4 w-4 mr-1" />
+          Mark as Added
+        </Button>
+      )
+    }
+
+    // If active, show "Mark as Removed"
+    if (subscription.appStatus === "active") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 border-orange-500/20"
+          onClick={(e) => {
+            e.stopPropagation()
+            updateAppStatus(subscription.id, "removed")
+          }}
+        >
+          <X className="h-4 w-4 mr-1" />
+          Mark as Removed
+        </Button>
+      )
+    }
+
+    return null
   }
 
   const toggleExpanded = (id: string) => {
@@ -388,11 +540,7 @@ export default function AdminDashboard() {
                       open={expandedItems[mosque.id]}
                       onOpenChange={() => toggleExpanded(mosque.id)}
                     >
-                      <div
-                        className={`border rounded-lg overflow-hidden ${
-                          !mosque.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
-                        }`}
-                      >
+                      <div className={`border rounded-lg overflow-hidden ${getCardStyle(mosque)}`}>
                         <CollapsibleTrigger asChild>
                           <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                             <div className="flex items-center gap-4">
@@ -414,14 +562,7 @@ export default function AdminDashboard() {
                                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                                     Code: #{mosque.mosqueCode}
                                   </Badge>
-                                  {!mosque.addedToApp && (
-                                    <Badge
-                                      variant="outline"
-                                      className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                                    >
-                                      🆕 Pending Verification
-                                    </Badge>
-                                  )}
+                                  {getAppStatusBadge(mosque)}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                                   <MapPin className="h-3 w-3" />
@@ -430,20 +571,7 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
-                              {!mosque.addedToApp && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    markAsAdded(mosque.id)
-                                  }}
-                                >
-                                  <Check className="h-4 w-4 mr-1" />
-                                  Mark as Added
-                                </Button>
-                              )}
+                              {getActionButton(mosque)}
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-foreground">${mosque.price}/mo</p>
                                 <p className="text-xs text-muted-foreground">
@@ -647,11 +775,7 @@ export default function AdminDashboard() {
                     open={expandedItems[business.id]}
                     onOpenChange={() => toggleExpanded(business.id)}
                   >
-                    <div
-                      className={`border rounded-lg overflow-hidden ${
-                        !business.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
-                      }`}
-                    >
+                    <div className={`border rounded-lg overflow-hidden ${getCardStyle(business)}`}>
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                           <div className="flex items-center gap-4">
@@ -678,33 +802,13 @@ export default function AdminDashboard() {
                                     Mosque #{business.affiliatedMosqueCode}
                                   </Badge>
                                 )}
-                                {!business.addedToApp && (
-                                  <Badge
-                                    variant="outline"
-                                    className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                                  >
-                                    🆕 Pending Verification
-                                  </Badge>
-                                )}
+                                {getAppStatusBadge(business)}
                               </div>
                               <p className="text-sm text-muted-foreground">{business.categories?.join(", ")}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
-                            {!business.addedToApp && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  markAsAdded(business.id)
-                                }}
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Mark as Added
-                              </Button>
-                            )}
+                            {getActionButton(business)}
                             <div className="text-right">
                               <p className="text-sm font-semibold text-foreground">${business.price}/mo</p>
                               <p className="text-xs text-muted-foreground">
@@ -866,11 +970,7 @@ export default function AdminDashboard() {
                     open={expandedItems[coupon.id]}
                     onOpenChange={() => toggleExpanded(coupon.id)}
                   >
-                    <div
-                      className={`border rounded-lg overflow-hidden ${
-                        !coupon.addedToApp ? "border-yellow-500 bg-yellow-500/5" : "border-border"
-                      }`}
-                    >
+                    <div className={`border rounded-lg overflow-hidden ${getCardStyle(coupon)}`}>
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                           <div className="flex items-center gap-4">
@@ -897,33 +997,13 @@ export default function AdminDashboard() {
                                     Mosque #{coupon.affiliatedMosqueCode}
                                   </Badge>
                                 )}
-                                {!coupon.addedToApp && (
-                                  <Badge
-                                    variant="outline"
-                                    className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                                  >
-                                    🆕 Pending Verification
-                                  </Badge>
-                                )}
+                                {getAppStatusBadge(coupon)}
                               </div>
                               <p className="text-sm text-muted-foreground">{coupon.merchant}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
-                            {!coupon.addedToApp && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  markAsAdded(coupon.id)
-                                }}
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Mark as Added
-                              </Button>
-                            )}
+                            {getActionButton(coupon)}
                             <div className="text-right">
                               <p className="text-sm font-semibold text-foreground">${coupon.price}/mo</p>
                               <p className="text-xs text-muted-foreground">

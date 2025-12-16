@@ -140,36 +140,39 @@ export default function AdminSettingsPage() {
                   <Bell className="mr-2 inline-block h-5 w-5" />
                   Admin Notifications
                 </CardTitle>
-                <CardDescription>Configure when to receive notifications</CardDescription>
+                <CardDescription>Configure when to receive notifications and set notification email</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>New Subscription</Label>
-                    <p className="text-sm text-muted-foreground">Get notified when a new member subscribes</p>
-                  </div>
-                  <Switch defaultChecked />
+                <div className="space-y-2">
+                  <Label>Notification Email Address</Label>
+                  <p className="text-xs text-muted-foreground mb-2">Email where new subscription alerts will be sent</p>
+                  <Input type="email" placeholder="admin@amanah.app" defaultValue="josh@mobileappcity.com" />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Payment Failed</Label>
-                    <p className="text-sm text-muted-foreground">Alert when a payment fails</p>
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold text-foreground mb-4">Alert Types</h3>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>New Subscription</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get notified when a new mosque, business, or coupon is added
+                      </p>
+                    </div>
+                    <Switch defaultChecked />
                   </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Subscription Cancelled</Label>
-                    <p className="text-sm text-muted-foreground">Get notified of cancellations</p>
+                  <div className="flex items-center justify-between pt-4">
+                    <div className="space-y-0.5">
+                      <Label>Payment Failed</Label>
+                      <p className="text-sm text-muted-foreground">Alert when a payment fails</p>
+                    </div>
+                    <Switch defaultChecked />
                   </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>New Mosque Added</Label>
-                    <p className="text-sm text-muted-foreground">Alert when a new mosque is listed</p>
+                  <div className="flex items-center justify-between pt-4">
+                    <div className="space-y-0.5">
+                      <Label>Subscription Cancelled</Label>
+                      <p className="text-sm text-muted-foreground">Get notified of cancellations</p>
+                    </div>
+                    <Switch defaultChecked />
                   </div>
-                  <Switch defaultChecked />
                 </div>
               </CardContent>
             </Card>

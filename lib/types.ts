@@ -2,6 +2,8 @@ export type SubscriptionType = "mosque" | "coupon" | "business"
 
 export type SubscriptionStatus = "active" | "pending" | "cancelled" | "past_due"
 
+export type AppStatus = "pending_verification" | "active" | "removed" | "cancelled"
+
 export interface Subscription {
   id: string
   type: SubscriptionType
@@ -13,6 +15,8 @@ export interface Subscription {
   paymentStartDate: string
   addedToApp: boolean
   addedToAppDate?: string
+  appStatus: AppStatus
+  removedFromAppDate?: string
 }
 
 export interface MosqueSubscription extends Subscription {
@@ -177,4 +181,11 @@ export interface EmailLog {
   sentAt: string
   status: "sent" | "failed" | "pending"
   error?: string
+}
+
+export interface AdminSettings {
+  notificationEmailAddress: string
+  enableNewSubscriptionNotifications: boolean
+  enablePaymentFailedNotifications: boolean
+  enableCancellationNotifications: boolean
 }

@@ -1,4 +1,12 @@
-import type { Member, PaymentAlert, AffiliateEarning, FinancialRecord, EmailTemplate, EmailLog } from "./types"
+import type {
+  Member,
+  PaymentAlert,
+  AffiliateEarning,
+  FinancialRecord,
+  EmailTemplate,
+  EmailLog,
+  AdminSettings,
+} from "./types"
 
 export const mockMembers: Member[] = [
   {
@@ -19,6 +27,7 @@ export const mockMembers: Member[] = [
         nextBillingDate: "2025-01-01",
         addedToApp: true,
         addedToAppDate: "2024-01-02",
+        appStatus: "active",
         address: "123 Islamic Way, Easton, PA 18042",
         email: "info@epma.org",
         phone: "+1 555-123-4567",
@@ -110,6 +119,7 @@ export const mockMembers: Member[] = [
         nextBillingDate: "2025-01-01",
         addedToApp: true,
         addedToAppDate: "2024-06-02",
+        appStatus: "active",
         phone: "+1 555-987-6543",
         email: "coupons@halaldelights.com",
         website: "https://www.halaldelights.com/coupons",
@@ -142,6 +152,7 @@ export const mockMembers: Member[] = [
         paymentStartDate: "2024-06-15",
         nextBillingDate: "2025-01-01",
         addedToApp: false,
+        appStatus: "active",
         phone: "+1 555-987-6543",
         email: "coupons@halaldelights.com",
         merchant: "Halal Delights Restaurant",
@@ -181,6 +192,7 @@ export const mockMembers: Member[] = [
         nextBillingDate: "2024-12-01",
         addedToApp: true,
         addedToAppDate: "2024-03-03",
+        appStatus: "active",
         address: "456 Faith Lane, Basking Ridge, NJ 07920",
         email: "info@isbr.org",
         phone: "+1 555-456-7890",
@@ -254,6 +266,7 @@ export const mockMembers: Member[] = [
         nextBillingDate: "2025-01-01",
         addedToApp: true,
         addedToAppDate: "2024-08-16",
+        appStatus: "active",
         phone: "+1 555-321-9876",
         email: "sales@crescentbooks.com",
         merchant: "Crescent Islamic Books & Gifts",
@@ -670,6 +683,15 @@ export const mockEmailTemplates: EmailTemplate[] = [
     lastModified: "2024-12-01",
     active: true,
   },
+  {
+    id: "template-7",
+    name: "Admin Alert - New Subscription",
+    subject: "New {{subscriptionType}} subscription added: {{subscriptionName}}",
+    body: "New {{subscriptionType}} subscription has been added to Amanah!\n\nDetails:\n- Name: {{subscriptionName}}\n- Email: {{memberEmail}}\n- Phone: {{memberPhone}}\n- Type: {{subscriptionType}}\n- Price: ${{price}}/month\n- Date: {{createdAt}}\n\nPlease verify and add to the app in the admin portal.\n\nAmanah Admin",
+    variables: ["subscriptionType", "subscriptionName", "memberEmail", "memberPhone", "price", "createdAt"],
+    lastModified: "2024-12-01",
+    active: true,
+  },
 ]
 
 export const mockEmailLogs: EmailLog[] = [
@@ -754,6 +776,13 @@ export const getAllMosquesWithCodes = () => {
     }
   }
   return mosques.sort((a, b) => a.code - b.code)
+}
+
+export const mockAdminSettings: AdminSettings = {
+  notificationEmailAddress: "josh@mobileappcity.com",
+  enableNewSubscriptionNotifications: true,
+  enablePaymentFailedNotifications: true,
+  enableCancellationNotifications: true,
 }
 
 export const emailTemplates = mockEmailTemplates
