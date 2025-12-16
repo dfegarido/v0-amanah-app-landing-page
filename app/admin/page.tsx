@@ -30,6 +30,7 @@ import {
   ArrowUpRight,
   Ban,
   X,
+  Heart,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -125,9 +126,33 @@ export default function AdminDashboard() {
     appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
+  // ADDED: allNonprofits data structure
+  const allNonprofits = mockMembers.flatMap((m) =>
+    m.subscriptions
+      .filter((s) => s.type === "nonprofit")
+      .map((s) => ({
+        ...s,
+        memberName: m.name,
+        memberEmail: m.email,
+        memberPhone: m.phone,
+        memberId: m.id,
+        // App lifecycle statuses: pending, active, update_pending, removed, cancelled
+        appLifecycle: s.appLifecycle || "pending",
+      })),
+  ) as Array<
+    Subscription & {
+      memberName: string
+      memberEmail: string
+      memberPhone?: string
+      memberId: string
+      appLifecycle: "pending" | "active" | "update_pending" | "removed" | "cancelled"
+    }
+  >
+
   const totalMosques = allMosques.length
   const totalBusinesses = allBusinesses.length
   const totalCoupons = allCoupons.length
+  const totalNonprofits = allNonprofits.length // Added totalNonprofits
   const unresolvedAlerts = alerts.filter((a) => !a.resolved).length
 
   const getMosqueAffiliates = (mosqueCode: number) => {
@@ -156,6 +181,19 @@ export default function AdminDashboard() {
     const totalAmanahDonation = records.reduce((acc, r) => acc + (r.amanahOrgDonation || 0), 0)
     const netRevenue = records.reduce((acc, r) => acc + r.netRevenue, 0)
 
+    // ADDED: Calculate total manual donations
+    const totalManualDonations = mockMembers.reduce((sum, member) => {
+      return (
+        sum +
+        member.subscriptions.reduce((subSum, sub) => {
+          if (sub.type === "mosque" && sub.manualDonations) {
+            return subSum + sub.manualDonations
+          }
+          return subSum
+        }, 0)
+      )
+    }, 0)
+
     return {
       totalRevenue,
       mosqueRevenue,
@@ -163,6 +201,7 @@ export default function AdminDashboard() {
       couponRevenue,
       totalMosqueKickbacks,
       totalAmanahDonation,
+      totalManualDonations, // Added totalManualDonations
       netRevenue,
       records,
     }
@@ -323,6 +362,24 @@ export default function AdminDashboard() {
     }
   }
 
+  // ADDED: getAppLifecycleBadge helper function for Non-Profits
+  const getAppLifecycleBadge = (lifecycle: string) => {
+    switch (lifecycle) {
+      case "pending":
+        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Pending</Badge>
+      case "active":
+        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Active</Badge>
+      case "update_pending":
+        return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Update Pending</Badge>
+      case "removed":
+        return <Badge className="bg-gray-500/10 text-gray-500 border-gray-500/20">Removed</Badge>
+      case "cancelled":
+        return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Cancelled</Badge>
+      default:
+        return <Badge variant="outline">{lifecycle}</Badge>
+    }
+  }
+
   const downloadAllPhotos = async (photos: string[], name: string) => {
     for (let i = 0; i < photos.length; i++) {
       const link = document.createElement("a")
@@ -390,11 +447,12 @@ export default function AdminDashboard() {
 
   const financialSummary = calculateFinancialSummary()
 
-  const handleCancelSubscription = (subscriptionId: string, type: string) => {
+  const handleCancelSubscription = (subscriptionId: string, type?: string) => {
+    // Added optional type parameter
     // Simulate cancellation
     toast({
       title: "Subscription Cancelled",
-      description: `${type} subscription has been cancelled and marked for removal.`,
+      description: `${type || "Subscription"} has been cancelled and marked for removal.`,
     })
     setCancellingId(null)
     // In a real app, this would update the backend
@@ -492,7 +550,7 @@ export default function AdminDashboard() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex-wrap">
+          <TabsList className="bg-muted flex-wrap">
             <TabsTrigger value="mosques">
               <Building2 className="h-4 w-4 mr-2" />
               Mosques ({totalMosques})
@@ -504,6 +562,10 @@ export default function AdminDashboard() {
             <TabsTrigger value="coupons">
               <Ticket className="h-4 w-4 mr-2" />
               Coupons ({totalCoupons})
+            </TabsTrigger>
+            <TabsTrigger value="nonprofits">
+              <Users className="h-4 w-4 mr-2" />
+              Non-Profits ({totalNonprofits})
             </TabsTrigger>
             <TabsTrigger value="payouts">
               <DollarSign className="h-4 w-4 mr-2" />
@@ -1120,12 +1182,206 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="nonprofits" className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Non-Profit Organizations</h2>
+              <p className="text-muted-foreground">Manage non-profit listings and verification</p>
+            </div>
+            {allNonprofits.map((nonprofit) => (
+              <Card
+                key={nonprofit.id}
+                className={`${
+                  nonprofit.appLifecycle === "pending"
+                    ? "border-green-500/50"
+                    : nonprofit.appLifecycle === "cancelled"
+                      ? "border-red-500/50"
+                      : nonprofit.appLifecycle === "removed"
+                        ? "border-gray-500/50"
+                        : nonprofit.appLifecycle === "update_pending"
+                          ? "border-yellow-500/50"
+                          : ""
+                }`}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Users className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          {nonprofit.name}
+                          {getAppLifecycleBadge(nonprofit.appLifecycle)}
+                          {getStatusBadge(nonprofit.status)}
+                        </CardTitle>
+                        <CardDescription>{nonprofit.memberName}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {nonprofit.appLifecycle === "update_pending" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            console.log("[v0] Marking nonprofit as updated:", nonprofit.id)
+                            alert("Nonprofit marked as updated!")
+                          }}
+                        >
+                          Mark as Updated
+                        </Button>
+                      )}
+                      {nonprofit.appLifecycle === "pending" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-500/10 border-green-500/20 text-green-500 hover:bg-green-500/20"
+                          onClick={() => {
+                            console.log("[v0] Marking nonprofit as added to app:", nonprofit.id)
+                            alert("Nonprofit marked as added!")
+                          }}
+                        >
+                          Mark as Added
+                        </Button>
+                      )}
+                      {(nonprofit.appLifecycle === "active" || nonprofit.appLifecycle === "update_pending") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            console.log("[v0] Marking nonprofit as removed:", nonprofit.id)
+                            alert("Nonprofit marked as removed")
+                          }}
+                        >
+                          Mark as Removed
+                        </Button>
+                      )}
+                      {(nonprofit.appLifecycle === "removed" || nonprofit.appLifecycle === "cancelled") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-500/10 border-green-500/20 text-green-500"
+                          onClick={() => {
+                            console.log("[v0] Re-adding nonprofit:", nonprofit.id)
+                            alert("Nonprofit re-added!")
+                          }}
+                        >
+                          Mark as Added
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCancelSubscription(nonprofit.id, "nonprofit")}
+                      >
+                        Cancel Subscription
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => toggleExpanded(`nonprofit-${nonprofit.id}`)}>
+                        {expandedItems[`nonprofit-${nonprofit.id}`] ? <ChevronUp /> : <ChevronDown />}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                {expandedItems[`nonprofit-${nonprofit.id}`] && (
+                  <CardContent className="space-y-4">
+                    {/* Display all nonprofit fields */}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <Label className="text-muted-foreground">Organization Name</Label>
+                        <p className="font-medium">{nonprofit.name}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Email</Label>
+                        <div className="flex items-center gap-2">
+                          <p>{nonprofit.email}</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigator.clipboard.writeText(nonprofit.email)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Phone</Label>
+                        <div className="flex items-center gap-2">
+                          <p>{nonprofit.phone}</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigator.clipboard.writeText(nonprofit.phone)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Website</Label>
+                        <p>{nonprofit.website}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label className="text-muted-foreground">Address</Label>
+                        <div className="flex items-center gap-2">
+                          <p>{nonprofit.address}</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigator.clipboard.writeText(nonprofit.address)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label className="text-muted-foreground">About</Label>
+                        <p>{nonprofit.about}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Donate Link</Label>
+                        <p>{nonprofit.donateLink}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Social Media</Label>
+                        <p className="whitespace-pre-wrap">{nonprofit.socialMedia}</p>
+                      </div>
+                    </div>
+                    {nonprofit.photos && nonprofit.photos.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-muted-foreground">Photos</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => downloadAllPhotos(nonprofit.photos!, nonprofit.name)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download All Photos
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {nonprofit.photos.map((photo, index) => (
+                            <img
+                              key={index}
+                              src={photo || "/placeholder.svg"}
+                              alt={`Photo ${index + 1}`}
+                              className="rounded-lg w-full h-32 object-cover"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </TabsContent>
+
           <TabsContent value="payouts" className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold">Mosque Affiliate Payouts</h2>
                 <p className="text-muted-foreground">
-                  Track mosque kickback earnings from affiliated businesses and coupons
+                  Track 10% kickbacks to mosques from affiliated businesses and coupons, plus manual donations
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1186,12 +1442,16 @@ export default function AdminDashboard() {
                         <TableHead className="text-center">Coupons</TableHead>
                         <TableHead className="text-center">Total Affiliates</TableHead>
                         <TableHead className="text-right">Monthly Payout</TableHead>
+                        <TableHead className="text-right">Manual Donations</TableHead>
+                        <TableHead className="text-right">Total Payout</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {allMosques.map((mosque) => {
                         const { businesses, coupons, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+                        const manualDonations = mosque.manualDonations || 0
+                        const totalPayout = totalKickback + manualDonations
                         return (
                           <TableRow key={mosque.id}>
                             <TableCell>
@@ -1207,6 +1467,19 @@ export default function AdminDashboard() {
                               {businesses.length + coupons.length}
                             </TableCell>
                             <TableCell className="text-right font-bold text-primary">${totalKickback}</TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                defaultValue={manualDonations}
+                                className="w-24 text-right"
+                                placeholder="$0"
+                                onChange={(e) => {
+                                  console.log("[v0] Updating manual donation for mosque:", mosque.id, e.target.value)
+                                  // In real app, this would update the mosque's manual donations
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-green-500">${totalPayout}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => toggleExpanded(`payout-${mosque.id}`)}>
                                 {expandedItems[`payout-${mosque.id}`] ? "Hide" : "Details"}
@@ -1311,7 +1584,7 @@ export default function AdminDashboard() {
               </Card>
 
               {/* Summary Cards */}
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-5">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardDescription>Total Revenue</CardDescription>
@@ -1352,6 +1625,20 @@ export default function AdminDashboard() {
                     </div>
                   </CardContent>
                 </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Manual Donations</CardDescription>
+                    <CardTitle className="text-3xl text-purple-500">
+                      ${financialSummary.totalManualDonations.toFixed(2)}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Heart className="h-4 w-4" />
+                      <span>External donations tracked</span>
+                    </div>
+                  </CardContent>
+                </Card>
                 <Card className="border-primary">
                   <CardHeader className="pb-2">
                     <CardDescription>Net Revenue</CardDescription>
@@ -1360,7 +1647,7 @@ export default function AdminDashboard() {
                   <CardContent>
                     <div className="flex items-center gap-1 text-sm text-green-500">
                       <TrendingUp className="h-4 w-4" />
-                      <span>After donations & kickbacks</span>
+                      <span>After all distributions</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -1555,6 +1842,7 @@ export default function AdminDashboard() {
                                 {sub.type === "mosque" && <Building2 className="h-4 w-4 text-primary" />}
                                 {sub.type === "business" && <Store className="h-4 w-4 text-primary" />}
                                 {sub.type === "coupon" && <Ticket className="h-4 w-4 text-primary" />}
+                                {sub.type === "nonprofit" && <Users className="h-4 w-4 text-primary" />}
                                 <div>
                                   <div className="text-sm font-medium">{sub.name}</div>
                                   <div className="text-xs text-muted-foreground">${sub.price}/mo</div>

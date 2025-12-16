@@ -6,6 +6,7 @@ import type {
   EmailTemplate,
   EmailLog,
   AdminSettings,
+  ManualDonation,
 } from "./types"
 
 export const mockMembers: Member[] = [
@@ -332,6 +333,68 @@ export const mockMembers: Member[] = [
       },
     ],
     createdAt: "2024-09-01",
+  },
+  {
+    id: "7",
+    email: "contact@muslimyouthservices.org",
+    name: "Muslim Youth Services",
+    phone: "+1 555-234-5678",
+    subscriptions: [
+      {
+        id: "sub-nonprofit-1",
+        type: "nonprofit",
+        name: "Muslim Youth Services",
+        status: "active",
+        price: 50,
+        startDate: "2024-09-01",
+        paymentStartDate: "2024-09-01",
+        nextBillingDate: "2025-01-01",
+        appStatus: "active",
+        appLifecycle: "active",
+        address: "789 Community St, Philadelphia, PA 19103",
+        email: "info@muslimyouthservices.org",
+        phone: "+1 555-234-5678",
+        website: "https://www.muslimyouthservices.org",
+        socialMedia: "Facebook: facebook.com/muslimyouthservices\nInstagram: @muslimyouthservices\nTwitter: @mys_org",
+        logo: "/images/logo-20amanaah.png",
+        photos: ["/islamic-bookstore-interior-with-quran-books.jpg", "/beautiful-quran-with-prayer-beads.jpg"],
+        donateLink: "https://muslimyouthservices.org/donate",
+        about:
+          "Muslim Youth Services is dedicated to empowering young Muslims through education, mentorship, and community service programs. We provide after-school tutoring, leadership development, and scholarship opportunities to help Muslim youth thrive academically and spiritually. Since 2010, we've served over 5,000 young people across the Greater Philadelphia area.",
+      },
+    ],
+    createdAt: "2024-09-01",
+  },
+  {
+    id: "8",
+    email: "admin@islamicreliefcenter.org",
+    name: "Islamic Relief Center",
+    phone: "+1 555-345-6789",
+    subscriptions: [
+      {
+        id: "sub-nonprofit-2",
+        type: "nonprofit",
+        name: "Islamic Relief Center",
+        status: "active",
+        price: 50,
+        startDate: "2024-10-15",
+        paymentStartDate: "2024-10-15",
+        nextBillingDate: "2025-01-15",
+        appStatus: "pending_verification",
+        appLifecycle: "pending",
+        address: "456 Charity Lane, Trenton, NJ 08608",
+        email: "contact@islamicreliefcenter.org",
+        phone: "+1 555-345-6789",
+        website: "https://www.islamicreliefcenter.org",
+        socialMedia: "Facebook: facebook.com/islamicreliefcenter\nInstagram: @irc_relief",
+        logo: "/images/logo-20amanaah.png",
+        photos: ["/halal-restaurant-interior-with-arabic-decor.jpg"],
+        donateLink: "https://islamicreliefcenter.org/give",
+        about:
+          "Islamic Relief Center provides humanitarian aid, disaster relief, and sustainable development programs to communities in need. We focus on food security, healthcare, education, and emergency response both locally and internationally. Our work is guided by Islamic principles of compassion and service to humanity.",
+      },
+    ],
+    createdAt: "2024-10-15",
   },
 ]
 
@@ -908,3 +971,47 @@ export const membersOverview = [
     ],
   },
 ]
+
+export const mockManualDonations: ManualDonation[] = [
+  {
+    id: "donation-1",
+    mosqueCode: 1,
+    mosqueName: "EPMA Mosque",
+    amount: 500,
+    date: "2024-12-15",
+    notes: "Anonymous donation from community fundraiser",
+    addedBy: "Admin",
+    addedAt: "2024-12-15T10:00:00Z",
+  },
+  {
+    id: "donation-2",
+    mosqueCode: 2,
+    mosqueName: "ISBR Mosque",
+    amount: 1000,
+    date: "2024-12-10",
+    notes: "Corporate sponsorship from local business",
+    addedBy: "Admin",
+    addedAt: "2024-12-10T14:30:00Z",
+  },
+]
+
+export const getTotalCommunityFunding = () => {
+  const activeRecords = mockFinancialRecords.filter((r) => {
+    const sub = mockMembers.flatMap((m) => m.subscriptions).find((s) => s.id === r.subscriptionId)
+    return !sub || sub.status === "active"
+  })
+
+  const amanahOrgTotal = activeRecords.reduce((sum, r) => sum + (r.amanahOrgDonation || 0), 0)
+  const mosqueKickbacksTotal = activeRecords.reduce(
+    (sum, r) => sum + (r.mosqueKickback || 0) + (r.mosqueCodeKickback || 0),
+    0,
+  )
+  const manualDonationsTotal = mockManualDonations.reduce((sum, d) => sum + d.amount, 0)
+
+  return {
+    amanahOrgFund: amanahOrgTotal,
+    mosqueKickbacks: mosqueKickbacksTotal,
+    manualDonations: manualDonationsTotal,
+    totalGivenBack: amanahOrgTotal + mosqueKickbacksTotal + manualDonationsTotal,
+  }
+}

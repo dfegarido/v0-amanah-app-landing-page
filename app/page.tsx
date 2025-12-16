@@ -2,10 +2,22 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { MSquare as Mosque, Store, MapPin, Heart, Calendar, MessageCircle, Shield, LogIn, Plus } from "lucide-react"
+import {
+  MSquare as Mosque,
+  Store,
+  MapPin,
+  Heart,
+  Calendar,
+  MessageCircle,
+  Shield,
+  LogIn,
+  Plus,
+  TrendingUp,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { LanguageToggle } from "@/components/language-toggle"
+import { getTotalCommunityFunding } from "@/lib/mock-data"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
 const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
@@ -110,6 +122,8 @@ export default function AmanahLanding() {
   const toggleLanguage = () => {
     setLanguage(language === "en" ? "ar" : "en")
   }
+
+  const communityFunding = getTotalCommunityFunding()
 
   return (
     <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
@@ -264,6 +278,40 @@ export default function AmanahLanding() {
                 <p className="text-lg text-muted-foreground">{t.toEducation}</p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Community Impact Tracker Section */}
+      <section className="px-4 py-16 bg-gradient-to-br from-primary/10 to-primary/5 border-y border-primary/20">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <TrendingUp className="h-8 w-8 text-primary" />
+              <h3 className="text-3xl font-bold text-foreground md:text-4xl">
+                {language === "en" ? "Community Impact Tracker" : "متتبع التأثير المجتمعي"}
+              </h3>
+            </div>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+              {language === "en"
+                ? "Total funds returned to the Muslim community"
+                : "إجمالي الأموال المعادة للمجتمع المسلم"}
+            </p>
+
+            <Card className="p-8 text-center bg-background/50 backdrop-blur border-primary/20 inline-block">
+              <div className="text-5xl font-bold text-primary mb-3">
+                ${communityFunding.totalGivenBack.toLocaleString()}
+              </div>
+              <p className="text-muted-foreground font-semibold">
+                {language === "en" ? "Given Back to Community" : "معاد للمجتمع"}
+              </p>
+            </Card>
+
+            <p className="text-sm text-muted-foreground italic mt-8">
+              {language === "en"
+                ? "Updated in real-time based on active subscriptions and contributions"
+                : "يتم التحديث في الوقت الفعلي بناءً على الاشتراكات النشطة والمساهمات"}
+            </p>
           </div>
         </div>
       </section>

@@ -17,6 +17,7 @@ import {
   Download,
   Calendar,
   Users,
+  Heart,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,6 +43,8 @@ export default function MemberDashboard() {
         return <Store className="h-5 w-5" />
       case "coupon":
         return <Ticket className="h-5 w-5" />
+      case "nonprofit":
+        return <Heart className="h-5 w-5" />
       default:
         return <FileText className="h-5 w-5" />
     }
@@ -55,6 +58,8 @@ export default function MemberDashboard() {
         return "$10/month"
       case "coupon":
         return "$10/month"
+      case "nonprofit":
+        return "$50/month"
       default:
         return ""
     }
@@ -203,7 +208,7 @@ export default function MemberDashboard() {
             {/* Add New Subscription */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Add New Subscription</h3>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
                   <Link href="/member/subscribe/mosque">
                     <CardHeader className="flex flex-row items-center gap-4">
@@ -243,6 +248,21 @@ export default function MemberDashboard() {
                       <div className="flex-1">
                         <CardTitle className="text-base">Add Coupon</CardTitle>
                         <CardDescription>$10/month per coupon</CardDescription>
+                      </div>
+                      <Plus className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                  </Link>
+                </Card>
+
+                <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
+                  <Link href="/member/subscribe/nonprofit">
+                    <CardHeader className="flex flex-row items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Heart className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-base">Add Nonprofit</CardTitle>
+                        <CardDescription>$50/month</CardDescription>
                       </div>
                       <Plus className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>

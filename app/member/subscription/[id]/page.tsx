@@ -56,6 +56,14 @@ export default function SubscriptionDetailPage() {
     router.push("/member")
   }
 
+  const handleSaveChanges = () => {
+    console.log("[v0] Saving subscription changes, triggering update pending status")
+    // In a real app, this would call an API and send notification email to admin
+    alert("Changes saved successfully! Your updates will be reviewed and applied within 1-2 business days.")
+    setIsEditing(false)
+    // This would set the subscription status to 'update_pending' in the backend
+  }
+
   if (!subscription) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -77,6 +85,8 @@ export default function SubscriptionDetailPage() {
         return <Store className="h-6 w-6" />
       case "coupon":
         return <Ticket className="h-6 w-6" />
+      case "nonprofit":
+        return <FileText className="h-6 w-6" />
       default:
         return <FileText className="h-6 w-6" />
     }
@@ -92,6 +102,8 @@ export default function SubscriptionDetailPage() {
         return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Cancelled</Badge>
       case "past_due":
         return <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20">Past Due</Badge>
+      case "update_pending":
+        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Update Pending</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
@@ -139,55 +151,191 @@ export default function SubscriptionDetailPage() {
                   <X className="h-4 w-4 mr-2" />
                   Cancel
                 </Button>
-                <Button onClick={() => setIsEditing(false)}>
+                <Button onClick={handleSaveChanges}>
                   <Save className="h-4 w-4 mr-2" />
-                  Save
+                  Save Changes
                 </Button>
               </div>
             )}
           </CardHeader>
           <CardContent className="space-y-4">
+            {subscription.type === "nonprofit" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Organization Name</Label>
+                  {isEditing ? (
+                    <Input
+                      defaultValue={subscription.name}
+                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                    />
+                  ) : (
+                    <p className="text-foreground">{subscription.name}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Address</Label>
+                  {isEditing ? (
+                    <Input defaultValue={(subscription as any).address} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).address}</p>
+                  )}
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email Address</Label>
+                    {isEditing ? (
+                      <Input type="email" defaultValue={(subscription as any).email} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone Number</Label>
+                    {isEditing ? (
+                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).phone}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Website</Label>
+                  {isEditing ? (
+                    <Input type="url" defaultValue={(subscription as any).website} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).website}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Social Media Links</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).socialMedia}
+                      placeholder="Facebook, Instagram, Twitter links..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Donate Link</Label>
+                  {isEditing ? (
+                    <Input type="url" defaultValue={(subscription as any).donateLink} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).donateLink}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>About Organization</Label>
+                  {isEditing ? (
+                    <Textarea defaultValue={(subscription as any).about} rows={4} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).about}</p>
+                  )}
+                </div>
+              </>
+            )}
+
             {subscription.type === "coupon" && (
               <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Coupon Name</Label>
+                    <Label>Title</Label>
                     {isEditing ? (
-                      <Input defaultValue={subscription.name} />
+                      <Input defaultValue={(subscription as any).title} />
                     ) : (
-                      <p className="text-foreground">{subscription.name}</p>
+                      <p className="text-foreground">{(subscription as any).title}</p>
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Business Name</Label>
+                    <Label>Merchant</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).businessName} />
+                      <Input defaultValue={(subscription as any).merchant} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).businessName}</p>
+                      <p className="text-foreground">{(subscription as any).merchant}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    {isEditing ? (
+                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).phone}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    {isEditing ? (
+                      <Input type="email" defaultValue={(subscription as any).email} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Website</Label>
+                    {isEditing ? (
+                      <Input type="url" defaultValue={(subscription as any).website} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).website}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Discount</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).discount} placeholder="20% off or $10 off" />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).discount}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Redeem Code</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).redeemCode} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).redeemCode}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Redeem Limit</Label>
+                    {isEditing ? (
+                      <Input type="number" defaultValue={(subscription as any).redeemLimit} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).redeemLimit}</p>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Offer Description</Label>
+                  <Label>Description</Label>
                   {isEditing ? (
-                    <Textarea defaultValue={(subscription as any).offer} />
+                    <Textarea defaultValue={(subscription as any).description} rows={3} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).offer}</p>
+                    <p className="text-foreground">{(subscription as any).description}</p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>Location</Label>
+                  <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).location} />
+                    <Input defaultValue={(subscription as any).address} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).location}</p>
+                    <p className="text-foreground">{(subscription as any).address}</p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label>Coupon Photo</Label>
-                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">Click or drag to upload coupon image</p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    {isEditing ? (
+                      <Input type="date" defaultValue={(subscription as any).startDate} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).startDate}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End Date</Label>
+                    {isEditing ? (
+                      <Input type="date" defaultValue={(subscription as any).endDate} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).endDate}</p>
+                    )}
                   </div>
                 </div>
               </>
@@ -197,11 +345,11 @@ export default function SubscriptionDetailPage() {
               <>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Business Name</Label>
+                    <Label>Business Title</Label>
                     {isEditing ? (
-                      <Input defaultValue={(subscription as any).businessName} />
+                      <Input defaultValue={(subscription as any).title} />
                     ) : (
-                      <p className="text-foreground">{(subscription as any).businessName}</p>
+                      <p className="text-foreground">{(subscription as any).title}</p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -212,21 +360,106 @@ export default function SubscriptionDetailPage() {
                       <p className="text-foreground">{(subscription as any).category}</p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <Label>Sub Category</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).subCategory} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).subCategory}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    {isEditing ? (
+                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).phone}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fax</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).fax} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).fax}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    {isEditing ? (
+                      <Input type="email" defaultValue={(subscription as any).email} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Website</Label>
+                    {isEditing ? (
+                      <Input type="url" defaultValue={(subscription as any).website} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).website}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Zip Code</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).zip} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).zip}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Location</Label>
+                  <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).location} />
+                    <Input defaultValue={(subscription as any).address} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).location}</p>
+                    <p className="text-foreground">{(subscription as any).address}</p>
                   )}
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).city} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).city}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>State</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).state} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).state}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country</Label>
+                    {isEditing ? (
+                      <Input defaultValue={(subscription as any).country} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).country}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
                   {isEditing ? (
-                    <Textarea defaultValue={(subscription as any).description} />
+                    <Textarea defaultValue={(subscription as any).description} rows={4} />
                   ) : (
                     <p className="text-foreground">{(subscription as any).description}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Social Media Links</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).socialMedia}
+                      placeholder="Facebook, Instagram, Twitter links..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
                   )}
                 </div>
               </>
@@ -243,11 +476,97 @@ export default function SubscriptionDetailPage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>Location</Label>
+                  <Label>Address</Label>
                   {isEditing ? (
-                    <Input defaultValue={(subscription as any).location} />
+                    <Input defaultValue={(subscription as any).address} />
                   ) : (
-                    <p className="text-foreground">{(subscription as any).location}</p>
+                    <p className="text-foreground">{(subscription as any).address}</p>
+                  )}
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email Address</Label>
+                    {isEditing ? (
+                      <Input type="email" defaultValue={(subscription as any).email} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone Number</Label>
+                    {isEditing ? (
+                      <Input type="tel" defaultValue={(subscription as any).phone} />
+                    ) : (
+                      <p className="text-foreground">{(subscription as any).phone}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Website</Label>
+                  {isEditing ? (
+                    <Input type="url" defaultValue={(subscription as any).website} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).website}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Social Media Links</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).socialMedia}
+                      placeholder="Facebook, Instagram, Twitter links..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).socialMedia}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Donate Link</Label>
+                  {isEditing ? (
+                    <Input type="url" defaultValue={(subscription as any).donateLink} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).donateLink}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Prayer Times Link</Label>
+                  {isEditing ? (
+                    <Input type="url" defaultValue={(subscription as any).prayerTimesLink} />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).prayerTimesLink}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Sunday School</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).sundaySchool}
+                      placeholder="Sunday school information..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).sundaySchool}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Services Offered</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).services}
+                      placeholder="Prayer services, classes, events..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).services}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Committee Members</Label>
+                  {isEditing ? (
+                    <Textarea
+                      defaultValue={(subscription as any).committeeMembers}
+                      placeholder="List of committee members..."
+                    />
+                  ) : (
+                    <p className="text-foreground">{(subscription as any).committeeMembers}</p>
                   )}
                 </div>
               </>

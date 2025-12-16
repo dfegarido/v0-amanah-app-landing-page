@@ -1,8 +1,8 @@
-export type SubscriptionType = "mosque" | "coupon" | "business"
+export type SubscriptionType = "mosque" | "coupon" | "business" | "nonprofit"
 
 export type SubscriptionStatus = "active" | "pending" | "cancelled" | "past_due"
 
-export type AppStatus = "pending_verification" | "active" | "removed" | "cancelled"
+export type AppStatus = "pending_verification" | "active" | "removed" | "cancelled" | "update_pending"
 
 export interface Subscription {
   id: string
@@ -103,6 +103,28 @@ export interface BusinessSubscription extends Subscription {
   documents: Document[]
 }
 
+export interface NonprofitSubscription extends Subscription {
+  type: "nonprofit"
+  organizationName: string
+  taxId: string
+  address: string
+  email: string
+  phone: string
+  website?: string
+  socialMedia?: {
+    facebook?: string
+    twitter?: string
+    instagram?: string
+    other?: string
+  }
+  logo?: string
+  photos?: string[]
+  missionStatement: string
+  description?: string
+  contactName: string
+  documents: Document[]
+}
+
 export interface Document {
   id: string
   name: string
@@ -116,7 +138,7 @@ export interface Member {
   email: string
   name: string
   phone?: string
-  subscriptions: (MosqueSubscription | CouponSubscription | BusinessSubscription)[]
+  subscriptions: (MosqueSubscription | CouponSubscription | BusinessSubscription | NonprofitSubscription)[]
   createdAt: string
 }
 
@@ -152,13 +174,13 @@ export interface AffiliateEarning {
 export interface FinancialRecord {
   id: string
   date: string
-  type: "mosque" | "business" | "coupon"
-  subscriptionId: string
+  type: "mosque" | "business" | "coupon" | "nonprofit" | "donation"
+  subscriptionId?: string
   subscriptionName: string
   amount: number
   mosqueKickback?: number
-  amanahOrgDonation?: number // 15% for education
-  mosqueCodeKickback?: number // 10% to mosque of choice
+  amanahOrgDonation?: number
+  mosqueCodeKickback?: number
   netRevenue: number
 }
 
@@ -188,4 +210,15 @@ export interface AdminSettings {
   enableNewSubscriptionNotifications: boolean
   enablePaymentFailedNotifications: boolean
   enableCancellationNotifications: boolean
+}
+
+export interface ManualDonation {
+  id: string
+  mosqueCode: number
+  mosqueName: string
+  amount: number
+  date: string
+  notes?: string
+  addedBy: string
+  addedAt: string
 }
