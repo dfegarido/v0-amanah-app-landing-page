@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft, Building2, Users } from "lucide-react"
+import { ArrowLeft, Building2, Users, UserPlus } from "lucide-react"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 
 export default function LoginPage() {
   return (
@@ -15,7 +16,7 @@ export default function LoginPage() {
 
         <div className="text-center mb-8">
           <img src="/images/logo-20amanaah.png" alt="Amanah Logo" className="h-24 w-auto mx-auto mb-4" />
-          <h1 className="text-3xl font-bold text-foreground">Welcome Back</h1>
+          <h1 className="text-3xl font-bold text-foreground">Welcome to Amanah</h1>
           <p className="text-muted-foreground mt-2">Choose your portal to continue</p>
         </div>
 
@@ -47,6 +48,16 @@ export default function LoginPage() {
               </CardHeader>
             </Card>
           </Link>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-border text-center">
+          <p className="text-muted-foreground mb-4">New to Amanah?</p>
+          <Button asChild variant="outline" className="w-full bg-transparent">
+            <Link href="/member/register">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Create an Account
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

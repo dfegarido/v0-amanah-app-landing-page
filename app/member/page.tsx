@@ -199,7 +199,7 @@ export default function MemberDashboard() {
             {mosqueSubscriptions.length > 0 && (
               <TabsTrigger value="earnings">
                 <DollarSign className="h-4 w-4 mr-2" />
-                Mosque Earnings
+                Affiliate Earnings
               </TabsTrigger>
             )}
           </TabsList>

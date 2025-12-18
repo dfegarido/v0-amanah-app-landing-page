@@ -391,29 +391,21 @@ export default function AmanahLanding() {
         </div>
       </section>
 
-      {/* Add Mosque Section */}
-      <section className="px-4 py-20 bg-secondary/30">
-        <div className="mx-auto max-w-4xl text-center">
-          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
-            {language === "en"
-              ? "Looking to list your business, mosque, or feature a coupon?"
-              : "تبحث عن إدراج عملك أو مسجدك أو عرض قسيمة؟"}
-          </h3>
-          <p className="mb-8 text-lg text-muted-foreground leading-relaxed">
-            {language === "en"
-              ? "Create an account to get started and join the Amanah network."
-              : "أنشئ حسابًا للبدء والانضمام إلى شبكة أمانة."}
-          </p>
-          <Button
-            size="lg"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6"
-            asChild
-          >
-            <Link href="/login">
-              <Plus className="h-5 w-5 me-2" />
-              {language === "en" ? "Create Account" : "إنشاء حساب"}
-            </Link>
+      {/* Add Mosque / Business / Coupon Section */}
+      <section className="px-4 py-16 bg-secondary/30">
+        <div className="mx-auto max-w-3xl text-center">
+          <Plus className="mx-auto h-12 w-12 text-primary mb-4" />
+          <h3 className="mb-4 text-2xl font-bold text-foreground md:text-3xl">{t.addMosqueTitle}</h3>
+          <p className="mb-6 text-muted-foreground leading-relaxed">{t.addMosqueSubtitle}</p>
+          <Button size="lg" asChild>
+            <Link href="/member/register">{language === "en" ? "Create Account" : "إنشاء حساب"}</Link>
           </Button>
+          <p className="mt-4 text-sm text-muted-foreground">
+            {language === "en" ? "Already have an account? " : "لديك حساب بالفعل؟ "}
+            <Link href="/login" className="text-primary hover:underline">
+              {language === "en" ? "Sign in" : "تسجيل الدخول"}
+            </Link>
+          </p>
         </div>
       </section>
     </div>

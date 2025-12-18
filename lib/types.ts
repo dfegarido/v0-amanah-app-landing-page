@@ -106,7 +106,6 @@ export interface BusinessSubscription extends Subscription {
 export interface NonprofitSubscription extends Subscription {
   type: "nonprofit"
   organizationName: string
-  taxId: string
   address: string
   email: string
   phone: string
@@ -122,7 +121,6 @@ export interface NonprofitSubscription extends Subscription {
   missionStatement: string
   description?: string
   contactName: string
-  documents: Document[]
 }
 
 export interface Document {
@@ -210,6 +208,7 @@ export interface AdminSettings {
   enableNewSubscriptionNotifications: boolean
   enablePaymentFailedNotifications: boolean
   enableCancellationNotifications: boolean
+  enablePushNotificationRequests: boolean
 }
 
 export interface ManualDonation {
@@ -221,4 +220,23 @@ export interface ManualDonation {
   notes?: string
   addedBy: string
   addedAt: string
+}
+
+export interface PushNotificationRequest {
+  id: string
+  mosqueId: string
+  mosqueName: string
+  mosqueCode: number
+  title: string
+  message: string
+  scheduledDate: string // ISO date string (YYYY-MM-DD)
+  scheduledTime: string // Time string (HH:MM)
+  timezone: string // Timezone identifier (e.g., "America/New_York")
+  requestedAt: string
+  requestedBy: string
+  status: "pending" | "approved" | "sent" | "rejected"
+  sentAt?: string
+  sentBy?: string
+  rejectedReason?: string
+  lastRequestDate?: string
 }

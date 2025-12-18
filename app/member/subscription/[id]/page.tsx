@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   Building2,
@@ -16,6 +18,9 @@ import {
   X,
   Key,
   AlertTriangle,
+  ImageIcon,
+  Bell,
+  Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,10 +40,72 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { mockMembers } from "@/lib/mock-data"
+import { useToast } from "@/hooks/use-toast"
 
-export default function SubscriptionDetailPage() {
-  const params = useParams()
+// Define interfaces for clarity
+interface PushNotificationRequest {
+  id: string
+  mosqueId: string
+  mosqueName: string
+  mosqueCode?: string // Added optional property
+  title: string
+  message: string
+  scheduledDate: string
+  scheduledTime: string
+  timezone: string
+  requestedAt: string
+  requestedBy: string
+  status: "pending" | "approved" | "rejected" // Added status options
+  lastRequestDate: string | null
+}
+
+interface MosqueSubscription {
+  // Renamed from Subscription to be more specific
+  id: string
+  name: string
+  type: "mosque"
+  status: string
+  price: number
+  nextBillingDate: string
+  paymentStartDate: string
+  email: string
+  mosqueCode?: string // Added optional property
+  // ... other mosque-specific properties
+}
+
+const TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Dubai",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Australia/Sydney",
+  "Africa/Cairo",
+]
+
+const getMinScheduleDate = () => {
+  const today = new Date()
+  const minDate = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
+  return minDate.toISOString().split("T")[0]
+}
+
+export default function SubscriptionDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const subscriptionId = params.id as string
 
@@ -47,6 +114,16 @@ export default function SubscriptionDetailPage() {
   const subscription = member?.subscriptions.find((s) => s.id === subscriptionId)
 
   const [isEditing, setIsEditing] = useState(false)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false)
+
+  const [pushNotificationDate, setPushNotificationDate] = useState(getMinScheduleDate())
+  const [pushNotificationTime, setPushNotificationTime] = useState("09:00")
+  const [pushNotificationTimezone, setPushNotificationTimezone] = useState("America/New_York")
+  const [showPushNotificationDialog, setShowPushNotificationDialog] = useState(false)
+  const [pushNotificationTitle, setPushNotificationTitle] = useState("")
+  const [pushNotificationMessage, setPushNotificationMessage] = useState("")
+  const [lastPushRequestDate, setLastPushRequestDate] = useState<string | null>("2024-11-15") // Mock last request date
 
   const [formData, setFormData] = useState({
     name: (subscription as any)?.name || "",
@@ -96,6 +173,62 @@ export default function SubscriptionDetailPage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files)
+      setPhotoFiles([...photoFiles, ...files])
+    }
+  }
+
+  const handleRemovePhoto = (index: number) => {
+    const existingPhotos = (subscription as any).photos || []
+    const updatedPhotos = existingPhotos.filter((_: any, i: number) => i !== index)
+    // In real app, this would call an API to update photos
+    console.log("[v0] Removed photo at index", index)
+  }
+
+  // Moved toast hook call to the top level
+  const { toast } = useToast()
+
+  const handlePushNotificationRequest = () => {
+    // Check if mosque has requested in the last 30 days
+    // Removed the 30 day check as it's now scheduled and reviewed by admin.
+    // In a real app, this would be handled by the backend.
+
+    // Create new notification request with scheduled date/time
+    const newRequest: PushNotificationRequest = {
+      id: `push-${Date.now()}`,
+      mosqueId: subscription.id,
+      mosqueName: subscription.name,
+      mosqueCode: (subscription as MosqueSubscription).mosqueCode,
+      title: pushNotificationTitle,
+      message: pushNotificationMessage,
+      scheduledDate: pushNotificationDate,
+      scheduledTime: pushNotificationTime,
+      timezone: pushNotificationTimezone,
+      requestedAt: new Date().toISOString(),
+      requestedBy: subscription.email,
+      status: "pending",
+      lastRequestDate: new Date().toISOString().split("T")[0],
+    }
+
+    // In production, this would be sent to backend
+    console.log("[v0] Push notification request:", newRequest)
+
+    setPushNotificationTitle("")
+    setPushNotificationMessage("")
+    setPushNotificationDate(getMinScheduleDate())
+    setPushNotificationTime("09:00")
+    setPushNotificationTimezone("America/New_York")
+    setShowPushNotificationDialog(false)
+
+    // Show toast
+    toast({
+      title: "Push Notification Requested",
+      description: `Your push notification has been scheduled for ${pushNotificationDate} at ${pushNotificationTime} ${pushNotificationTimezone}`,
+    })
   }
 
   if (!subscription) {
@@ -166,7 +299,40 @@ export default function SubscriptionDetailPage() {
         </div>
       </header>
 
-      <main className="p-6 max-w-4xl mx-auto">
+      <main className="container mx-auto p-6 space-y-6">
+        {/* Header Card */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {subscription.type === "mosque" && (
+                  <Button variant="outline" onClick={() => setShowPushNotificationDialog(true)}>
+                    <Bell className="h-4 w-4 mr-2" />
+                    Request Push Notification
+                  </Button>
+                )}
+                {!isEditing ? (
+                  <Button variant="outline" onClick={() => setIsEditing(true)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveChanges}>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
         {/* Subscription Details */}
         <Card className="mb-6">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -728,6 +894,106 @@ export default function SubscriptionDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Photo Management Section */}
+        {(subscription as any).photos && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5" />
+                    Photos
+                  </CardTitle>
+                  <CardDescription>Manage your listing photos</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowPhotoUpload(!showPhotoUpload)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Photos
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showPhotoUpload && (
+                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                    id="photo-upload"
+                  />
+                  <label htmlFor="photo-upload" className="cursor-pointer">
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground mb-2">Click to upload photos</p>
+                    <p className="text-xs text-muted-foreground">PNG, JPG up to 10MB each</p>
+                  </label>
+                </div>
+              )}
+
+              {/* Existing Photos */}
+              {(subscription as any).photos?.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {(subscription as any).photos.map((photo: string, idx: number) => (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={photo || "/placeholder.svg"}
+                        alt={`Photo ${idx + 1}`}
+                        className="h-32 w-full object-cover rounded-lg"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                        onClick={() => handleRemovePhoto(idx)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Newly Added Photos Preview */}
+              {photoFiles.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">New Photos (not yet saved)</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {photoFiles.map((file, idx) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={URL.createObjectURL(file) || "/placeholder.svg"}
+                          alt={`New photo ${idx + 1}`}
+                          className="h-32 w-full object-cover rounded-lg"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                          onClick={() => setPhotoFiles(photoFiles.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="mt-4"
+                    onClick={() => {
+                      console.log("[v0] Saving new photos", photoFiles)
+                      alert("Photos saved successfully!")
+                      setPhotoFiles([])
+                      setShowPhotoUpload(false)
+                    }}
+                  >
+                    Save New Photos
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Third Party Logins - Mosque Only */}
         {subscription.type === "mosque" && (
           <Card className="mb-6">
@@ -840,6 +1106,106 @@ export default function SubscriptionDetailPage() {
           </Card>
         )}
       </main>
+
+      {/* Push Notification Request Dialog */}
+      {subscription.type === "mosque" && (
+        <Dialog open={showPushNotificationDialog} onOpenChange={setShowPushNotificationDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Request Push Notification</DialogTitle>
+              <DialogDescription>
+                Send a notification to all Amanah app users.
+                {lastPushRequestDate && (
+                  <span className="block mt-2 text-sm">
+                    Last request: {new Date(lastPushRequestDate).toLocaleDateString()}
+                  </span>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-900">
+                  <strong>Important:</strong> Push notifications must be scheduled at least 1 week in advance to allow
+                  our team to review and schedule them.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="push-title">Title</Label>
+                <Input
+                  id="push-title"
+                  placeholder="e.g., Ramadan Schedule 2025"
+                  value={pushNotificationTitle}
+                  onChange={(e) => setPushNotificationTitle(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="push-message">Message</Label>
+                <Textarea
+                  id="push-message"
+                  placeholder="Enter your message..."
+                  rows={4}
+                  value={pushNotificationMessage}
+                  onChange={(e) => setPushNotificationMessage(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="push-date">Scheduled Date</Label>
+                  <Input
+                    id="push-date"
+                    type="date"
+                    min={getMinScheduleDate()}
+                    value={pushNotificationDate}
+                    onChange={(e) => setPushNotificationDate(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Minimum 7 days from today</p>
+                </div>
+
+                <div>
+                  <Label htmlFor="push-time">Time</Label>
+                  <Input
+                    id="push-time"
+                    type="time"
+                    value={pushNotificationTime}
+                    onChange={(e) => setPushNotificationTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="push-timezone">Timezone</Label>
+                <select
+                  id="push-timezone"
+                  value={pushNotificationTimezone}
+                  onChange={(e) => setPushNotificationTimezone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowPushNotificationDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handlePushNotificationRequest}
+                disabled={!pushNotificationTitle || !pushNotificationMessage || !pushNotificationDate}
+              >
+                Send Request
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

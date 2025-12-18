@@ -31,6 +31,7 @@ import {
   Ban,
   X,
   Heart,
+  Bell,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,7 +41,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { mockMembers, mockPaymentAlerts, mockFinancialRecords } from "@/lib/mock-data"
+import { mockMembers, mockPaymentAlerts, mockFinancialRecords, mockPushNotificationRequests } from "@/lib/mock-data" // ADDED: mockPushNotificationRequests
 import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
@@ -56,6 +57,29 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("mosques")
   const [payoutsMonth, setPayoutsMonth] = useState(new Date())
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  // ADDED: push notification requests state
+  const [pushNotificationRequests, setPushNotificationRequests] = useState(mockPushNotificationRequests)
+  const pendingPushRequests = pushNotificationRequests.filter((req) => req.status === "pending").length
+
+  // ADDED: push notification handlers
+  const handleApprovePushNotification = (requestId: string) => {
+    setPushNotificationRequests(
+      pushNotificationRequests.map((req) =>
+        req.id === requestId ? { ...req, status: "sent", sentAt: new Date().toISOString(), sentBy: "admin" } : req,
+      ),
+    )
+    console.log("[v0] Approved push notification:", requestId)
+  }
+
+  const handleRejectPushNotification = (requestId: string, reason: string) => {
+    setPushNotificationRequests(
+      pushNotificationRequests.map((req) =>
+        req.id === requestId ? { ...req, status: "rejected", rejectedReason: reason } : req,
+      ),
+    )
+    console.log("[v0] Rejected push notification:", requestId, reason)
+  }
 
   // REMOVED: markAsAdded function
 
@@ -581,6 +605,16 @@ export default function AdminDashboard() {
               {unresolvedAlerts > 0 && (
                 <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
                   {unresolvedAlerts}
+                </span>
+              )}
+            </TabsTrigger>
+            {/* CHANGE: Added push notification tab */}
+            <TabsTrigger value="push-notifications" className="relative">
+              <Bell className="h-4 w-4 mr-2" />
+              Push Requests
+              {pendingPushRequests > 0 && (
+                <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                  {pendingPushRequests}
                 </span>
               )}
             </TabsTrigger>
@@ -1183,9 +1217,17 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="nonprofits" className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">Non-Profit Organizations</h2>
-              <p className="text-muted-foreground">Manage non-profit listings and verification</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Non-Profit Organizations</h2>
+                <p className="text-muted-foreground">Manage non-profit listings and verification</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Search non-profits..." className="pl-10 w-[300px]" />
+                </div>
+              </div>
             </div>
             {allNonprofits.map((nonprofit) => (
               <Card
@@ -1942,6 +1984,126 @@ export default function AdminDashboard() {
                             <Button variant="outline" size="sm" onClick={() => handleResolveAlert(alert.id)}>
                               Mark Resolved
                             </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* CHANGE: Added Push Notification Requests Tab with scheduled date/time/timezone */}
+          <TabsContent value="push-notifications">
+            <Card>
+              <CardHeader>
+                <CardTitle>Push Notification Requests</CardTitle>
+                <CardDescription>
+                  Review and approve mosque push notification requests (1 per month limit). All requests must be
+                  scheduled at least 1 week in advance.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {pushNotificationRequests.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No push notification requests</p>
+                ) : (
+                  pushNotificationRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className={`p-4 rounded-lg border ${
+                        request.status === "pending"
+                          ? "bg-primary/10 border-primary/20"
+                          : request.status === "sent"
+                            ? "bg-green-500/10 border-green-500/20"
+                            : request.status === "rejected"
+                              ? "bg-destructive/10 border-destructive/20"
+                              : "bg-secondary/30 border-border"
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-4 flex-1">
+                            <Bell
+                              className={`h-5 w-5 mt-1 flex-shrink-0 ${
+                                request.status === "pending"
+                                  ? "text-primary"
+                                  : request.status === "sent"
+                                    ? "text-green-500"
+                                    : request.status === "rejected"
+                                      ? "text-destructive"
+                                      : "text-muted-foreground"
+                              }`}
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <p className="font-semibold text-lg">{request.title}</p>
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                                  Code: #{request.mosqueCode}
+                                </Badge>
+                                {request.status === "pending" && (
+                                  <Badge className="bg-primary/10 text-primary border-primary/20">Pending Review</Badge>
+                                )}
+                                {request.status === "sent" && (
+                                  <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Sent</Badge>
+                                )}
+                                {request.status === "rejected" && (
+                                  <Badge className="bg-destructive/10 text-destructive border-destructive/20">
+                                    Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-2">{request.mosqueName}</p>
+                              <p className="text-sm mb-3">{request.message}</p>
+
+                              <div className="bg-secondary/50 rounded-lg p-3 mb-3 space-y-2">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">Scheduled:</span>
+                                  <span>
+                                    {new Date(request.scheduledDate).toLocaleDateString()} at {request.scheduledTime}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Globe className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">Timezone:</span>
+                                  <span>{request.timezone}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
+                                <span>Requested: {new Date(request.requestedAt).toLocaleString()}</span>
+                                <span>By: {request.requestedBy}</span>
+                                {request.lastRequestDate && (
+                                  <span>Last request: {new Date(request.lastRequestDate).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                              {request.status === "sent" && request.sentAt && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Sent: {new Date(request.sentAt).toLocaleString()} by {request.sentBy}
+                                </p>
+                              )}
+                              {request.status === "rejected" && request.rejectedReason && (
+                                <p className="text-xs text-destructive mt-1">Reason: {request.rejectedReason}</p>
+                              )}
+                            </div>
+                          </div>
+                          {request.status === "pending" && (
+                            <div className="flex gap-2 ml-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const reason = prompt("Enter rejection reason:")
+                                  if (reason) handleRejectPushNotification(request.id, reason)
+                                }}
+                              >
+                                Reject
+                              </Button>
+                              <Button size="sm" onClick={() => handleApprovePushNotification(request.id)}>
+                                Approve & Send
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>

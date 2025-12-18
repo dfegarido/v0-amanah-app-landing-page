@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, User, Lock, Bell, CreditCard } from "lucide-react"
+import { ArrowLeft, User, Lock, Bell, CreditCard, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,24 +10,50 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { mockMembers } from "@/lib/mock-data"
+import { useToast } from "@/hooks/use-toast"
 
 export default function MemberSettingsPage() {
+  const { toast } = useToast()
   const [member] = useState(mockMembers[0])
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [paymentReminders, setPaymentReminders] = useState(true)
   const [monthlyReports, setMonthlyReports] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSave = () => {
+    setIsSaving(true)
+    setTimeout(() => {
+      setIsSaving(false)
+      toast({
+        title: "Settings saved",
+        description: "Your changes have been saved successfully.",
+      })
+    }, 1000)
+  }
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="flex items-center gap-4 px-6 py-4">
-          <Link href="/member" className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Account Settings</h1>
-            <p className="text-sm text-muted-foreground">Manage your account preferences and security</p>
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/member" className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">Account Settings</h1>
+              <p className="text-sm text-muted-foreground">Manage your account preferences and security</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/">
+                <Home className="h-5 w-5" />
+              </Link>
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
           </div>
         </div>
       </header>
@@ -55,7 +81,6 @@ export default function MemberSettingsPage() {
               <Label htmlFor="phone">Phone Number</Label>
               <Input id="phone" type="tel" defaultValue={member.phone} />
             </div>
-            <Button>Save Changes</Button>
           </CardContent>
         </Card>
 
@@ -81,7 +106,6 @@ export default function MemberSettingsPage() {
               <Label htmlFor="confirm-password">Confirm New Password</Label>
               <Input id="confirm-password" type="password" />
             </div>
-            <Button>Update Password</Button>
           </CardContent>
         </Card>
 
@@ -141,6 +165,19 @@ export default function MemberSettingsPage() {
               </Button>
             </div>
             <Button variant="outline">Add New Payment Method</Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            <CardDescription>Irreversible actions for your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive">Delete Account</Button>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will permanently delete your account and all subscriptions. This action cannot be undone.
+            </p>
           </CardContent>
         </Card>
       </main>
