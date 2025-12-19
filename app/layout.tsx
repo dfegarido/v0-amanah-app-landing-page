@@ -2,6 +2,8 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { AuthProvider } from "@/lib/auth-context"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -52,7 +54,10 @@ export default function RootLayout({
             `,
           }}
         />
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+        <Toaster />
         <Analytics />
       </body>
     </html>

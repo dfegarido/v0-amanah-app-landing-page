@@ -129,9 +129,9 @@ export default function AmanahLanding() {
     <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
       <LanguageToggle language={language} onToggle={toggleLanguage} />
 
-      <div className="fixed top-4 left-4 z-50">
+        <div className="fixed top-4 left-4 z-50">
         <Button asChild variant="outline" className="bg-background/80 backdrop-blur-sm">
-          <Link href="/login">
+          <Link href="/auth/login">
             <LogIn className="mr-2 h-4 w-4" />
             {language === "en" ? "Login" : "تسجيل الدخول"}
           </Link>

@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowLeft, User, Lock, Bell, CreditCard, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,26 +10,219 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
-import { mockMembers } from "@/lib/mock-data"
+import { useAuth } from "@/lib/auth-context"
+import { authenticatedPut, authenticatedPost, authenticatedGet, authenticatedDelete } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+import { AddPaymentMethodDialog } from "@/components/add-payment-method-dialog"
 
 export default function MemberSettingsPage() {
+  const router = useRouter()
   const { toast } = useToast()
-  const [member] = useState(mockMembers[0])
+  const { user, loading, refreshUser } = useAuth()
+  
+  // Profile form state
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
+  
+  // Password form state
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  
+  // Notification preferences
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [paymentReminders, setPaymentReminders] = useState(true)
   const [monthlyReports, setMonthlyReports] = useState(false)
+  
+  // Payment method state
+  const [paymentMethod, setPaymentMethod] = useState<{
+    id: string
+    brand: string
+    last4: string
+    expMonth: number
+    expYear: number
+  } | null>(null)
+  const [isLoadingPayment, setIsLoadingPayment] = useState(false)
+  
+  // UI state
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSave = () => {
-    setIsSaving(true)
-    setTimeout(() => {
-      setIsSaving(false)
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth/login')
+    }
+  }, [user, loading, router])
+
+  // Load user data into form
+  useEffect(() => {
+    if (user) {
+      setName(user.name || "")
+      setEmail(user.email || "")
+      setPhone(user.phone || "")
+      
+      // Load notification preferences and payment method
+      loadNotificationPreferences()
+      loadPaymentMethod()
+    }
+  }, [user])
+
+  const loadNotificationPreferences = async () => {
+    try {
+      const response = await authenticatedGet<{ data: any }>('/api/user/notification-preferences')
+      if (response.data) {
+        setEmailNotifications(response.data.email_notifications ?? true)
+        setPaymentReminders(response.data.payment_reminders ?? true)
+        setMonthlyReports(response.data.monthly_reports ?? false)
+      }
+    } catch (error) {
+      console.error('Failed to load notification preferences:', error)
+    }
+  }
+
+  const loadPaymentMethod = async () => {
+    setIsLoadingPayment(true)
+    try {
+      const response = await authenticatedGet<{ data: { paymentMethod: any } }>('/api/stripe/payment-method')
+      setPaymentMethod(response.data.paymentMethod)
+    } catch (error) {
+      console.error('Failed to load payment method:', error)
+    } finally {
+      setIsLoadingPayment(false)
+    }
+  }
+
+  const handleRemovePaymentMethod = async () => {
+    if (!confirm('Are you sure you want to remove your payment method?')) {
+      return
+    }
+
+    setIsLoadingPayment(true)
+    try {
+      await authenticatedDelete('/api/stripe/payment-method')
+      setPaymentMethod(null)
       toast({
-        title: "Settings saved",
-        description: "Your changes have been saved successfully.",
+        title: "Payment method removed",
+        description: "Your payment method has been removed successfully.",
       })
-    }, 1000)
+    } catch (error: any) {
+      toast({
+        title: "Failed to remove",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingPayment(false)
+    }
+  }
+
+  const handleProfileUpdate = async () => {
+    setError(null)
+    setIsSaving(true)
+
+    try {
+      await authenticatedPut('/api/user/profile', { name, phone })
+      await refreshUser()
+      
+      toast({
+        title: "Profile updated",
+        description: "Your profile information has been updated successfully.",
+      })
+    } catch (err: any) {
+      setError(err.message)
+      toast({
+        title: "Update failed",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    setError(null)
+
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match")
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters long")
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      await authenticatedPost('/api/user/change-password', {
+        currentPassword,
+        newPassword,
+      })
+      
+      toast({
+        title: "Password changed",
+        description: "Your password has been updated successfully.",
+      })
+      
+      // Clear password fields
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+    } catch (err: any) {
+      setError(err.message)
+      toast({
+        title: "Password change failed",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleNotificationChange = async (
+    preference: 'email_notifications' | 'payment_reminders' | 'monthly_reports',
+    value: boolean
+  ) => {
+    try {
+      await authenticatedPut('/api/user/notification-preferences', {
+        [preference]: value,
+      })
+      
+      toast({
+        title: "Preferences updated",
+        description: "Your notification preferences have been saved.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+      })
+      
+      // Revert the change
+      if (preference === 'email_notifications') setEmailNotifications(!value)
+      if (preference === 'payment_reminders') setPaymentReminders(!value)
+      if (preference === 'monthly_reports') setMonthlyReports(!value)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
@@ -47,18 +241,22 @@ export default function MemberSettingsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" asChild>
-              <Link href="/">
+              <Link href="/member">
                 <Home className="h-5 w-5" />
               </Link>
-            </Button>
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </div>
       </header>
 
       <main className="p-6 max-w-4xl mx-auto space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Profile Information */}
         <Card>
           <CardHeader>
@@ -71,16 +269,35 @@ export default function MemberSettingsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue={member.name} />
+              <Input 
+                id="name" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" defaultValue={member.email} />
+              <Input 
+                id="email" 
+                type="email" 
+                value={email}
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-xs text-muted-foreground">Email cannot be changed</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" type="tel" defaultValue={member.phone} />
+              <Input 
+                id="phone" 
+                type="tel" 
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
             </div>
+            <Button onClick={handleProfileUpdate} disabled={isSaving}>
+              {isSaving ? "Updating..." : "Update Profile"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -96,15 +313,59 @@ export default function MemberSettingsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="current-password">Current Password</Label>
-              <Input id="current-password" type="password" />
+              <Input 
+                id="current-password" 
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">New Password</Label>
-              <Input id="new-password" type="password" />
+              <Input 
+                id="new-password" 
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+              <p className="text-xs text-muted-foreground">
+                Must be at least 8 characters long
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirm New Password</Label>
-              <Input id="confirm-password" type="password" />
+              <Input 
+                id="confirm-password" 
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+              {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={handlePasswordChange} 
+                disabled={isSaving || !currentPassword || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+              >
+                {isSaving ? "Changing..." : "Change Password"}
+              </Button>
+              {currentPassword && newPassword && confirmPassword && !isSaving && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setCurrentPassword("")
+                    setNewPassword("")
+                    setConfirmPassword("")
+                    setError(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -124,7 +385,13 @@ export default function MemberSettingsPage() {
                 <p className="font-medium">Email Notifications</p>
                 <p className="text-sm text-muted-foreground">Receive emails about your account activity</p>
               </div>
-              <Switch checked={emailNotifications} onCheckedChange={setEmailNotifications} />
+              <Switch 
+                checked={emailNotifications} 
+                onCheckedChange={(value) => {
+                  setEmailNotifications(value)
+                  handleNotificationChange('email_notifications', value)
+                }} 
+              />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -132,7 +399,13 @@ export default function MemberSettingsPage() {
                 <p className="font-medium">Payment Reminders</p>
                 <p className="text-sm text-muted-foreground">Get notified before upcoming payments</p>
               </div>
-              <Switch checked={paymentReminders} onCheckedChange={setPaymentReminders} />
+              <Switch 
+                checked={paymentReminders} 
+                onCheckedChange={(value) => {
+                  setPaymentReminders(value)
+                  handleNotificationChange('payment_reminders', value)
+                }} 
+              />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -140,7 +413,13 @@ export default function MemberSettingsPage() {
                 <p className="font-medium">Monthly Reports</p>
                 <p className="text-sm text-muted-foreground">Receive monthly summary of your earnings and activity</p>
               </div>
-              <Switch checked={monthlyReports} onCheckedChange={setMonthlyReports} />
+              <Switch 
+                checked={monthlyReports} 
+                onCheckedChange={(value) => {
+                  setMonthlyReports(value)
+                  handleNotificationChange('monthly_reports', value)
+                }} 
+              />
             </div>
           </CardContent>
         </Card>
@@ -155,16 +434,48 @@ export default function MemberSettingsPage() {
             <CardDescription>Manage your payment information</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg mb-4">
-              <div>
-                <p className="font-medium">Visa ending in 4242</p>
-                <p className="text-sm text-muted-foreground">Expires 12/2025</p>
+            {isLoadingPayment ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">Loading...</p>
               </div>
-              <Button variant="outline" size="sm">
-                Update
-              </Button>
-            </div>
-            <Button variant="outline">Add New Payment Method</Button>
+            ) : paymentMethod ? (
+              <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <CreditCard className="h-5 w-5" />
+                  <div>
+                    <p className="font-medium capitalize">
+                      {paymentMethod.brand} ending in {paymentMethod.last4}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Expires {paymentMethod.expMonth}/{paymentMethod.expYear}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <AddPaymentMethodDialog onPaymentMethodAdded={loadPaymentMethod}>
+                    <Button variant="outline" size="sm">Update</Button>
+                  </AddPaymentMethodDialog>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleRemovePaymentMethod}
+                    disabled={isLoadingPayment}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground mb-4">
+                  No payment method added yet
+                </p>
+                <AddPaymentMethodDialog onPaymentMethodAdded={loadPaymentMethod}>
+                  <Button variant="outline">Add Payment Method</Button>
+                </AddPaymentMethodDialog>
+              </div>
+            )}
           </CardContent>
         </Card>
 

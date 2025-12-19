@@ -44,7 +44,7 @@ export default function AdminSettingsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" asChild>
-              <Link href="/">
+              <Link href="/admin">
                 <Home className="h-5 w-5" />
               </Link>
             </Button>

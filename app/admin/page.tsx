@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Building2,
   Store,
@@ -45,9 +46,14 @@ import { mockMembers, mockPaymentAlerts, mockFinancialRecords, mockPushNotificat
 import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
+import { useAuth } from "@/lib/auth-context"
 
 export default function AdminDashboard() {
+  const router = useRouter()
   const { toast } = useToast()
+  const { signOut, user, loading } = useAuth()
+  
+  // All useState hooks must be at the top before any early returns
   const [alerts, setAlerts] = useState(mockPaymentAlerts)
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
@@ -61,6 +67,13 @@ export default function AdminDashboard() {
   // ADDED: push notification requests state
   const [pushNotificationRequests, setPushNotificationRequests] = useState(mockPushNotificationRequests)
   const pendingPushRequests = pushNotificationRequests.filter((req) => req.status === "pending").length
+
+  // Redirect if not logged in or not admin (useEffect must be at top with other hooks)
+  useEffect(() => {
+    if (!loading && (!user || user.role !== 'admin')) {
+      router.push('/auth/login')
+    }
+  }, [user, loading, router])
 
   // ADDED: push notification handlers
   const handleApprovePushNotification = (requestId: string) => {
@@ -482,6 +495,23 @@ export default function AdminDashboard() {
     // In a real app, this would update the backend
   }
 
+  const handleLogout = async () => {
+    await signOut()
+    router.push("/auth/login")
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!user || user.role !== 'admin') {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -491,7 +521,7 @@ export default function AdminDashboard() {
             <img src="/images/logo-20amanaah.png" alt="Amanah Logo" className="h-10 w-auto" />
             <div>
               <h1 className="text-lg font-semibold text-foreground">Admin Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Manage all subscriptions and listings</p>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -501,10 +531,8 @@ export default function AdminDashboard() {
                 <Settings className="h-5 w-5" />
               </Link>
             </Button>
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/login">
-                <LogOut className="h-5 w-5" />
-              </Link>
+            <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+              <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
