@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users } from "lucide-react"
+import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,17 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getAllMosquesWithCodes, getNextMosqueCode } from "@/lib/mock-data"
+import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
+import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
+
+// Helper function to get the correct table name for a subscription type
+const getTableName = (type: string): string => {
+  // Handle special pluralization cases
+  if (type === 'business') return 'businesses'
+  // Default: just add 's'
+  return `${type}s`
+}
 
 const subscriptionInfo = {
   mosque: {
@@ -45,6 +55,7 @@ const subscriptionInfo = {
 export default function SubscribePage() {
   const params = useParams()
   const router = useRouter()
+  const { toast } = useToast()
   const type = params.type as "mosque" | "business" | "coupon" | "nonprofit"
 
   const [step, setStep] = useState(1)
@@ -52,13 +63,60 @@ export default function SubscribePage() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null)
   const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
-  const [formData, setFormData] = useState({ name: "" }) // Added to store form data
+  const [formData, setFormData] = useState<any>({}) // Store all form data
+  const [availableMosques, setAvailableMosques] = useState<any[]>([])
+  const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
+  const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
+  
+  // Optimistic UI state for uploads
+  const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set())
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // File input refs
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   const info = subscriptionInfo[type]
   const Icon = info?.icon || Building2
 
-  const availableMosques = getAllMosquesWithCodes().filter((m) => m.status === "active")
-  const nextMosqueCode = getNextMosqueCode()
+  // Fetch active mosques on mount
+  useEffect(() => {
+    const fetchMosques = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('mosques')
+          .select('id, name, mosque_code, status')
+          .eq('status', 'active')
+          .order('mosque_code', { ascending: true })
+
+        if (!error && data) {
+          setAvailableMosques(data)
+        }
+      } catch (error) {
+        console.error('Error fetching mosques:', error)
+      }
+    }
+
+    fetchMosques()
+  }, [])
+
+  // Get next mosque code (for display only)
+  useEffect(() => {
+    const getNextCode = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_next_mosque_code')
+        if (!error && data) {
+          setNextMosqueCode(data)
+        }
+      } catch (error) {
+        console.error('Error getting next mosque code:', error)
+      }
+    }
+
+    if (type === 'mosque') {
+      getNextCode()
+    }
+  }, [type])
 
   if (!info) {
     return (
@@ -73,39 +131,336 @@ export default function SubscribePage() {
     )
   }
 
-  const handleImageUpload = () => {
-    setUploadedImages([
-      ...uploadedImages,
-      `/placeholder.svg?height=300&width=400&query=uploaded image ${uploadedImages.length + 1}`,
-    ])
+  // Helper function to resize/compress image and convert to WebP
+  const resizeImage = (file: File, maxSizeMB: number = 2): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (e) => {
+        const img = new Image()
+        img.src = e.target?.result as string
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+          
+          // Calculate new dimensions to reduce file size
+          const maxDimension = 1920 // Max width or height
+          if (width > height && width > maxDimension) {
+            height = (height / width) * maxDimension
+            width = maxDimension
+          } else if (height > maxDimension) {
+            width = (width / height) * maxDimension
+            height = maxDimension
+          }
+          
+          canvas.width = width
+          canvas.height = height
+          
+          const ctx = canvas.getContext('2d')
+          ctx?.drawImage(img, 0, 0, width, height)
+          
+          // Try different quality levels until file size is acceptable
+          // WebP typically produces smaller files than JPEG at the same quality
+          let quality = 0.9
+          const tryCompress = () => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error('Failed to compress image'))
+                  return
+                }
+                
+                const targetSize = maxSizeMB * 1024 * 1024
+                
+                // If still too large and quality can be reduced, try again
+                if (blob.size > targetSize && quality > 0.1) {
+                  quality -= 0.1
+                  tryCompress()
+                  return
+                }
+                
+                // Create new file from blob with .webp extension
+                const fileName = file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp')
+                const resizedFile = new File([blob], fileName, {
+                  type: 'image/webp',
+                  lastModified: Date.now(),
+                })
+                resolve(resizedFile)
+              },
+              'image/webp',
+              quality
+            )
+          }
+          
+          tryCompress()
+        }
+        img.onerror = () => reject(new Error('Failed to load image'))
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+    })
+  }
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    
+    // Validate file type - only accept JPG, JPEG, PNG
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPG, JPEG, or PNG image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create temporary preview URL (optimistic UI)
+    const tempPreviewUrl = URL.createObjectURL(file)
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    
+    // Add to uploaded images immediately (optimistic)
+    setUploadedImages(prev => [...prev, tempPreviewUrl])
+    setUploadingImages(prev => new Set([...prev, tempPreviewUrl]))
+
+    try {
+      // Process and upload in background
+      const processedFile = await resizeImage(file, 2)
+      
+      const fileName = `${type}-${Date.now()}-${Math.random().toString(36).substring(7)}.webp`
+      const filePath = `${getTableName(type)}/${fileName}`
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, processedFile, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Upload error:', error)
+        
+        // Remove temp preview on error
+        setUploadedImages(prev => prev.filter(url => url !== tempPreviewUrl))
+        setUploadingImages(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(tempPreviewUrl)
+          return newSet
+        })
+        URL.revokeObjectURL(tempPreviewUrl)
+        
+        toast({
+          title: "Upload failed",
+          description: error.message || "Failed to upload image",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      // Replace temp URL with real URL
+      setUploadedImages(prev => prev.map(url => url === tempPreviewUrl ? publicUrl : url))
+      setUploadingImages(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(tempPreviewUrl)
+        return newSet
+      })
+      
+      // Clean up temp URL
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      const sizeInfo = `${(processedFile.size / 1024 / 1024).toFixed(1)}MB`
+      const reduction = file.size > processedFile.size 
+        ? ` (${Math.round((1 - processedFile.size / file.size) * 100)}% smaller)`
+        : ''
+      
+      toast({
+        title: "Upload complete",
+        description: `${sizeInfo} WebP${reduction}`,
+      })
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      
+      // Remove temp preview on error
+      setUploadedImages(prev => prev.filter(url => url !== tempPreviewUrl))
+      setUploadingImages(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(tempPreviewUrl)
+        return newSet
+      })
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "An error occurred while uploading the image",
+        variant: "destructive",
+      })
+    }
+    
+    // Reset input
+    event.target.value = ''
   }
 
   const removeImage = (index: number) => {
     setUploadedImages(uploadedImages.filter((_, i) => i !== index))
   }
 
-  const handleLogoUpload = () => {
-    setUploadedLogo("/mosque-logo.png")
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    
+    // Validate file type - only accept JPG, JPEG, PNG
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPG, JPEG, or PNG image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create temporary preview URL (optimistic UI)
+    const tempPreviewUrl = URL.createObjectURL(file)
+    
+    // Show preview immediately (optimistic)
+    setUploadedLogo(tempPreviewUrl)
+    setUploadingLogo(true)
+
+    try {
+      // Process and upload in background
+      const processedFile = await resizeImage(file, 2)
+
+      const fileName = `logo-${type}-${Date.now()}-${Math.random().toString(36).substring(7)}.webp`
+      const filePath = `${getTableName(type)}/${fileName}`
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, processedFile, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Upload error:', error)
+        
+        // Remove temp preview on error
+        setUploadedLogo(null)
+        setUploadingLogo(false)
+        URL.revokeObjectURL(tempPreviewUrl)
+        
+        toast({
+          title: "Upload failed",
+          description: error.message || "Failed to upload logo",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      // Replace temp URL with real URL
+      setUploadedLogo(publicUrl)
+      setUploadingLogo(false)
+      
+      // Clean up temp URL
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      const sizeInfo = `${(processedFile.size / 1024 / 1024).toFixed(1)}MB`
+      const reduction = file.size > processedFile.size 
+        ? ` (${Math.round((1 - processedFile.size / file.size) * 100)}% smaller)`
+        : ''
+      
+      toast({
+        title: "Upload complete",
+        description: `${sizeInfo} WebP${reduction}`,
+      })
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      
+      // Remove temp preview on error
+      setUploadedLogo(null)
+      setUploadingLogo(false)
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "An error occurred while uploading the logo",
+        variant: "destructive",
+      })
+    }
+    
+    // Reset input
+    event.target.value = ''
   }
 
   const handleSubmit = async () => {
     setIsProcessing(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    
+    try {
+      // Prepare data based on subscription type
+      const subscriptionData = {
+        ...formData,
+        photos: uploadedImages,
+        logo: uploadedLogo,
+        affiliatedMosqueCode: affiliatedMosqueCode && affiliatedMosqueCode !== 'none' ? affiliatedMosqueCode : null
+      }
 
-    // Simulate sending notification email to admin
-    const newEmailLog = {
-      id: `log-${Date.now()}`,
-      to: "josh@mobileappcity.com",
-      recipientName: "Amanah Admin",
-      template: "Admin Alert - New Subscription",
-      subject: `New ${type} subscription added: ${formData.name || "Unnamed"}`,
-      sentAt: new Date().toISOString(),
-      status: "sent" as const,
+      // Create subscription via simulated API (no Stripe)
+      const response: any = await authenticatedPost('/api/subscriptions/simulate', {
+        type: type,
+        data: subscriptionData
+      })
+
+      if (response.success) {
+        setCreatedSubscriptionId(response.data.subscription.id)
+        
+        // Send notification to admin
+        try {
+          await authenticatedPost('/api/notifications/send', {
+            type: 'new_subscription',
+            subscriptionId: response.data.subscription.id,
+            subscriptionType: type,
+            entityName: formData.name || formData.title || formData.orgName || 'Unnamed'
+          })
+        } catch (notifError) {
+          console.error('Failed to send notification:', notifError)
+          // Don't fail the whole flow if notification fails
+        }
+
+        toast({
+          title: "Success!",
+          description: `Your ${type} subscription has been created successfully.`,
+        })
+
+        setStep(3)
+      } else {
+        throw new Error(response.error || 'Failed to create subscription')
+      }
+    } catch (error: any) {
+      console.error('Subscription creation error:', error)
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to create subscription. Please try again.',
+        variant: "destructive"
+      })
+    } finally {
+      setIsProcessing(false)
     }
-    console.log("[v0] Notification email sent to admin:", newEmailLog)
-
-    setStep(3)
-    setIsProcessing(false)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -197,46 +552,77 @@ export default function SubscribePage() {
                       <img
                         src={uploadedLogo || "/placeholder.svg"}
                         alt="Logo"
-                        className="h-20 w-20 object-contain rounded-lg border"
+                        className={`h-20 w-20 object-contain rounded-lg border ${uploadingLogo ? 'opacity-50' : ''}`}
                       />
+                      {uploadingLogo && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                          <Loader2 className="h-6 w-6 text-white animate-spin" />
+                        </div>
+                      )}
                       <Button
                         variant="destructive"
                         size="icon"
                         className="absolute -top-2 -right-2 h-6 w-6"
                         onClick={() => setUploadedLogo(null)}
+                        disabled={uploadingLogo}
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
                   ) : (
-                    <Button variant="outline" onClick={handleLogoUpload}>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Logo
-                    </Button>
+                    <>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={handleLogoUpload}
+                      />
+                      <Button variant="outline" onClick={() => logoInputRef.current?.click()}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Logo
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
               <div className="space-y-2">
                 <Label>Images (PNG or JPG Files)</Label>
                 <div className="grid grid-cols-3 gap-2">
-                  {uploadedImages.map((img, idx) => (
-                    <div key={idx} className="relative">
-                      <img
-                        src={img || "/placeholder.svg"}
-                        alt={`Upload ${idx + 1}`}
-                        className="h-24 w-full object-cover rounded-lg"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => removeImage(idx)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+                  {uploadedImages.map((img, idx) => {
+                    const isUploading = uploadingImages.has(img)
+                    return (
+                      <div key={idx} className="relative">
+                        <img
+                          src={img || "/placeholder.svg"}
+                          alt={`Upload ${idx + 1}`}
+                          className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                        />
+                        {isUploading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                            <Loader2 className="h-6 w-6 text-white animate-spin" />
+                          </div>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6"
+                          onClick={() => removeImage(idx)}
+                          disabled={isUploading}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <Button variant="outline" className="h-24 bg-transparent" onClick={() => imageInputRef.current?.click()}>
                     <Plus className="h-6 w-6" />
                   </Button>
                 </div>
@@ -312,8 +698,8 @@ export default function SubscribePage() {
                 <SelectContent>
                   <SelectItem value="none">No Affiliation</SelectItem>
                   {availableMosques.map((mosque) => (
-                    <SelectItem key={mosque.code} value={mosque.code.toString()}>
-                      #{mosque.code} - {mosque.name}
+                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                      #{mosque.mosque_code} - {mosque.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -363,24 +749,40 @@ export default function SubscribePage() {
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Photos (Image Size: 4/3 ratio – 400*300)</h3>
             <div className="grid grid-cols-3 gap-2">
-              {uploadedImages.map((img, idx) => (
-                <div key={idx} className="relative">
-                  <img
-                    src={img || "/placeholder.svg"}
-                    alt={`Upload ${idx + 1}`}
-                    className="h-24 w-full object-cover rounded-lg"
-                  />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={() => removeImage(idx)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+              {uploadedImages.map((img, idx) => {
+                const isUploading = uploadingImages.has(img)
+                return (
+                  <div key={idx} className="relative">
+                    <img
+                      src={img || "/placeholder.svg"}
+                      alt={`Upload ${idx + 1}`}
+                      className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                    />
+                    {isUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      </div>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={() => removeImage(idx)}
+                      disabled={isUploading}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )
+              })}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <Button variant="outline" className="h-24 bg-transparent" onClick={() => imageInputRef.current?.click()}>
                 <Plus className="h-6 w-6" />
               </Button>
             </div>
@@ -486,8 +888,8 @@ export default function SubscribePage() {
                 <SelectContent>
                   <SelectItem value="none">No Affiliation</SelectItem>
                   {availableMosques.map((mosque) => (
-                    <SelectItem key={mosque.code} value={mosque.code.toString()}>
-                      #{mosque.code} - {mosque.name}
+                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                      #{mosque.mosque_code} - {mosque.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -634,24 +1036,40 @@ export default function SubscribePage() {
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Image (Recommended: 320px width)</h3>
             <div className="grid grid-cols-3 gap-2">
-              {uploadedImages.map((img, idx) => (
-                <div key={idx} className="relative">
-                  <img
-                    src={img || "/placeholder.svg"}
-                    alt={`Upload ${idx + 1}`}
-                    className="h-24 w-full object-cover rounded-lg"
-                  />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={() => removeImage(idx)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" className="h-24 bg-transparent" onClick={handleImageUpload}>
+              {uploadedImages.map((img, idx) => {
+                const isUploading = uploadingImages.has(img)
+                return (
+                  <div key={idx} className="relative">
+                    <img
+                      src={img || "/placeholder.svg"}
+                      alt={`Upload ${idx + 1}`}
+                      className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                    />
+                    {isUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      </div>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={() => removeImage(idx)}
+                      disabled={isUploading}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )
+              })}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <Button variant="outline" className="h-24 bg-transparent" onClick={() => imageInputRef.current?.click()}>
                 <Plus className="h-6 w-6" />
               </Button>
             </div>
@@ -735,18 +1153,94 @@ export default function SubscribePage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="logo">Organization Logo (PNG) *</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">Click or drag to upload logo</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG format recommended</p>
-            </div>
+            {uploadedLogo ? (
+              <div className="relative w-fit">
+                <img
+                  src={uploadedLogo}
+                  alt="Logo"
+                  className={`h-32 w-32 object-contain rounded-lg border ${uploadingLogo ? 'opacity-50' : ''}`}
+                />
+                {uploadingLogo && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                    <Loader2 className="h-8 w-8 text-white animate-spin" />
+                  </div>
+                )}
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6"
+                  onClick={() => setUploadedLogo(null)}
+                  disabled={uploadingLogo}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoUpload}
+                />
+                <div 
+                  className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Click or drag to upload logo</p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG format recommended</p>
+                </div>
+              </>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="images">Organization Images (PNG or JPG)</Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">Click or drag to upload images</p>
-              <p className="text-xs text-muted-foreground mt-1">Multiple images showing your organization's work</p>
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                {uploadedImages.map((img, idx) => {
+                  const isUploading = uploadingImages.has(img)
+                  return (
+                    <div key={idx} className="relative">
+                      <img
+                        src={img}
+                        alt={`Upload ${idx + 1}`}
+                        className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                      />
+                      {isUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                          <Loader2 className="h-6 w-6 text-white animate-spin" />
+                        </div>
+                      )}
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={() => removeImage(idx)}
+                        disabled={isUploading}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <div 
+                className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">Click or drag to upload images</p>
+                <p className="text-xs text-muted-foreground mt-1">Multiple images showing your organization's work</p>
+              </div>
             </div>
           </div>
         </div>
@@ -816,12 +1310,12 @@ export default function SubscribePage() {
           </Card>
         )}
 
-        {/* Step 2: Payment */}
+        {/* Step 2: Payment Summary */}
         {step === 2 && (
           <Card>
             <CardHeader>
-              <CardTitle>Payment Details</CardTitle>
-              <CardDescription>Complete your subscription with a secure payment</CardDescription>
+              <CardTitle>Confirm Subscription</CardTitle>
+              <CardDescription>Review your subscription details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 rounded-lg bg-secondary">
@@ -844,25 +1338,10 @@ export default function SubscribePage() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cardNumber">Card Number</Label>
-                  <Input id="cardNumber" placeholder="4242 4242 4242 4242" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="expiry">Expiry Date</Label>
-                    <Input id="expiry" placeholder="MM/YY" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cvc">CVC</Label>
-                    <Input id="cvc" placeholder="123" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nameOnCard">Name on Card</Label>
-                  <Input id="nameOnCard" placeholder="Full name" />
-                </div>
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
+                  💳 Payment simulation enabled for demonstration purposes
+                </p>
               </div>
 
               <div className="flex gap-4">
@@ -877,16 +1356,12 @@ export default function SubscribePage() {
                     </>
                   ) : (
                     <>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Pay ${info.price}/month
+                      <Check className="h-4 w-4 mr-2" />
+                      Simulate Payment
                     </>
                   )}
                 </Button>
               </div>
-
-              <p className="text-xs text-center text-muted-foreground">
-                This is a simulated payment for demonstration purposes.
-              </p>
             </CardContent>
           </Card>
         )}

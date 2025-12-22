@@ -355,10 +355,47 @@ All endpoints (except auth) require `Authorization: Bearer {token}` header.
 
 ## 🧪 Testing
 
+### End-to-End Tests (Playwright)
+
+**50+ automated tests** covering all major features:
+
+```bash
+# Install Playwright
+pnpm add -D @playwright/test
+pnpm exec playwright install
+
+# Run all tests
+pnpm test:e2e
+
+# Run with UI (interactive)
+pnpm test:e2e:ui
+
+# Run specific test file
+pnpm exec playwright test auth
+
+# View HTML report
+pnpm test:e2e:report
+```
+
+**Test Coverage:**
+- ✅ Authentication (login, registration, logout)
+- ✅ Subscription creation (mosque, business, coupon, nonprofit)
+- ✅ Dashboard display and navigation
+- ✅ Settings management (profile, password, notifications, payment)
+- ✅ Responsive design (mobile, tablet, desktop)
+
+**See detailed guide:** `PLAYWRIGHT_TESTING_GUIDE.md`
+
 ### Test Admin Account
 ```
 Email: rorounifix@gmail.com
 Password: P@$$w0rd
+```
+
+### Test User Account (for E2E tests)
+```
+Email: test@example.com
+Password: testpassword
 ```
 
 ### Test Payment Method

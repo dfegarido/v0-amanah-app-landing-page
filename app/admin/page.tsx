@@ -42,11 +42,12 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { mockMembers, mockPaymentAlerts, mockFinancialRecords, mockPushNotificationRequests } from "@/lib/mock-data" // ADDED: mockPushNotificationRequests
+import { mockPaymentAlerts, mockFinancialRecords, mockPushNotificationRequests } from "@/lib/mock-data" // ADDED: mockPushNotificationRequests
 import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/lib/auth-context"
+import { authenticatedGet } from "@/lib/api-client"
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -63,6 +64,8 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("mosques")
   const [payoutsMonth, setPayoutsMonth] = useState(new Date())
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [members, setMembers] = useState<any[]>([])
+  const [membersLoading, setMembersLoading] = useState(true)
 
   // ADDED: push notification requests state
   const [pushNotificationRequests, setPushNotificationRequests] = useState(mockPushNotificationRequests)
@@ -74,6 +77,41 @@ export default function AdminDashboard() {
       router.push('/auth/login')
     }
   }, [user, loading, router])
+
+  // Fetch members data
+  useEffect(() => {
+    const fetchMembers = async () => {
+      if (!user || user.role !== 'admin') return
+      
+      try {
+        setMembersLoading(true)
+        const response = await authenticatedGet('/api/admin/members') as any
+        
+        if (response.success && response.data) {
+          setMembers(response.data.members || [])
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load members data",
+            variant: "destructive"
+          })
+        }
+      } catch (error: any) {
+        console.error('Error fetching members:', error)
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load members data",
+          variant: "destructive"
+        })
+      } finally {
+        setMembersLoading(false)
+      }
+    }
+
+    if (!loading) {
+      fetchMembers()
+    }
+  }, [user, loading, toast])
 
   // ADDED: push notification handlers
   const handleApprovePushNotification = (requestId: string) => {
@@ -105,18 +143,31 @@ export default function AdminDashboard() {
     // For demonstration purposes, we'll just log and alert.
   }
 
-  const allMosques = mockMembers.flatMap((m) =>
+  const allMosques = members.flatMap((m) =>
     m.subscriptions
-      .filter((s) => s.type === "mosque")
-      .map((s) => ({
-        ...s,
-        memberName: m.name,
-        memberEmail: m.email,
-        memberPhone: m.phone,
-        memberId: m.id,
-        // Added default appStatus for demonstration, in a real app this would come from the backend
-        appStatus: s.appStatus || "active",
-      })),
+      .filter((s: any) => s.type === "mosque")
+      .map((s: any) => {
+        return {
+          ...s,
+          ...s.entity,
+          memberName: m.name,
+          memberEmail: m.email,
+          memberPhone: m.phone,
+          memberId: m.id,
+          // Added default appStatus for demonstration, in a real app this would come from the backend
+          appStatus: s.entity?.status || "active",
+          // Map database fields to expected interface
+          name: s.entity?.name,
+          mosqueCode: s.entity?.mosque_code,
+          title: s.entity?.name,
+          type: "mosque",
+          status: s.status,
+          price: s.price,
+          interval: s.interval,
+          nextBillingDate: s.next_billing_date,
+          createdAt: s.created_at,
+        }
+      }),
   ) as (MosqueSubscription & {
     memberName: string
     memberEmail: string
@@ -125,17 +176,30 @@ export default function AdminDashboard() {
     appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
-  const allBusinesses = mockMembers.flatMap((m) =>
+  const allBusinesses = members.flatMap((m) =>
     m.subscriptions
-      .filter((s) => s.type === "business")
-      .map((s) => ({
-        ...s,
-        memberName: m.name,
-        memberEmail: m.email,
-        memberPhone: m.phone,
-        memberId: m.id,
-        appStatus: s.appStatus || "active",
-      })),
+      .filter((s: any) => s.type === "business")
+      .map((s: any) => {
+        return {
+          ...s,
+          ...s.entity,
+          memberName: m.name,
+          memberEmail: m.email,
+          memberPhone: m.phone,
+          memberId: m.id,
+          appStatus: s.entity?.status || "active",
+          // Map database fields to expected interface
+          name: s.entity?.name,
+          title: s.entity?.name,
+          type: "business",
+          status: s.status,
+          price: s.price,
+          interval: s.interval,
+          nextBillingDate: s.next_billing_date,
+          createdAt: s.created_at,
+          affiliatedMosqueCode: s.entity?.affiliated_mosque_code,
+        }
+      }),
   ) as (BusinessSubscription & {
     memberName: string
     memberEmail: string
@@ -144,16 +208,27 @@ export default function AdminDashboard() {
     appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
 
-  const allCoupons = mockMembers.flatMap((m) =>
+  const allCoupons = members.flatMap((m) =>
     m.subscriptions
-      .filter((s) => s.type === "coupon")
-      .map((s) => ({
+      .filter((s: any) => s.type === "coupon")
+      .map((s: any) => ({
         ...s,
+        ...s.entity,
         memberName: m.name,
         memberEmail: m.email,
         memberPhone: m.phone,
         memberId: m.id,
-        appStatus: s.appStatus || "active",
+        appStatus: s.entity?.status || "active",
+        // Map database fields to expected interface
+        title: s.entity?.title,
+        type: "coupon",
+        status: s.status,
+        price: s.price,
+        interval: s.interval,
+        nextBillingDate: s.next_billing_date,
+        createdAt: s.created_at,
+        affiliatedMosqueCode: s.entity?.affiliated_mosque_code,
+        merchant: s.entity?.merchant,
       })),
   ) as (CouponSubscription & {
     memberName: string
@@ -164,17 +239,26 @@ export default function AdminDashboard() {
   })[]
 
   // ADDED: allNonprofits data structure
-  const allNonprofits = mockMembers.flatMap((m) =>
+  const allNonprofits = members.flatMap((m) =>
     m.subscriptions
-      .filter((s) => s.type === "nonprofit")
-      .map((s) => ({
+      .filter((s: any) => s.type === "nonprofit")
+      .map((s: any) => ({
         ...s,
+        ...s.entity,
         memberName: m.name,
         memberEmail: m.email,
         memberPhone: m.phone,
         memberId: m.id,
         // App lifecycle statuses: pending, active, update_pending, removed, cancelled
-        appLifecycle: s.appLifecycle || "pending",
+        appLifecycle: s.entity?.status || "pending",
+        // Map database fields to expected interface
+        title: s.entity?.name,
+        type: "nonprofit",
+        status: s.status,
+        price: s.price,
+        interval: s.interval,
+        nextBillingDate: s.next_billing_date,
+        createdAt: s.created_at,
       })),
   ) as Array<
     Subscription & {
@@ -219,12 +303,12 @@ export default function AdminDashboard() {
     const netRevenue = records.reduce((acc, r) => acc + r.netRevenue, 0)
 
     // ADDED: Calculate total manual donations
-    const totalManualDonations = mockMembers.reduce((sum, member) => {
+    const totalManualDonations = members.reduce((sum, member) => {
       return (
         sum +
-        member.subscriptions.reduce((subSum, sub) => {
-          if (sub.type === "mosque" && sub.manualDonations) {
-            return subSum + sub.manualDonations
+        member.subscriptions.reduce((subSum: number, sub: any) => {
+          if (sub.type === "mosque" && sub.entity?.manual_donations) {
+            return subSum + sub.entity.manual_donations
           }
           return subSum
         }, 0)
@@ -559,7 +643,7 @@ export default function AdminDashboard() {
               <CardDescription className="flex items-center gap-1">
                 <Building2 className="h-4 w-4" /> Mosques
               </CardDescription>
-              <CardTitle className="text-3xl">{totalMosques}</CardTitle>
+              <CardTitle className="text-3xl">{membersLoading ? "..." : totalMosques}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -567,7 +651,7 @@ export default function AdminDashboard() {
               <CardDescription className="flex items-center gap-1">
                 <Store className="h-4 w-4" /> Businesses
               </CardDescription>
-              <CardTitle className="text-3xl">{totalBusinesses}</CardTitle>
+              <CardTitle className="text-3xl">{membersLoading ? "..." : totalBusinesses}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -575,7 +659,7 @@ export default function AdminDashboard() {
               <CardDescription className="flex items-center gap-1">
                 <Ticket className="h-4 w-4" /> Coupons
               </CardDescription>
-              <CardTitle className="text-3xl">{totalCoupons}</CardTitle>
+              <CardTitle className="text-3xl">{membersLoading ? "..." : totalCoupons}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -584,7 +668,7 @@ export default function AdminDashboard() {
                 <DollarSign className="h-4 w-4" /> Monthly Revenue
               </CardDescription>
               <CardTitle className="text-3xl text-primary">
-                ${totalMosques * 100 + (totalBusinesses + totalCoupons) * 10}
+                {membersLoading ? "..." : `$${totalMosques * 100 + (totalBusinesses + totalCoupons) * 10}`}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -605,19 +689,19 @@ export default function AdminDashboard() {
           <TabsList className="bg-muted flex-wrap">
             <TabsTrigger value="mosques">
               <Building2 className="h-4 w-4 mr-2" />
-              Mosques ({totalMosques})
+              Mosques ({membersLoading ? "..." : totalMosques})
             </TabsTrigger>
             <TabsTrigger value="businesses">
               <Store className="h-4 w-4 mr-2" />
-              Businesses ({totalBusinesses})
+              Businesses ({membersLoading ? "..." : totalBusinesses})
             </TabsTrigger>
             <TabsTrigger value="coupons">
               <Ticket className="h-4 w-4 mr-2" />
-              Coupons ({totalCoupons})
+              Coupons ({membersLoading ? "..." : totalCoupons})
             </TabsTrigger>
             <TabsTrigger value="nonprofits">
               <Users className="h-4 w-4 mr-2" />
-              Non-Profits ({totalNonprofits})
+              Non-Profits ({membersLoading ? "..." : totalNonprofits})
             </TabsTrigger>
             <TabsTrigger value="payouts">
               <DollarSign className="h-4 w-4 mr-2" />
@@ -1362,11 +1446,11 @@ export default function AdminDashboard() {
                       <div>
                         <Label className="text-muted-foreground">Email</Label>
                         <div className="flex items-center gap-2">
-                          <p>{nonprofit.email}</p>
+                          <p>{(nonprofit as any).email}</p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigator.clipboard.writeText(nonprofit.email)}
+                            onClick={() => navigator.clipboard.writeText((nonprofit as any).email)}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
@@ -1375,11 +1459,11 @@ export default function AdminDashboard() {
                       <div>
                         <Label className="text-muted-foreground">Phone</Label>
                         <div className="flex items-center gap-2">
-                          <p>{nonprofit.phone}</p>
+                          <p>{(nonprofit as any).phone}</p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigator.clipboard.writeText(nonprofit.phone)}
+                            onClick={() => navigator.clipboard.writeText((nonprofit as any).phone)}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
@@ -1387,16 +1471,16 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Website</Label>
-                        <p>{nonprofit.website}</p>
+                        <p>{(nonprofit as any).website}</p>
                       </div>
                       <div className="md:col-span-2">
                         <Label className="text-muted-foreground">Address</Label>
                         <div className="flex items-center gap-2">
-                          <p>{nonprofit.address}</p>
+                          <p>{(nonprofit as any).address}</p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigator.clipboard.writeText(nonprofit.address)}
+                            onClick={() => navigator.clipboard.writeText((nonprofit as any).address)}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
@@ -1404,32 +1488,32 @@ export default function AdminDashboard() {
                       </div>
                       <div className="md:col-span-2">
                         <Label className="text-muted-foreground">About</Label>
-                        <p>{nonprofit.about}</p>
+                        <p>{(nonprofit as any).about}</p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Donate Link</Label>
-                        <p>{nonprofit.donateLink}</p>
+                        <p>{(nonprofit as any).donateLink || (nonprofit as any).donate_link}</p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground">Social Media</Label>
-                        <p className="whitespace-pre-wrap">{nonprofit.socialMedia}</p>
+                        <p className="whitespace-pre-wrap">{(nonprofit as any).socialMedia || (nonprofit as any).social_media}</p>
                       </div>
                     </div>
-                    {nonprofit.photos && nonprofit.photos.length > 0 && (
+                    {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <Label className="text-muted-foreground">Photos</Label>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => downloadAllPhotos(nonprofit.photos!, nonprofit.name)}
+                            onClick={() => downloadAllPhotos((nonprofit as any).photos!, (nonprofit as any).name)}
                           >
                             <Download className="h-4 w-4 mr-2" />
                             Download All Photos
                           </Button>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
-                          {nonprofit.photos.map((photo, index) => (
+                          {(nonprofit as any).photos.map((photo: any, index: number) => (
                             <img
                               key={index}
                               src={photo || "/placeholder.svg"}
@@ -1520,7 +1604,7 @@ export default function AdminDashboard() {
                     <TableBody>
                       {allMosques.map((mosque) => {
                         const { businesses, coupons, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
-                        const manualDonations = mosque.manualDonations || 0
+                        const manualDonations = (mosque as any).manualDonations || (mosque as any).manual_donations || 0
                         const totalPayout = totalKickback + manualDonations
                         return (
                           <TableRow key={mosque.id}>
@@ -1871,7 +1955,20 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid gap-4">
-              {mockMembers.map((member) => (
+              {membersLoading ? (
+                <Card>
+                  <CardContent className="p-6">
+                    <p className="text-center text-muted-foreground">Loading members...</p>
+                  </CardContent>
+                </Card>
+              ) : members.length === 0 ? (
+                <Card>
+                  <CardContent className="p-6">
+                    <p className="text-center text-muted-foreground">No members found</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                members.map((member) => (
                 <Card key={member.id}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -1893,7 +1990,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold">
-                          ${member.subscriptions.reduce((sum, sub) => sum + sub.price, 0)}/mo
+                          ${member.subscriptions.reduce((sum: number, sub: any) => sum + sub.price, 0)}/mo
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {member.subscriptions.length} subscription{member.subscriptions.length !== 1 ? "s" : ""}
@@ -1905,7 +2002,7 @@ export default function AdminDashboard() {
                     <div className="space-y-3">
                       <div className="text-sm font-medium">Active Subscriptions:</div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {member.subscriptions.map((sub) => (
+                        {member.subscriptions.map((sub: any) => (
                           <div key={sub.id} className="flex flex-col gap-2">
                             <div className="flex items-center justify-between rounded-lg border p-3">
                               <div className="flex items-center gap-2">
@@ -1965,7 +2062,8 @@ export default function AdminDashboard() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              ))
+              )}
             </div>
           </TabsContent>
 

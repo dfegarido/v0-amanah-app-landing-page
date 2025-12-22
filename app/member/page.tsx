@@ -28,18 +28,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth-context"
+import { authenticatedGet } from "@/lib/api-client"
+import { useToast } from "@/hooks/use-toast"
 
 export default function MemberDashboard() {
   const router = useRouter()
   const { signOut, user, loading } = useAuth()
+  const { toast } = useToast()
   
   // Real user data - no mock data
   const [startDate, setStartDate] = useState("2024-10-01")
   const [endDate, setEndDate] = useState("2024-12-31")
   
-  // Empty subscriptions array - will be populated from API in future
-  const subscriptions: any[] = []
-  const mosqueSubscriptions: any[] = []
+  // Subscriptions state
+  const [subscriptions, setSubscriptions] = useState<any[]>([])
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(true)
 
   const handleLogout = async () => {
     await signOut()
@@ -52,6 +55,71 @@ export default function MemberDashboard() {
       router.push('/auth/login')
     }
   }, [user, loading, router])
+
+  // Fetch subscriptions
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      if (!user) return
+      
+      try {
+        setLoadingSubscriptions(true)
+        const response: any = await authenticatedGet('/api/subscriptions')
+        
+        if (response.success && response.data) {
+          // Transform data to include entity name
+          const transformedData = response.data.map((sub: any) => {
+            let name = 'Unnamed'
+            let entityStatus = 'pending'
+            
+            if (sub.entity) {
+              // Get name based on type
+              if (sub.type === 'mosque') {
+                name = sub.entity.name || 'Unnamed Mosque'
+                entityStatus = sub.entity.status
+              } else if (sub.type === 'business') {
+                name = sub.entity.name || 'Unnamed Business'
+                entityStatus = sub.entity.status
+              } else if (sub.type === 'coupon') {
+                name = sub.entity.title || 'Unnamed Coupon'
+                entityStatus = sub.entity.status
+              } else if (sub.type === 'nonprofit') {
+                name = sub.entity.name || 'Unnamed Nonprofit'
+                entityStatus = sub.entity.status
+              }
+            }
+            
+            return {
+              id: sub.id,
+              type: sub.type,
+              name: name,
+              status: sub.status,
+              entityStatus: entityStatus,
+              price: sub.price_amount,
+              nextBillingDate: sub.next_billing_date,
+              entity: sub.entity,
+              mosqueCode: sub.entity?.mosque_code,
+              affiliatedMosqueCode: sub.entity?.affiliated_mosque_code
+            }
+          })
+          
+          setSubscriptions(transformedData)
+        }
+      } catch (error: any) {
+        console.error('Error fetching subscriptions:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load subscriptions",
+          variant: "destructive"
+        })
+      } finally {
+        setLoadingSubscriptions(false)
+      }
+    }
+
+    if (user) {
+      fetchSubscriptions()
+    }
+  }, [user, toast])
 
   if (loading) {
     return (
@@ -110,10 +178,13 @@ export default function MemberDashboard() {
     }
   }
 
-  // Calculate totals from real subscriptions (currently empty)
+  // Calculate totals from real subscriptions
   const totalMonthly = subscriptions.reduce((acc, sub) => acc + (sub.price || 0), 0)
   const activeSubscriptionsCount = subscriptions.filter((s) => s.status === "active").length
   const memberSince = user?.created_at ? new Date(user.created_at) : new Date()
+
+  // Show loading for stats during initial load
+  const statsLoading = loading || loadingSubscriptions
 
   return (
     <div className="min-h-screen bg-background">
@@ -152,13 +223,17 @@ export default function MemberDashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Active Subscriptions</CardDescription>
-              <CardTitle className="text-3xl">{activeSubscriptionsCount}</CardTitle>
+              <CardTitle className="text-3xl">
+                {statsLoading ? "..." : activeSubscriptionsCount}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Monthly Total</CardDescription>
-              <CardTitle className="text-3xl text-primary">${totalMonthly}</CardTitle>
+              <CardTitle className="text-3xl text-primary">
+                {statsLoading ? "..." : `$${totalMonthly.toFixed(2)}`}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -246,7 +321,14 @@ export default function MemberDashboard() {
             {/* Current Subscriptions */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Your Subscriptions</h3>
-              {subscriptions.length === 0 ? (
+              {loadingSubscriptions ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                    <p className="text-muted-foreground">Loading subscriptions...</p>
+                  </CardContent>
+                </Card>
+              ) : subscriptions.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
@@ -266,15 +348,37 @@ export default function MemberDashboard() {
                             {getSubscriptionIcon(subscription.type)}
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 mb-1">
                               <CardTitle className="text-base">{subscription.name}</CardTitle>
                               {getStatusBadge(subscription.status)}
+                              {subscription.entityStatus && subscription.entityStatus !== subscription.status && (
+                                <Badge variant="outline" className="text-xs">
+                                  {subscription.entityStatus}
+                                </Badge>
+                              )}
                             </div>
-                            <CardDescription className="flex items-center gap-2">
+                            <CardDescription className="flex items-center gap-2 flex-wrap">
                               <span className="capitalize">{subscription.type}</span>
                               <span>•</span>
                               <span>{getSubscriptionPrice(subscription.type)}</span>
+                              {subscription.mosqueCode && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-primary font-medium">Code #{subscription.mosqueCode}</span>
+                                </>
+                              )}
+                              {subscription.affiliatedMosqueCode && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-primary">Affiliated with #{subscription.affiliatedMosqueCode}</span>
+                                </>
+                              )}
                             </CardDescription>
+                            {subscription.nextBillingDate && (
+                              <CardDescription className="text-xs mt-1">
+                                Next billing: {new Date(subscription.nextBillingDate).toLocaleDateString()}
+                              </CardDescription>
+                            )}
                           </div>
                           <ChevronRight className="h-5 w-5 text-muted-foreground" />
                         </CardHeader>

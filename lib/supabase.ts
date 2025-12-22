@@ -14,3 +14,14 @@ export const createServerClient = () => {
   return createClient(supabaseUrl, supabaseAnonKey)
 }
 
+// Create an authenticated Supabase client using a JWT token
+export const createAuthenticatedClient = (accessToken: string) => {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }
+  })
+}
+
