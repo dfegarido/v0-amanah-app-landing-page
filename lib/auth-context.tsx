@@ -67,19 +67,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
+        console.error('Error fetching user profile:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          userId: userId
+        })
+
         // If profile not found and we have retries left, wait and try again
         if (retries < maxRetries) {
           console.log(`Profile not found yet, retrying (${retries + 1}/${maxRetries})...`)
           await new Promise(resolve => setTimeout(resolve, 1000))
           return fetchUserProfile(userId, retries + 1, maxRetries)
         }
+        
+        console.error('⚠️ User profile fetch failed after all retries')
+        console.error('This usually means:')
+        console.error('1. Profile does not exist in public.users table')
+        console.error('2. RLS policy is blocking access')
+        console.error('3. Auth trigger did not run during signup')
+        console.error('→ Run FIX_AUTH_ISSUE.sql in Supabase to fix')
+        
         throw error
       }
       
       setUser(data as User)
-      console.log('User profile loaded:', data.email)
-    } catch (error) {
-      console.error('Error fetching user profile after retries:', error)
+      console.log('✅ User profile loaded:', data.email, 'Role:', data.role)
+    } catch (error: any) {
+      console.error('❌ Error fetching user profile after retries:', {
+        message: error?.message || 'Unknown error',
+        code: error?.code,
+        details: error?.details
+      })
       setUser(null)
     } finally {
       setLoading(false)

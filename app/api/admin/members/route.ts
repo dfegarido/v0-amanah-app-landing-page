@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch users', 500)
     }
 
+    console.log('[Admin API] Fetched users:', users?.length || 0)
+
     if (!users || users.length === 0) {
       return successResponse({
         members: [],
@@ -55,6 +57,8 @@ export async function GET(request: NextRequest) {
             subscriptions: []
           }
         }
+
+        console.log(`[Admin API] User ${user.email} has ${subscriptions?.length || 0} subscriptions`)
 
         // For each subscription, fetch the related entity
         const subscriptionsWithEntities = await Promise.all(
@@ -95,6 +99,7 @@ export async function GET(request: NextRequest) {
               console.error(`Error fetching ${entityTable} for subscription ${subscription.id}:`, entityError)
             } else {
               entity = entityData
+              console.log(`[Admin API] Found ${entityTable} entity:`, entity?.name || entity?.title || 'unnamed')
             }
 
             return {
@@ -114,7 +119,14 @@ export async function GET(request: NextRequest) {
           phone: user.phone || null,
           role: user.role,
           createdAt: user.created_at,
-          subscriptions: validSubscriptions
+          subscriptions: validSubscriptions.map(sub => ({
+            ...sub,
+            // Map database fields to frontend expected fields
+            price: sub.price_amount,
+            interval: 'month', // Default to monthly
+            next_billing_date: sub.next_billing_date,
+            created_at: sub.created_at
+          }))
         }
       })
     )

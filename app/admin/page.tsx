@@ -87,7 +87,11 @@ export default function AdminDashboard() {
         setMembersLoading(true)
         const response = await authenticatedGet('/api/admin/members') as any
         
+        console.log('[Admin Dashboard] API Response:', response)
+        
         if (response.success && response.data) {
+          console.log('[Admin Dashboard] Members received:', response.data.members?.length || 0)
+          console.log('[Admin Dashboard] First member:', response.data.members?.[0])
           setMembers(response.data.members || [])
         } else {
           toast({
@@ -147,6 +151,13 @@ export default function AdminDashboard() {
     m.subscriptions
       .filter((s: any) => s.type === "mosque")
       .map((s: any) => {
+        console.log('[Admin Dashboard] Processing mosque subscription:', {
+          subscriptionId: s.id,
+          type: s.type,
+          hasEntity: !!s.entity,
+          entityName: s.entity?.name,
+          mosqueCode: s.entity?.mosque_code
+        })
         return {
           ...s,
           ...s.entity,
@@ -175,6 +186,8 @@ export default function AdminDashboard() {
     memberId: string
     appStatus?: "active" | "removed" | "pending_verification" | "cancelled" // Added appStatus
   })[]
+  
+  console.log('[Admin Dashboard] Total mosques found:', allMosques.length)
 
   const allBusinesses = members.flatMap((m) =>
     m.subscriptions
@@ -502,12 +515,125 @@ export default function AdminDashboard() {
   }
 
   const downloadAllPhotos = async (photos: string[], name: string) => {
+    if (!photos || photos.length === 0) {
+      toast({
+        title: "No Photos",
+        description: "There are no photos to download.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    toast({
+      title: "Downloading Photos",
+      description: `Starting download of ${photos.length} photo(s)...`,
+    })
+
+    let successCount = 0
+    let failCount = 0
+
     for (let i = 0; i < photos.length; i++) {
+      try {
+        // Fetch the photo as a blob
+        const response = await fetch(photos[i])
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch photo ${i + 1}`)
+        }
+
+        const blob = await response.blob()
+        
+        // Get file extension from blob type or URL
+        const contentType = blob.type
+        let extension = 'jpg'
+        if (contentType.includes('png')) extension = 'png'
+        else if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = 'jpg'
+        else if (contentType.includes('gif')) extension = 'gif'
+        else if (contentType.includes('webp')) extension = 'webp'
+        
+        // Create blob URL and download
+        const blobUrl = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = blobUrl
+        link.download = `${name.replace(/\s+/g, "_")}_photo_${i + 1}.${extension}`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // Clean up blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+        
+        successCount++
+        
+        // Wait between downloads to avoid overwhelming the browser
+        await new Promise((resolve) => setTimeout(resolve, 800))
+      } catch (error) {
+        console.error(`Error downloading photo ${i + 1}:`, error)
+        failCount++
+        
+        // Continue with next photo even if one fails
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+    }
+
+    // Show completion toast
+    if (successCount > 0) {
+      toast({
+        title: "Download Complete",
+        description: `Successfully downloaded ${successCount} photo(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}.`,
+      })
+    } else {
+      toast({
+        title: "Download Failed",
+        description: "Unable to download photos. They may have CORS restrictions.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const downloadDocument = async (docUrl: string, docName: string) => {
+    try {
+      toast({
+        title: "Downloading...",
+        description: `Fetching ${docName}...`,
+      })
+
+      // Fetch the file as a blob to force download
+      const response = await fetch(docUrl)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch file')
+      }
+
+      const blob = await response.blob()
+      
+      // Create a blob URL and trigger download
+      const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement("a")
-      link.href = photos[i]
-      link.download = `${name.replace(/\s+/g, "_")}_photo_${i + 1}.jpg`
+      link.href = blobUrl
+      link.download = docName
+      document.body.appendChild(link)
       link.click()
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      document.body.removeChild(link)
+      
+      // Clean up the blob URL after a short delay
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+      
+      toast({
+        title: "Download Complete",
+        description: `${docName} has been downloaded.`,
+      })
+    } catch (error) {
+      console.error('Download error:', error)
+      
+      // Fallback: open in new tab
+      window.open(docUrl, '_blank')
+      
+      toast({
+        title: "Opening in New Tab",
+        description: "Unable to download directly. File opened in new tab.",
+        variant: "destructive"
+      })
     }
   }
 
@@ -950,7 +1076,11 @@ export default function AdminDashboard() {
                                       className="flex items-center justify-between p-3 rounded-lg bg-secondary"
                                     >
                                       <span>{doc.name}</span>
-                                      <Button variant="ghost" size="sm">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => downloadDocument(doc.url, doc.name)}
+                                      >
                                         <Download className="h-4 w-4 mr-2" />
                                         Download
                                       </Button>
@@ -1146,7 +1276,11 @@ export default function AdminDashboard() {
                                     className="flex items-center justify-between p-3 rounded-lg bg-secondary"
                                   >
                                     <span>{doc.name}</span>
-                                    <Button variant="ghost" size="sm">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={() => downloadDocument(doc.url, doc.name)}
+                                    >
                                       <Download className="h-4 w-4 mr-2" />
                                       Download
                                     </Button>
