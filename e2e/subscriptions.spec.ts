@@ -235,4 +235,3 @@ test.describe('Subscription Form Validation', () => {
     expect(validationMessage).toBeTruthy();
   });
 });
-

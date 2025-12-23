@@ -42,7 +42,7 @@ See `../PLAYWRIGHT_TESTING_GUIDE.md` for complete documentation.
 
 ### Quick Commands:
 
-```bash
+\`\`\`bash
 # Run all tests
 pnpm test:e2e
 
@@ -54,7 +54,7 @@ pnpm test:e2e:ui
 
 # Debug mode
 pnpm test:e2e:debug
-```
+\`\`\`
 
 ## Test Coverage
 
@@ -71,14 +71,13 @@ pnpm test:e2e:debug
 
 ## Writing New Tests
 
-```typescript
+\`\`\`typescript
 import { test, expect } from '@playwright/test';
 
 test('my test', async ({ page }) => {
   await page.goto('/member');
   await expect(page.locator('text=Dashboard')).toBeVisible();
 });
-```
+\`\`\`
 
 See guide for more details.
-

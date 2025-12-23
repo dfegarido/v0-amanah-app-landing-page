@@ -146,4 +146,3 @@ export async function PUT(request: NextRequest) {
     return errorResponse('Internal server error', 500)
   }
 }
-

@@ -18,4 +18,3 @@ WHERE email = 'rorounifix@gmail.com';
 SELECT id, email, name, role, created_at 
 FROM public.users 
 WHERE email = 'rorounifix@gmail.com';
-

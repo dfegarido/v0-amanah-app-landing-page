@@ -31,4 +31,3 @@ SELECT
   END as status
 FROM public.users u
 WHERE u.email = 'rorounifix@gmail.com';
-

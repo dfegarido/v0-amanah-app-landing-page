@@ -72,4 +72,3 @@ runAllMigrations().catch(error => {
   console.error('❌ Migration process failed:', error)
   process.exit(1)
 })
-

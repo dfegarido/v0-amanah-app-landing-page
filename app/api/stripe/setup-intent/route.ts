@@ -56,4 +56,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error.message || 'Failed to create setup intent', 500)
   }
 }
-

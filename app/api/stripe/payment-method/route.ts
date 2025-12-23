@@ -78,4 +78,3 @@ export async function DELETE(request: NextRequest) {
     return errorResponse(error.message || 'Failed to remove payment method', 500)
   }
 }
-

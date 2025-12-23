@@ -121,4 +121,3 @@ CREATE POLICY "Anyone can view active nonprofits"
   ON public.nonprofits
   FOR SELECT
   USING (status = 'active');
-

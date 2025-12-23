@@ -26,4 +26,3 @@ $$ LANGUAGE plpgsql;
 
 -- Add comment explaining the function
 COMMENT ON FUNCTION get_next_mosque_code() IS 'Returns the next available mosque code using a sequence to prevent duplicates';
-

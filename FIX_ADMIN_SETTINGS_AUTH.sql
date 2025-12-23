@@ -136,4 +136,3 @@ SELECT
   ) THEN '✅' ELSE '❌' END;
 
 -- All should show ✅
-

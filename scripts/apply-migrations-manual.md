@@ -20,7 +20,7 @@ Since the Supabase JavaScript client doesn't support running DDL statements dire
 
 If you have PostgreSQL installed:
 
-```bash
+\`\`\`bash
 # Set the database URL
 export DATABASE_URL="postgresql://postgres:dM6odMPPgGUBOx3V@db.pbjqcijbhheueqsgwzxv.supabase.co:5432/postgres"
 
@@ -28,11 +28,11 @@ export DATABASE_URL="postgresql://postgres:dM6odMPPgGUBOx3V@db.pbjqcijbhheueqsgw
 psql $DATABASE_URL -f supabase/migrations/001_initial_schema.sql
 psql $DATABASE_URL -f supabase/migrations/002_rls_policies.sql
 psql $DATABASE_URL -f supabase/migrations/003_auth_trigger.sql
-```
+\`\`\`
 
 ### Option 3: Using Supabase CLI
 
-```bash
+\`\`\`bash
 # Install Supabase CLI
 brew install supabase/tap/supabase
 
@@ -41,7 +41,7 @@ supabase link --project-ref pbjqcijbhheueqsgwzxv
 
 # Push migrations
 supabase db push
-```
+\`\`\`
 
 ## Verification
 
@@ -76,4 +76,3 @@ After running the migrations, verify in the Supabase Dashboard:
 - Copy the entire SQL file content
 - Don't copy line by line
 - Make sure there are no truncated statements
-

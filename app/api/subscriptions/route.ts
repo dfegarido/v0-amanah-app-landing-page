@@ -89,4 +89,3 @@ export async function GET(request: NextRequest) {
     return errorResponse(error.message || 'Internal server error', 500)
   }
 }
-

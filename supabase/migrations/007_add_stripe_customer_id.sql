@@ -8,4 +8,3 @@ CREATE INDEX IF NOT EXISTS idx_users_stripe_customer_id ON public.users(stripe_c
 
 -- Add comment
 COMMENT ON COLUMN public.users.stripe_customer_id IS 'Stripe customer ID for payment processing';
-

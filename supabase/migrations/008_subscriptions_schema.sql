@@ -215,4 +215,3 @@ BEGIN
   ORDER BY s.created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
-

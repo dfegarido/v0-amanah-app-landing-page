@@ -148,4 +148,3 @@ async function createTestMosque() {
 }
 
 createTestMosque()
-

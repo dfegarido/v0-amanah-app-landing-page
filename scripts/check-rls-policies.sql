@@ -41,4 +41,3 @@ SELECT
   role
 FROM public.users
 WHERE id = auth.uid();
-

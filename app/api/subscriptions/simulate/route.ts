@@ -305,4 +305,3 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
     .select()
     .single()
 }
-

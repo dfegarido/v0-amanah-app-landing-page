@@ -97,4 +97,3 @@ CREATE POLICY "Admins can manage all mosques"
       WHERE id = auth.uid() AND role = 'admin'
     )
   );
-

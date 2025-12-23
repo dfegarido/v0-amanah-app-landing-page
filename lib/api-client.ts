@@ -107,4 +107,3 @@ export async function authenticatedDelete<T>(url: string): Promise<T> {
   
   return response.json()
 }
-

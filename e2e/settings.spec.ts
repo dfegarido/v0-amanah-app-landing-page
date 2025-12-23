@@ -292,4 +292,3 @@ test.describe('Settings Responsiveness', () => {
     await expect(page.locator('text=/Account Settings/i')).toBeVisible();
   });
 });
-

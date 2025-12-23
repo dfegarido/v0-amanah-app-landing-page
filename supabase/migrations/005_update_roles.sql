@@ -111,4 +111,3 @@ CREATE POLICY "Admins can manage all mosques"
 
 -- Verify the change
 SELECT 'Roles updated successfully! Only user and admin roles remain.' as message;
-

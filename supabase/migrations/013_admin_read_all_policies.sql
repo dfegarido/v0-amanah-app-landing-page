@@ -65,4 +65,3 @@ FROM pg_policies
 WHERE tablename IN ('users', 'subscriptions', 'mosques', 'businesses', 'coupons', 'nonprofits')
 AND policyname LIKE '%Admin%'
 ORDER BY tablename, policyname;
-

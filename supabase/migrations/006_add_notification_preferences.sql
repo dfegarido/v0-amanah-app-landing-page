@@ -10,4 +10,3 @@ ADD COLUMN IF NOT EXISTS monthly_reports BOOLEAN DEFAULT false;
 COMMENT ON COLUMN public.users.email_notifications IS 'Receive emails about account activity';
 COMMENT ON COLUMN public.users.payment_reminders IS 'Get notified before upcoming payments';
 COMMENT ON COLUMN public.users.monthly_reports IS 'Receive monthly summary of earnings and activity';
-

@@ -96,4 +96,3 @@ CREATE TRIGGER update_admin_settings_updated_at
 
 -- Add comment
 COMMENT ON TABLE public.admin_settings IS 'Stores platform-wide admin settings. Only one row should exist.';
-

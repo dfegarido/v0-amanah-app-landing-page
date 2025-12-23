@@ -26,4 +26,3 @@ DROP POLICY IF EXISTS "Admins can view all users" ON public.users;
 CREATE POLICY "Authenticated users can view all users"
   ON public.users FOR SELECT
   USING (auth.role() = 'authenticated');
-

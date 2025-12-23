@@ -31,4 +31,3 @@ AND id NOT IN (
 
 -- Add a comment
 COMMENT ON TABLE public.subscriptions IS 'Subscriptions table - entries should always have corresponding entity records (mosques, businesses, coupons, or nonprofits)';
-

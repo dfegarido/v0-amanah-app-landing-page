@@ -104,4 +104,3 @@ export async function hasAnyRole(roles: UserRole[]): Promise<boolean> {
   if (!user) return false
   return roles.includes(user.role) || user.role === 'admin'
 }
-

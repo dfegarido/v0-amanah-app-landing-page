@@ -86,22 +86,22 @@ Before you begin, ensure you have:
 
 ### 1. Clone the Repository
 
-```bash
+\`\`\`bash
 git clone <repository-url>
 cd amanah_project/amanah-website
-```
+\`\`\`
 
 ### 2. Install Dependencies
 
-```bash
+\`\`\`bash
 pnpm install
-```
+\`\`\`
 
 ### 3. Set Up Environment Variables
 
 Create a `.env.local` file in the `amanah-website` directory:
 
-```bash
+\`\`\`bash
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
@@ -111,7 +111,7 @@ SUPABASE_DATABASE_URL=postgresql://postgres:password@db.xxx.supabase.co:5432/pos
 # Stripe (Test Mode)
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key
 STRIPE_SECRET_KEY=sk_test_your_secret_key
-```
+\`\`\`
 
 #### Getting Your Keys:
 
@@ -130,7 +130,7 @@ STRIPE_SECRET_KEY=sk_test_your_secret_key
 
 Execute the SQL migrations in order via Supabase SQL Editor:
 
-```bash
+\`\`\`bash
 # 1. Initial schema (users, businesses, mosques)
 supabase/migrations/001_initial_schema.sql
 
@@ -151,15 +151,15 @@ supabase/migrations/006_add_notification_preferences.sql
 
 # 7. Stripe customer ID
 supabase/migrations/007_add_stripe_customer_id.sql
-```
+\`\`\`
 
 **Or run via command line:**
 
-```bash
+\`\`\`bash
 psql "$SUPABASE_DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 psql "$SUPABASE_DATABASE_URL" -f supabase/migrations/002_rls_policies.sql
 # ... continue for all migrations
-```
+\`\`\`
 
 ### 5. Create an Admin Account
 
@@ -167,23 +167,23 @@ psql "$SUPABASE_DATABASE_URL" -f supabase/migrations/002_rls_policies.sql
 1. Register a new account at `/member/register`
 2. Run this SQL in Supabase:
 
-```sql
+\`\`\`sql
 UPDATE public.users 
 SET role = 'admin' 
 WHERE email = 'your-admin-email@example.com';
-```
+\`\`\`
 
 #### Option B: Via Script
-```bash
+\`\`\`bash
 pnpm create-admin
 # Follow the prompts to enter admin details
-```
+\`\`\`
 
 ### 6. Run the Development Server
 
-```bash
+\`\`\`bash
 pnpm dev
-```
+\`\`\`
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
@@ -191,7 +191,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 📁 Project Structure
 
-```
+\`\`\`
 amanah-website/
 ├── app/                          # Next.js App Router
 │   ├── api/                      # API routes
@@ -239,13 +239,13 @@ amanah-website/
 ├── .env.local                   # Environment variables (create this)
 ├── middleware.ts                # Auth middleware
 └── package.json
-```
+\`\`\`
 
 ---
 
 ## 🔐 Authentication Flow
 
-```
+\`\`\`
 1. User Registration
    → POST /api/auth/register
    → Create user in auth.users
@@ -266,7 +266,7 @@ amanah-website/
 4. Role-Based Access
    → Admin routes check user.role === 'admin'
    → Member routes allow any authenticated user
-```
+\`\`\`
 
 ---
 
@@ -280,7 +280,7 @@ amanah-website/
    - 3D Secure: `4000 0027 6000 3184`
 
 2. **Add Payment Method Flow**:
-   ```
+   \`\`\`
    User clicks "Add Payment Method"
    → Create SetupIntent (POST /api/stripe/setup-intent)
    → Display Stripe Elements form
@@ -288,7 +288,7 @@ amanah-website/
    → Stripe validates & tokenizes
    → Payment method attached to customer
    → Success toast shown
-   ```
+   \`\`\`
 
 3. **Stripe Dashboard**:
    - View customers: https://dashboard.stripe.com/test/customers
@@ -359,7 +359,7 @@ All endpoints (except auth) require `Authorization: Bearer {token}` header.
 
 **50+ automated tests** covering all major features:
 
-```bash
+\`\`\`bash
 # Install Playwright
 pnpm add -D @playwright/test
 pnpm exec playwright install
@@ -375,7 +375,7 @@ pnpm exec playwright test auth
 
 # View HTML report
 pnpm test:e2e:report
-```
+\`\`\`
 
 **Test Coverage:**
 - ✅ Authentication (login, registration, logout)
@@ -387,34 +387,34 @@ pnpm test:e2e:report
 **See detailed guide:** `PLAYWRIGHT_TESTING_GUIDE.md`
 
 ### Test Admin Account
-```
+\`\`\`
 Email: rorounifix@gmail.com
 Password: P@$$w0rd
-```
+\`\`\`
 
 ### Test User Account (for E2E tests)
-```
+\`\`\`
 Email: test@example.com
 Password: testpassword
-```
+\`\`\`
 
 ### Test Payment Method
-```
+\`\`\`
 Card: 4242 4242 4242 4242
 Expiry: 12/25
 CVC: 123
 ZIP: 12345
-```
+\`\`\`
 
 ### Run Linter
-```bash
+\`\`\`bash
 pnpm lint
-```
+\`\`\`
 
 ### Build for Production
-```bash
+\`\`\`bash
 pnpm build
-```
+\`\`\`
 
 ---
 
@@ -429,11 +429,11 @@ pnpm build
 
 ### Environment Variables for Production
 
-```bash
+\`\`\`bash
 # Use LIVE keys for production
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_SECRET_KEY=sk_live_...
-```
+\`\`\`
 
 ---
 

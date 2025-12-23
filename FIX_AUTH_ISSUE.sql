@@ -117,4 +117,3 @@ LEFT JOIN public.users pu ON au.id = pu.id
 ORDER BY au.created_at DESC;
 
 -- 10. If you see any ❌ Missing, run step 2 again
-

@@ -246,4 +246,3 @@ test.describe('Dashboard Responsiveness', () => {
     await expect(page.locator('text=/Add Mosque/i')).toBeVisible();
   });
 });
-

@@ -129,4 +129,3 @@ test.describe('Authentication', () => {
     ).toBeVisible({ timeout: 5000 });
   });
 });
-

@@ -177,4 +177,3 @@ ORDER BY tablename, policyname;
 SELECT 
   '✅ ALL ADMIN POLICIES FIXED!' as message,
   'Logout, clear cache, and login again' as next_step;
-

@@ -108,4 +108,3 @@ BEGIN
   RETURN next_code;
 END;
 $$ LANGUAGE plpgsql;
-
