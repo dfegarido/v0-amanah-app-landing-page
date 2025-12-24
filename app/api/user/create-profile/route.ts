@@ -63,4 +63,3 @@ export async function POST(request: NextRequest) {
     return errorResponse('Internal server error', 500)
   }
 }
-

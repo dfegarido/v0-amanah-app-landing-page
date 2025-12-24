@@ -135,4 +135,3 @@ SELECT
   ) THEN '✅' ELSE '⚠️ Some users missing profiles' END as status;
 
 SELECT '✅ AUTH TRIGGER FIXED!' as message;
-

@@ -85,4 +85,3 @@ FROM auth.users au
 LEFT JOIN public.users pu ON au.id = pu.id
 WHERE au.email IN ('admin@test.com', 'user@test.com')
 ORDER BY au.email;
-

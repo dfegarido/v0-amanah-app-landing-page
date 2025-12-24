@@ -80,4 +80,3 @@ GRANT EXECUTE ON FUNCTION public.create_user_profile() TO authenticated;
 
 -- Add comment
 COMMENT ON FUNCTION public.create_user_profile() IS 'Creates a profile in public.users for the currently authenticated user. Can be used as fallback if auth trigger fails.';
-

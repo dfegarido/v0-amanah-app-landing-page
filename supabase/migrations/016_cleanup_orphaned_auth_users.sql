@@ -105,4 +105,3 @@ SELECT
     ) THEN 'All users have profiles ✅'
     ELSE 'Some users still missing profiles ⚠️'
   END as status;
-
