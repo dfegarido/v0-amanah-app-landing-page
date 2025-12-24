@@ -106,7 +106,19 @@ export default function RegisterPage() {
             {error && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>
+                  {error}
+                  {error.includes('already registered') && (
+                    <div className="mt-2">
+                      <Link 
+                        href="/auth/login" 
+                        className="text-sm underline font-medium"
+                      >
+                        Go to Login Page →
+                      </Link>
+                    </div>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
             

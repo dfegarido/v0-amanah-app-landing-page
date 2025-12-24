@@ -114,7 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        return { success: false, error: error.message }
+        // Return generic error message for security
+        return { success: false, error: 'Invalid login credentials' }
       }
 
       if (data.user) {
@@ -123,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true }
     } catch (error: any) {
-      return { success: false, error: error.message || 'An error occurred during sign in' }
+      return { success: false, error: 'Invalid login credentials' }
     }
   }
 
@@ -145,6 +146,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Sign up error:', error)
+        
+        // Provide helpful error messages
+        if (error.message.includes('already registered') || error.message.includes('already exists')) {
+          return { 
+            success: false, 
+            error: 'This email is already registered. Please try logging in instead, or use a different email address.' 
+          }
+        }
+        
         return { success: false, error: error.message }
       }
 
@@ -169,16 +179,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Set session immediately
       setSession(data.session)
       
-      // Wait a bit longer for the trigger to run and profile to be created
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Fetch the user profile with retries
-      await fetchUserProfile(data.user.id)
-      
-      // Wait for state to update
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      console.log('Sign up complete! Redirecting to portal selection...')
+        // Wait for trigger to create profile
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Try to fetch profile with retries
+        let profileFetchSuccess = false
+        try {
+          await fetchUserProfile(data.user.id)
+          
+          // Check if profile was actually loaded
+          const { data: checkProfile } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', data.user.id)
+            .single()
+          
+          if (checkProfile) {
+            profileFetchSuccess = true
+          }
+        } catch (e) {
+          // Profile fetch failed, will try fallback
+        }
+
+        // If profile still doesn't exist, create it via API fallback
+        if (!profileFetchSuccess) {
+          console.log('Profile not created by trigger, using API fallback...')
+          try {
+            const createResponse = await fetch('/api/user/create-profile', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${data.session.access_token}`
+              }
+            })
+
+            if (createResponse.ok) {
+              const createResult = await createResponse.json()
+              console.log('API fallback response:', createResult)
+              
+              if (createResult.success) {
+                console.log('✅ Profile created via API fallback')
+                // Fetch profile again
+                await fetchUserProfile(data.user.id)
+              } else {
+                console.error('❌ API fallback failed:', createResult.error)
+              }
+            } else {
+              const errorText = await createResponse.text()
+              console.error('❌ API fallback HTTP error:', createResponse.status, errorText)
+            }
+          } catch (fallbackError: any) {
+            console.error('❌ Fallback profile creation exception:', fallbackError)
+          }
+        }
+        
+        // Wait for state to update
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        console.log('Sign up complete! Redirecting to portal selection...')
 
       return { success: true }
     } catch (error: any) {
