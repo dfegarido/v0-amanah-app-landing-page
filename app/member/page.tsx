@@ -19,6 +19,8 @@ import {
   Calendar,
   Users,
   Heart,
+  MessageCircle,
+  Bell,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -249,6 +251,8 @@ export default function MemberDashboard() {
         <Tabs defaultValue="subscriptions" className="space-y-6">
           <TabsList>
             <TabsTrigger value="subscriptions">My Subscriptions</TabsTrigger>
+            <TabsTrigger value="donations">Donations</TabsTrigger>
+            <TabsTrigger value="messages">Messages</TabsTrigger>
           </TabsList>
 
           <TabsContent value="subscriptions" className="space-y-8">
@@ -405,6 +409,66 @@ export default function MemberDashboard() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="donations" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Donations</h3>
+                <p className="text-sm text-muted-foreground">Make donations and view your donation history</p>
+              </div>
+              <Button asChild>
+                <Link href="/member/donate">
+                  <Heart className="h-4 w-4 mr-2" />
+                  Make a Donation
+                </Link>
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">
+                    View your complete donation history
+                  </p>
+                  <Button asChild>
+                    <Link href="/member/donations">
+                      View Donation History
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="messages" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Messages</h3>
+                <p className="text-sm text-muted-foreground">Communicate with administrators and other users</p>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href="/member/messages">
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  Open Messages
+                </Link>
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8">
+                  <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">
+                    Send and receive messages within the platform
+                  </p>
+                  <Button variant="outline" asChild>
+                    <Link href="/member/messages">
+                      Go to Messages
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
