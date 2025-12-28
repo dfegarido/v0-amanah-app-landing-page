@@ -8,7 +8,7 @@ import {
   ArrowLeft,
   Download,
   Building2,
-  Calendar,
+  Calendar as CalendarIcon,
   DollarSign,
   Loader2,
   Filter,
@@ -21,9 +21,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedGet } from "@/lib/api-client"
+import { authenticatedGet, authenticatedFetch } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
 
 interface Donation {
   id: string
@@ -51,10 +55,13 @@ export default function DonationsHistoryPage() {
 
   const [donations, setDonations] = useState<Donation[]>([])
   const [loading, setLoading] = useState(true)
+  const [isFiltering, setIsFiltering] = useState(false) // Subtle loading indicator for filters
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [mosqueFilter, setMosqueFilter] = useState<string>("all")
-  const [startDate, setStartDate] = useState<string>("")
-  const [endDate, setEndDate] = useState<string>("")
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [startDateOpen, setStartDateOpen] = useState(false)
+  const [endDateOpen, setEndDateOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
@@ -64,15 +71,44 @@ export default function DonationsHistoryPage() {
     }
   }, [user, authLoading, router])
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (user && currentPage !== 1) {
+      setCurrentPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, mosqueFilter, startDate, endDate])
+
+  // Initial load only
   useEffect(() => {
     if (user) {
-      fetchDonations()
+      fetchDonations(true) // Pass true for initial load
     }
-  }, [user, statusFilter, mosqueFilter, startDate, endDate, currentPage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
-  const fetchDonations = async () => {
+  // Filter changes - optimistic update (no blocking loading)
+  useEffect(() => {
+    if (user && !loading) {
+      // Small delay to debounce rapid filter changes
+      const timeoutId = setTimeout(() => {
+        fetchDonations(false) // Not initial load, use subtle loading
+      }, 100)
+      
+      return () => clearTimeout(timeoutId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, mosqueFilter, startDate, endDate, currentPage])
+
+  const fetchDonations = async (isInitialLoad = false) => {
     try {
-      setLoading(true)
+      // Only show full loading on initial load, otherwise use subtle filtering indicator
+      if (isInitialLoad) {
+        setLoading(true)
+      } else {
+        setIsFiltering(true)
+      }
+
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: "20",
@@ -85,17 +121,27 @@ export default function DonationsHistoryPage() {
         params.append("mosque_id", mosqueFilter)
       }
       if (startDate) {
-        params.append("start_date", startDate)
+        // Ensure date is in ISO format for API (start of day in local timezone, then convert to UTC)
+        const localStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0, 0)
+        params.append("start_date", localStartDate.toISOString())
       }
       if (endDate) {
-        params.append("end_date", endDate)
+        // Ensure date is in ISO format for API (end of day in local timezone, then convert to UTC)
+        const localEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999)
+        params.append("end_date", localEndDate.toISOString())
       }
 
-      const response: any = await authenticatedGet(`/api/donations?${params.toString()}`)
+      const apiUrl = `/api/donations?${params.toString()}`
+      console.log('[Donations] Fetching with params:', apiUrl) // Debug log
+      
+      const response: any = await authenticatedGet(apiUrl)
 
       if (response.success && response.data) {
+        console.log('[Donations] Received donations:', response.data.donations?.length || 0) // Debug log
         setDonations(response.data.donations || [])
         setTotalPages(response.data.pagination?.totalPages || 1)
+      } else {
+        console.error('[Donations] API error:', response.error) // Debug log
       }
     } catch (error: any) {
       console.error("Error fetching donations:", error)
@@ -106,64 +152,133 @@ export default function DonationsHistoryPage() {
       })
     } finally {
       setLoading(false)
+      setIsFiltering(false)
     }
   }
 
   const handleDownloadReceipt = async (donationId: string) => {
     try {
+      // Fetch receipt data
       const response: any = await authenticatedGet(`/api/donations/${donationId}/receipt`)
       
-      if (response.success && response.data) {
-        // Create a blob from the receipt data
-        const receiptData = response.data
-        const receiptText = `
-DONATION RECEIPT
-
-Receipt Number: ${receiptData.receipt_number}
-Date: ${new Date(receiptData.date).toLocaleDateString()}
-
-DONOR INFORMATION
-Name: ${receiptData.donor.name}
-Email: ${receiptData.donor.email}
-
-DONATION DETAILS
-Amount: ${receiptData.donation.currency} ${receiptData.donation.amount}
-Purpose: ${receiptData.donation.purpose || 'General Donation'}
-${receiptData.donation.campaign ? `Campaign: ${receiptData.donation.campaign}` : ''}
-
-RECIPIENT
-${receiptData.recipient.name}
-${receiptData.recipient.address || ''}
-
-PAYMENT INFORMATION
-Provider: ${receiptData.payment.provider}
-Transaction ID: ${receiptData.payment.transaction_id}
-Payment Date: ${new Date(receiptData.payment.payment_date).toLocaleDateString()}
-
-Thank you for your generous donation!
-Amanah Organization
-        `.trim()
-
-        // Create download link
-        const blob = new Blob([receiptText], { type: 'text/plain' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `receipt-${receiptData.receipt_number}.txt`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-
-        toast({
-          title: "Receipt Downloaded",
-          description: "Your receipt has been downloaded.",
-        })
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fetch receipt data')
       }
+
+      const receipt = response.data
+
+      // Dynamically import jspdf for client-side PDF generation
+      const { jsPDF } = await import('jspdf')
+      
+      const doc = new jsPDF()
+      let yPos = 20
+
+      // Header
+      doc.setFontSize(24)
+      doc.text('DONATION RECEIPT', 105, yPos, { align: 'center' })
+      yPos += 15
+
+      // Receipt Number and Date
+      doc.setFontSize(12)
+      doc.text(`Receipt Number: ${receipt.receipt_number}`, 105, yPos, { align: 'center' })
+      yPos += 7
+      doc.text(`Date: ${new Date(receipt.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 105, yPos, { align: 'center' })
+      yPos += 15
+
+      // Donor Information
+      doc.setFontSize(14)
+      doc.setFont(undefined, 'bold')
+      doc.text('DONOR INFORMATION', 20, yPos)
+      doc.setFont(undefined, 'normal')
+      yPos += 10
+      doc.setFontSize(12)
+      doc.text(`Name: ${receipt.donor.name}`, 20, yPos)
+      yPos += 7
+      if (receipt.donor.email) {
+        doc.text(`Email: ${receipt.donor.email}`, 20, yPos)
+        yPos += 7
+      }
+      yPos += 5
+
+      // Donation Details
+      doc.setFontSize(14)
+      doc.setFont(undefined, 'bold')
+      doc.text('DONATION DETAILS', 20, yPos)
+      doc.setFont(undefined, 'normal')
+      yPos += 10
+      doc.setFontSize(12)
+      doc.text(`Amount: ${receipt.donation.currency.toUpperCase()} ${Number(receipt.donation.amount).toFixed(2)}`, 20, yPos)
+      yPos += 7
+      doc.text(`Purpose: ${receipt.donation.purpose}`, 20, yPos)
+      yPos += 7
+      if (receipt.donation.campaign) {
+        doc.text(`Campaign: ${receipt.donation.campaign}`, 20, yPos)
+        yPos += 7
+      }
+      yPos += 5
+
+      // Recipient
+      doc.setFontSize(14)
+      doc.setFont(undefined, 'bold')
+      doc.text('RECIPIENT', 20, yPos)
+      doc.setFont(undefined, 'normal')
+      yPos += 10
+      doc.setFontSize(12)
+      doc.text(receipt.recipient.name, 20, yPos)
+      yPos += 7
+      if (receipt.recipient.address) {
+        doc.text(receipt.recipient.address, 20, yPos)
+        yPos += 7
+      }
+      if (receipt.recipient.email) {
+        doc.text(`Email: ${receipt.recipient.email}`, 20, yPos)
+        yPos += 7
+      }
+      if (receipt.recipient.phone) {
+        doc.text(`Phone: ${receipt.recipient.phone}`, 20, yPos)
+        yPos += 7
+      }
+      yPos += 5
+
+      // Payment Information
+      doc.setFontSize(14)
+      doc.setFont(undefined, 'bold')
+      doc.text('PAYMENT INFORMATION', 20, yPos)
+      doc.setFont(undefined, 'normal')
+      yPos += 10
+      doc.setFontSize(12)
+      doc.text(`Provider: ${receipt.payment.provider.toUpperCase()}`, 20, yPos)
+      yPos += 7
+      doc.text(`Transaction ID: ${receipt.payment.transaction_id}`, 20, yPos)
+      yPos += 7
+      doc.text(`Payment Date: ${new Date(receipt.payment.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 20, yPos)
+      yPos += 15
+
+      // Footer
+      doc.setFontSize(12)
+      doc.setFont(undefined, 'bold')
+      doc.text('Thank you for your generous donation!', 105, yPos, { align: 'center' })
+      doc.setFont(undefined, 'normal')
+      yPos += 10
+      doc.setFontSize(10)
+      doc.text(receipt.organization.name, 105, yPos, { align: 'center' })
+      yPos += 5
+      doc.text(receipt.organization.email, 105, yPos, { align: 'center' })
+      yPos += 5
+      doc.text(receipt.organization.website, 105, yPos, { align: 'center' })
+
+      // Save PDF
+      doc.save(`receipt-${receipt.receipt_number}.pdf`)
+
+      toast({
+        title: "Receipt Downloaded",
+        description: "Your receipt PDF has been downloaded.",
+      })
     } catch (error: any) {
+      console.error('Error downloading receipt:', error)
       toast({
         title: "Error",
-        description: "Failed to download receipt",
+        description: error.message || "Failed to download receipt",
         variant: "destructive",
       })
     }
@@ -270,24 +385,59 @@ Amanah Organization
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="failed">Failed</SelectItem>
                     <SelectItem value="canceled">Canceled</SelectItem>
+                    <SelectItem value="refunded">Refunded</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Start Date</Label>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
+                <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={(date) => {
+                        setStartDate(date)
+                        setStartDateOpen(false) // Close popover after selection
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>End Date</Label>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
+                <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={(date) => {
+                        setEndDate(date)
+                        setEndDateOpen(false) // Close popover after selection
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Actions</Label>
@@ -296,8 +446,11 @@ Amanah Organization
                   onClick={() => {
                     setStatusFilter("all")
                     setMosqueFilter("all")
-                    setStartDate("")
-                    setEndDate("")
+                    setStartDate(undefined)
+                    setEndDate(undefined)
+                    setStartDateOpen(false)
+                    setEndDateOpen(false)
+                    setCurrentPage(1) // Reset to first page when clearing filters
                   }}
                   className="w-full"
                 >
@@ -311,8 +464,15 @@ Amanah Organization
         {/* Donations Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Donations</CardTitle>
-            <CardDescription>Your donation history</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Donations</CardTitle>
+                <CardDescription>Your donation history</CardDescription>
+              </div>
+              {isFiltering && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {donations.length === 0 ? (
@@ -345,7 +505,7 @@ Amanah Organization
                         <TableRow key={donation.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                               {new Date(donation.created_at).toLocaleDateString()}
                             </div>
                           </TableCell>

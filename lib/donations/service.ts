@@ -77,13 +77,27 @@ export async function createStripeDonationIntent(
   // Get Stripe instance
   const stripe = getStripe()
 
-  // Create PaymentIntent
+  // Create PaymentIntent with multiple payment methods
+  // Supports: Card, Cash App Pay, Amazon Pay, PayPal, Bank Transfer/ACH, Link
+  // To enable additional methods: Stripe Dashboard → Settings → Payment methods → Enable desired methods
+  // Note: Crypto payments are NOT directly supported by Stripe - would require separate integration (e.g., Coinbase Commerce)
+  
+  // Use automatic payment methods - this will automatically include all enabled payment methods
+  // from your Stripe Dashboard without needing to specify each one explicitly
+  // This avoids errors when specific payment methods aren't enabled
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountInCents,
     currency: currency.toLowerCase(),
     metadata: paymentMetadata,
     description: purpose || `Donation${campaignName ? ` for ${campaignName}` : ''}`,
     receipt_email: donorEmail || undefined,
+    // Automatic payment methods - includes ALL enabled methods in Stripe Dashboard
+    // This will show: card, Cash App Pay, Amazon Pay, PayPal, Link, bank transfers, etc.
+    // (only if they're enabled in Stripe Dashboard → Settings → Payment methods)
+    automatic_payment_methods: {
+      enabled: true,
+      allow_redirects: 'always', // Required for redirect-based methods (PayPal, Cash App, Amazon Pay)
+    },
   })
 
   return {

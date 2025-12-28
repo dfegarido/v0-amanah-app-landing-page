@@ -66,7 +66,21 @@ export default function PaymentForm({ clientSecret, onSuccess, onCancel }: Payme
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      <PaymentElement 
+        options={{
+          // PaymentElement will show all payment methods enabled in the PaymentIntent
+          // Including: Card, Cash App Pay, Amazon Pay, PayPal, Bank Transfer, Link, etc.
+          // Order: Most common first, then alternative payment methods
+          paymentMethodOrder: [
+            'card',
+            'cashapp', // Cash App Pay
+            'amazon_pay', // Amazon Pay
+            'paypal', // PayPal
+            'link', // Stripe Link
+            'us_bank_account', // Bank Transfer/ACH
+          ],
+        }}
+      />
       <div className="flex justify-end gap-2 pt-4">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
           Cancel

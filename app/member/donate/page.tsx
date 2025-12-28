@@ -224,6 +224,8 @@ export default function DonatePage() {
       appearance: {
         theme: "stripe" as const,
       },
+      // PaymentElement will automatically show all enabled payment methods from the PaymentIntent
+      // This includes: card, Cash App Pay, Amazon Pay, PayPal, bank transfers, etc.
     }
 
     return (

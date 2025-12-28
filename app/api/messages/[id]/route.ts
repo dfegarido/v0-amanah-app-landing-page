@@ -3,14 +3,15 @@ import { requireAuth, successResponse, errorResponse } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 // GET /api/messages/[id] - Get message details
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const { id } = await params
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         sender:users!messages_sender_id_fkey(id, name, email),
         recipient:users!messages_recipient_id_fkey(id, name, email)
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (messageError || !message) {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       await supabase
         .from('messages')
         .update({ read_at: new Date().toISOString() })
-        .eq('id', params.id)
+        .eq('id', id)
       
       // Update the message object
       message.read_at = new Date().toISOString()

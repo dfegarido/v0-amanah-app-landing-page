@@ -3,14 +3,15 @@ import { requireAuth, successResponse, errorResponse } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 // GET /api/donations/[id] - Get donation details
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const { id } = await params
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         mosque:mosques(id, name, mosque_code, address),
         user:users(id, name, email)
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (donationError || !donation) {

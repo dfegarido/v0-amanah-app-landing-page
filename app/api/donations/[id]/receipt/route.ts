@@ -3,14 +3,15 @@ import { requireAuth, successResponse, errorResponse } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
-// GET /api/donations/[id]/receipt - Get donation receipt data
+// GET /api/donations/[id]/receipt - Get donation receipt data (PDF generated client-side)
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    const { id } = await params
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         mosque:mosques(id, name, mosque_code, address, email, phone),
         user:users(id, name, email)
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (donationError || !donation) {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse('Receipt is only available for successful donations', 400)
     }
 
-    // Generate receipt data
+    // Generate receipt data - PDF will be generated client-side using jspdf
     const receipt = {
       receipt_number: donation.id.substring(0, 8).toUpperCase(),
       date: donation.paid_at || donation.created_at,
@@ -73,15 +74,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     }
 
-    // If receipt URL exists, include it
-    if (donation.receipt_url) {
-      return successResponse({
-        ...receipt,
-        receipt_url: donation.receipt_url,
-      })
-    }
-
-    // Otherwise return receipt data for frontend to generate PDF
+    // Return receipt data for client-side PDF generation
     return successResponse(receipt)
   } catch (error: any) {
     console.error('Get donation receipt error:', error)

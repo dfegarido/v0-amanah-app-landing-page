@@ -3,14 +3,15 @@ import { requireAuth, successResponse, errorResponse } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 // PATCH /api/notifications/[id]/read - Mark notification as read
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
+    const { id } = await params
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
 
@@ -20,7 +21,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: notification, error: notificationError } = await supabase
       .from('notifications')
       .select('id, user_id, read_at')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (notificationError || !notification) {
@@ -41,7 +42,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { data: updatedNotification, error: updateError } = await supabase
       .from('notifications')
       .update({ read_at: new Date().toISOString() })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 

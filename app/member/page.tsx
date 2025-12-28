@@ -45,6 +45,10 @@ export default function MemberDashboard() {
   // Subscriptions state
   const [subscriptions, setSubscriptions] = useState<any[]>([])
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true)
+  
+  // Donations state
+  const [donations, setDonations] = useState<any[]>([])
+  const [loadingDonations, setLoadingDonations] = useState(true)
 
   const handleLogout = async () => {
     await signOut()
@@ -120,6 +124,44 @@ export default function MemberDashboard() {
 
     if (user) {
       fetchSubscriptions()
+    }
+  }, [user, toast])
+
+  // Fetch donations
+  useEffect(() => {
+    const fetchDonations = async () => {
+      if (!user) return
+      
+      try {
+        setLoadingDonations(true)
+        console.log('[Member Dashboard] Fetching donations...')
+        const response: any = await authenticatedGet('/api/donations?page=1&limit=10')
+        
+        console.log('[Member Dashboard] Donations response:', response)
+        
+        if (response.success && response.data) {
+          const donationsList = response.data.donations || []
+          console.log('[Member Dashboard] Setting donations:', donationsList.length, 'items')
+          setDonations(donationsList)
+        } else {
+          console.warn('[Member Dashboard] Unexpected response format:', response)
+          setDonations([])
+        }
+      } catch (error: any) {
+        console.error('[Member Dashboard] Error fetching donations:', error)
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load donations",
+          variant: "destructive"
+        })
+        setDonations([])
+      } finally {
+        setLoadingDonations(false)
+      }
+    }
+
+    if (user) {
+      fetchDonations()
     }
   }, [user, toast])
 
@@ -424,19 +466,108 @@ export default function MemberDashboard() {
                 </Link>
               </Button>
             </div>
+
+            {/* Donation Summary */}
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardDescription>Total Donated</CardDescription>
+                  <CardTitle className="text-2xl">
+                    ${donations.filter((d) => d.status === "succeeded").reduce((sum, d) => sum + Number(d.amount || 0), 0).toFixed(2)}
+                  </CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardDescription>Total Donations</CardDescription>
+                  <CardTitle className="text-2xl">{donations.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardDescription>Successful</CardDescription>
+                  <CardTitle className="text-2xl">
+                    {donations.filter((d) => d.status === "succeeded").length}
+                  </CardTitle>
+                </CardHeader>
+              </Card>
+            </div>
+
+            {/* Donations List */}
             <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-8">
-                  <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">
-                    View your complete donation history
-                  </p>
-                  <Button asChild>
-                    <Link href="/member/donations">
-                      View Donation History
-                    </Link>
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle>Recent Donations</CardTitle>
+                <CardDescription>Your recent donation activity</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingDonations ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Loading donations...</p>
+                  </div>
+                ) : donations.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">
+                      No donations yet. Make your first donation to get started!
+                    </p>
+                    <Button asChild>
+                      <Link href="/member/donate">
+                        Make a Donation
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {donations.slice(0, 5).map((donation) => (
+                      <div
+                        key={donation.id}
+                        className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Heart className="h-5 w-5 text-primary" />
+                          <div>
+                            <p className="font-medium">
+                              ${Number(donation.amount || 0).toFixed(2)} {donation.currency || 'USD'}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {donation.mosque?.name || 'General Donation'}
+                              {donation.campaign_name && ` • ${donation.campaign_name}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(donation.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {donation.status === "succeeded" && (
+                            <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
+                              Completed
+                            </Badge>
+                          )}
+                          {donation.status === "pending" && (
+                            <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
+                              Pending
+                            </Badge>
+                          )}
+                          {donation.status === "failed" && (
+                            <Badge className="bg-red-500/10 text-red-500 border-red-500/20">
+                              Failed
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {donations.length > 5 && (
+                      <div className="pt-2">
+                        <Button variant="outline" className="w-full" asChild>
+                          <Link href="/member/donations">
+                            View All Donations ({donations.length})
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
