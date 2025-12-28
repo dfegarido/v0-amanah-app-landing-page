@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, successResponse, errorResponse, parseRequestBody } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
+import { createClient } from '@supabase/supabase-js'
 import { onMessageCreated } from '@/lib/notifications/hooks'
 
 interface CreateMessageRequest {
@@ -21,23 +22,41 @@ export async function POST(request: NextRequest) {
       return errorResponse('Missing required fields: recipient_id and body', 400)
     }
 
-    // Validate recipient exists
-    const supabase = getServerSupabase(request)
-    const { data: recipient, error: recipientError } = await supabase
+    // Validate recipient exists using service role to bypass RLS
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    if (!supabaseServiceKey) {
+      console.error('SUPABASE_SERVICE_ROLE_KEY is not set')
+      return errorResponse('Service configuration error', 500)
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+
+    const { data: recipient, error: recipientError } = await supabaseAdmin
       .from('users')
       .select('id, email, name')
       .eq('id', body.recipient_id)
       .single()
 
     if (recipientError || !recipient) {
+      console.error('Recipient validation error:', recipientError)
       return errorResponse('Recipient not found', 404)
     }
+
+    // Get regular supabase client for message operations (respects RLS)
+    const supabase = getServerSupabase(request)
 
     // Validate parent message if provided
     if (body.parent_message_id) {
       const { data: parentMessage, error: parentError } = await supabase
         .from('messages')
-        .select('id, recipient_id')
+        .select('id, recipient_id, sender_id')
         .eq('id', body.parent_message_id)
         .single()
 
@@ -45,9 +64,9 @@ export async function POST(request: NextRequest) {
         return errorResponse('Parent message not found', 404)
       }
 
-      // Ensure user is part of the parent message thread
-      if (parentMessage.recipient_id !== authResult.user.id && 
-          parentMessage.recipient_id !== body.recipient_id) {
+      // Ensure user is part of the parent message thread (sender or recipient)
+      if (parentMessage.sender_id !== authResult.user.id && 
+          parentMessage.recipient_id !== authResult.user.id) {
         return errorResponse('Invalid parent message thread', 403)
       }
     }
@@ -76,7 +95,7 @@ export async function POST(request: NextRequest) {
         messageId: message.id,
         senderId: authResult.user.id,
         recipientId: body.recipient_id,
-        subject: body.subject,
+        subject: body.subject || undefined,
         body: body.body,
       })
     } catch (hookError) {
@@ -101,9 +120,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // Query parameters
-    const folder = searchParams.get('folder') || 'inbox' // 'inbox' | 'sent'
+    const folder = searchParams.get('folder') || 'all' // 'inbox' | 'sent' | 'all'
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const limit = parseInt(searchParams.get('limit') || '50')
     const offset = (page - 1) * limit
     const unreadOnly = searchParams.get('unread_only') === 'true'
 
@@ -123,13 +142,16 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
 
-    // Filter by folder (inbox or sent)
+    // Filter by folder (inbox, sent, or all)
     if (folder === 'inbox') {
       query = query.eq('recipient_id', authResult.user.id)
     } else if (folder === 'sent') {
       query = query.eq('sender_id', authResult.user.id)
+    } else if (folder === 'all') {
+      // Get all messages where user is sender or recipient
+      query = query.or(`sender_id.eq.${authResult.user.id},recipient_id.eq.${authResult.user.id}`)
     } else {
-      return errorResponse('Invalid folder. Use "inbox" or "sent"', 400)
+      return errorResponse('Invalid folder. Use "inbox", "sent", or "all"', 400)
     }
 
     // Filter unread only
@@ -147,6 +169,51 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch messages', 500)
     }
 
+    // Always fetch user data using service role to bypass RLS
+    // This ensures sender/recipient info is always available
+    let enrichedMessages = messages || []
+    if (messages && messages.length > 0) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      
+      if (supabaseServiceKey) {
+        try {
+          const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false
+            }
+          })
+
+          // Get unique user IDs
+          const userIds = new Set<string>()
+          messages.forEach(msg => {
+            if (msg.sender_id) userIds.add(msg.sender_id)
+            if (msg.recipient_id) userIds.add(msg.recipient_id)
+          })
+
+          // Fetch all users at once
+          const { data: users } = await supabaseAdmin
+            .from('users')
+            .select('id, email, name')
+            .in('id', Array.from(userIds))
+
+          // Map users by ID
+          const usersMap = new Map(users?.map(u => [u.id, u]) || [])
+
+          // Enrich messages with user data (override any existing user data)
+          enrichedMessages = messages.map(msg => ({
+            ...msg,
+            sender: usersMap.get(msg.sender_id) || null,
+            recipient: usersMap.get(msg.recipient_id) || null,
+          }))
+        } catch (error) {
+          console.error('Error enriching messages with user data:', error)
+          // Continue with messages as-is if enrichment fails
+        }
+      }
+    }
+
     // Get total count for pagination
     let countQuery = supabase
       .from('messages')
@@ -154,8 +221,10 @@ export async function GET(request: NextRequest) {
 
     if (folder === 'inbox') {
       countQuery = countQuery.eq('recipient_id', authResult.user.id)
-    } else {
+    } else if (folder === 'sent') {
       countQuery = countQuery.eq('sender_id', authResult.user.id)
+    } else if (folder === 'all') {
+      countQuery = countQuery.or(`sender_id.eq.${authResult.user.id},recipient_id.eq.${authResult.user.id}`)
     }
 
     if (unreadOnly) {
@@ -168,8 +237,9 @@ export async function GET(request: NextRequest) {
       console.error('Error counting messages:', countError)
     }
 
+    // Return enriched messages
     return successResponse({
-      messages: messages || [],
+      messages: enrichedMessages,
       pagination: {
         page,
         limit,

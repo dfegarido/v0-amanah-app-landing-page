@@ -16,6 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
+import { loadStripe } from "@stripe/stripe-js"
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js"
+import { useAuth } from "@/lib/auth-context"
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 // Helper function to get the correct table name for a subscription type
 const getTableName = (type: string): string => {
@@ -52,10 +57,88 @@ const subscriptionInfo = {
   },
 }
 
+// Payment confirmation form component
+function PaymentConfirmationForm({ 
+  clientSecret, 
+  onSuccess, 
+  onCancel 
+}: { 
+  clientSecret: string
+  onSuccess: () => void
+  onCancel: () => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!stripe || !elements) {
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: window.location.href,
+        },
+        redirect: 'if_required',
+      })
+
+      if (error) {
+        toast({
+          title: 'Payment failed',
+          description: error.message,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Payment successful!',
+          description: 'Your subscription has been activated.',
+        })
+        onSuccess()
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Something went wrong',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement 
+        options={{
+          paymentMethodOrder: ['card', 'cashapp', 'amazon_pay', 'paypal', 'link', 'us_bank_account'],
+        }}
+      />
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!stripe || isLoading}>
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isLoading ? 'Processing...' : 'Complete Payment'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 export default function SubscribePage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const type = params.type as "mosque" | "business" | "coupon" | "nonprofit"
 
   const [step, setStep] = useState(1)
@@ -67,6 +150,11 @@ export default function SubscribePage() {
   const [availableMosques, setAvailableMosques] = useState<any[]>([])
   const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
+  
+  // Stripe payment state
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<any>(null)
+  const [useSavedPaymentMethod, setUseSavedPaymentMethod] = useState(false)
   
   // Optimistic UI state for uploads
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set())
@@ -420,14 +508,42 @@ export default function SubscribePage() {
         affiliatedMosqueCode: affiliatedMosqueCode && affiliatedMosqueCode !== 'none' ? affiliatedMosqueCode : null
       }
 
-      // Create subscription via simulated API (no Stripe)
-      const response: any = await authenticatedPost('/api/subscriptions/simulate', {
+      // Create subscription with Stripe
+      const paymentMethodId = useSavedPaymentMethod && paymentMethod ? paymentMethod.id : undefined
+      
+      const response: any = await authenticatedPost('/api/subscriptions/create', {
         type: type,
-        data: subscriptionData
+        data: subscriptionData,
+        paymentMethodId: paymentMethodId
       })
 
       if (response.success) {
         setCreatedSubscriptionId(response.data.subscription.id)
+        
+        // If clientSecret is returned, we need to confirm the payment
+        if (response.data.clientSecret && (!useSavedPaymentMethod || !paymentMethod)) {
+          // Show payment form
+          setClientSecret(response.data.clientSecret)
+          // Wait for payment confirmation (handled by PaymentConfirmationForm)
+          return
+        } else if (response.data.clientSecret && useSavedPaymentMethod && paymentMethod) {
+          // Confirm payment with saved payment method
+          const stripe = await stripePromise
+          if (!stripe) {
+            throw new Error('Stripe not loaded')
+          }
+
+          const { error: confirmError } = await stripe.confirmCardPayment(response.data.clientSecret, {
+            payment_method: paymentMethod.id,
+          })
+
+          if (confirmError) {
+            throw confirmError
+          }
+        }
+        
+        // Payment successful, proceed to success step
+        setStep(3)
         
         // Send notification to admin
         try {
@@ -443,11 +559,9 @@ export default function SubscribePage() {
         }
 
         toast({
-          title: "Success!",
-          description: `Your ${type} subscription has been created successfully.`,
+          title: "Subscription Created!",
+          description: `Your ${type} subscription has been successfully created.`,
         })
-
-        setStep(3)
       } else {
         throw new Error(response.error || 'Failed to create subscription')
       }
@@ -461,6 +575,36 @@ export default function SubscribePage() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  // Fetch saved payment method when step 2 is reached
+  useEffect(() => {
+    if (step === 2 && user) {
+      fetchPaymentMethod()
+    }
+  }, [step, user])
+
+  const fetchPaymentMethod = async () => {
+    try {
+      const response: any = await authenticatedGet('/api/stripe/payment-method')
+      if (response.success && response.data?.paymentMethod) {
+        setPaymentMethod(response.data.paymentMethod)
+        setUseSavedPaymentMethod(true) // Default to using saved payment method if available
+      }
+    } catch (error) {
+      console.error('Error fetching payment method:', error)
+    }
+  }
+
+  const handlePaymentSuccess = () => {
+    setClientSecret(null)
+    setStep(3)
+    setIsProcessing(false)
+  }
+
+  const handlePaymentCancel = () => {
+    setClientSecret(null)
+    setIsProcessing(false)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1311,7 +1455,7 @@ export default function SubscribePage() {
         )}
 
         {/* Step 2: Payment Summary */}
-        {step === 2 && (
+        {step === 2 && !clientSecret && (
           <Card>
             <CardHeader>
               <CardTitle>Confirm Subscription</CardTitle>
@@ -1338,11 +1482,36 @@ export default function SubscribePage() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
-                  💳 Payment simulation enabled for demonstration purposes
-                </p>
-              </div>
+              {/* Show saved payment method if available */}
+              {paymentMethod && (
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="use-saved-pm" className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id="use-saved-pm"
+                        checked={useSavedPaymentMethod}
+                        onChange={(e) => setUseSavedPaymentMethod(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>Use saved payment method</span>
+                    </Label>
+                  </div>
+                  {useSavedPaymentMethod && (
+                    <div className="mt-2 p-3 bg-secondary rounded-lg flex items-center gap-3">
+                      <CreditCard className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">
+                          {paymentMethod.brand.charAt(0).toUpperCase() + paymentMethod.brand.slice(1)} •••• {paymentMethod.last4}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Expires {String(paymentMethod.expMonth).padStart(2, '0')}/{String(paymentMethod.expYear).slice(-2)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-4">
                 <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
@@ -1351,17 +1520,44 @@ export default function SubscribePage() {
                 <Button onClick={handleSubmit} disabled={isProcessing} className="flex-1">
                   {isProcessing ? (
                     <>
-                      <span className="animate-spin mr-2">⏳</span>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Processing...
                     </>
                   ) : (
                     <>
-                      <Check className="h-4 w-4 mr-2" />
-                      Simulate Payment
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Continue to Payment
                     </>
                   )}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Payment Form (shown when clientSecret is available) */}
+        {step === 2 && clientSecret && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Payment</CardTitle>
+              <CardDescription>Enter your payment details to activate your subscription</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Elements
+                stripe={stripePromise}
+                options={{
+                  clientSecret,
+                  appearance: {
+                    theme: 'stripe',
+                  },
+                }}
+              >
+                <PaymentConfirmationForm
+                  clientSecret={clientSecret}
+                  onSuccess={handlePaymentSuccess}
+                  onCancel={handlePaymentCancel}
+                />
+              </Elements>
             </CardContent>
           </Card>
         )}

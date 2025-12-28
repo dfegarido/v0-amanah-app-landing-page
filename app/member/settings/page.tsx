@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { AddPaymentMethodDialog } from "@/components/add-payment-method-dialog"
+import { PushNotificationToggleInline } from "@/components/push-notification-toggle-inline"
 
 export default function MemberSettingsPage() {
   const router = useRouter()
@@ -377,7 +378,7 @@ export default function MemberSettingsPage() {
               <Bell className="h-5 w-5" />
               Notifications
             </CardTitle>
-            <CardDescription>Manage your email notification preferences</CardDescription>
+            <CardDescription>Manage your email and push notification preferences</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -421,6 +422,8 @@ export default function MemberSettingsPage() {
                 }} 
               />
             </div>
+            <Separator />
+            <PushNotificationToggleInline />
           </CardContent>
         </Card>
 

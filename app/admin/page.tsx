@@ -33,6 +33,7 @@ import {
   X,
   Heart,
   Bell,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,9 +46,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { mockPaymentAlerts, mockFinancialRecords, mockPushNotificationRequests } from "@/lib/mock-data" // ADDED: mockPushNotificationRequests
 import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedGet } from "@/lib/api-client"
+import { authenticatedGet, authenticatedPatch } from "@/lib/api-client"
+import { NotificationBell } from "@/components/notification-bell"
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -66,6 +78,9 @@ export default function AdminDashboard() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [members, setMembers] = useState<any[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [subscriptionToReject, setSubscriptionToReject] = useState<{ id: string; name?: string; title?: string } | null>(null)
+  const [updatingSubscriptionId, setUpdatingSubscriptionId] = useState<string | null>(null)
 
   // ADDED: push notification requests state
   const [pushNotificationRequests, setPushNotificationRequests] = useState(mockPushNotificationRequests)
@@ -79,43 +94,43 @@ export default function AdminDashboard() {
   }, [user, loading, router])
 
   // Fetch members data
-  useEffect(() => {
-    const fetchMembers = async () => {
-      if (!user || user.role !== 'admin') return
+  const fetchMembers = async () => {
+    if (!user || user.role !== 'admin') return
+    
+    try {
+      setMembersLoading(true)
+      const response = await authenticatedGet('/api/admin/members') as any
       
-      try {
-        setMembersLoading(true)
-        const response = await authenticatedGet('/api/admin/members') as any
-        
-        console.log('[Admin Dashboard] API Response:', response)
-        
-        if (response.success && response.data) {
-          console.log('[Admin Dashboard] Members received:', response.data.members?.length || 0)
-          console.log('[Admin Dashboard] First member:', response.data.members?.[0])
-          setMembers(response.data.members || [])
-        } else {
-          toast({
-            title: "Error",
-            description: "Failed to load members data",
-            variant: "destructive"
-          })
-        }
-      } catch (error: any) {
-        console.error('Error fetching members:', error)
+      console.log('[Admin Dashboard] API Response:', response)
+      
+      if (response.success && response.data) {
+        console.log('[Admin Dashboard] Members received:', response.data.members?.length || 0)
+        console.log('[Admin Dashboard] First member:', response.data.members?.[0])
+        setMembers(response.data.members || [])
+      } else {
         toast({
           title: "Error",
-          description: error.message || "Failed to load members data",
+          description: "Failed to load members data",
           variant: "destructive"
         })
-      } finally {
-        setMembersLoading(false)
       }
+    } catch (error: any) {
+      console.error('Error fetching members:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load members data",
+        variant: "destructive"
+      })
+    } finally {
+      setMembersLoading(false)
     }
+  }
 
+  useEffect(() => {
     if (!loading) {
       fetchMembers()
     }
-  }, [user, loading, toast])
+  }, [user, loading])
 
   // ADDED: push notification handlers
   const handleApprovePushNotification = (requestId: string) => {
@@ -138,13 +153,54 @@ export default function AdminDashboard() {
 
   // REMOVED: markAsAdded function
 
-  // ADDED: updateAppStatus function
-  const updateAppStatus = (subscriptionId: string, newStatus: "active" | "removed") => {
-    console.log(`[v0] Updating subscription ${subscriptionId} to status: ${newStatus}`)
-    // In a real app, this would make an API call to update the status
-    alert(`Subscription marked as ${newStatus === "active" ? "Added to App" : "Removed from App"}`)
-    // This would typically involve re-fetching data or updating the local state
-    // For demonstration purposes, we'll just log and alert.
+  // Update subscription app status
+  const updateAppStatus = async (subscriptionId: string, newStatus: "active" | "removed" | "cancelled", entityStatus?: "active" | "inactive" | "rejected") => {
+    // Set loading state
+    setUpdatingSubscriptionId(subscriptionId)
+    
+    try {
+      const response: any = await authenticatedPatch(`/api/admin/subscriptions/${subscriptionId}/status`, {
+        app_status: newStatus,
+        entity_status: entityStatus
+      })
+
+      if (response.success) {
+        const statusText = newStatus === "active" ? "Approved" : newStatus === "removed" ? "Removed" : "Rejected"
+        toast({
+          title: "Success",
+          description: `Subscription ${statusText} successfully`,
+        })
+        // Refresh members data
+        fetchMembers()
+        // Close reject dialog if open
+        setRejectDialogOpen(false)
+        setSubscriptionToReject(null)
+      } else {
+        throw new Error(response.message || 'Failed to update status')
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update subscription status",
+        variant: "destructive",
+      })
+    } finally {
+      // Clear loading state
+      setUpdatingSubscriptionId(null)
+    }
+  }
+
+  const handleRejectClick = (subscription: Subscription & { subscriptionId?: string }) => {
+    const subscriptionId = (subscription as any).subscriptionId || subscription.id
+    const name = (subscription as any).name || (subscription as any).title || 'this subscription'
+    setSubscriptionToReject({ id: subscriptionId, name, title: name })
+    setRejectDialogOpen(true)
+  }
+
+  const handleConfirmReject = () => {
+    if (subscriptionToReject) {
+      updateAppStatus(subscriptionToReject.id, "cancelled", "rejected")
+    }
   }
 
   const allMosques = members.flatMap((m) =>
@@ -156,17 +212,21 @@ export default function AdminDashboard() {
           type: s.type,
           hasEntity: !!s.entity,
           entityName: s.entity?.name,
-          mosqueCode: s.entity?.mosque_code
+          mosqueCode: s.entity?.mosque_code,
+          app_status: s.app_status,
+          subscription_status: s.status
         })
         return {
-          ...s,
           ...s.entity,
+          ...s, // Spread subscription after entity so subscription.id overwrites entity.id
+          subscriptionId: s.id, // Explicitly preserve subscription ID
+          id: s.id, // Ensure id is subscription ID, not entity ID
           memberName: m.name,
           memberEmail: m.email,
           memberPhone: m.phone,
           memberId: m.id,
-          // Added default appStatus for demonstration, in a real app this would come from the backend
-          appStatus: s.entity?.status || "active",
+          // Use app_status from subscription, fallback to pending_verification
+          appStatus: s.app_status || "pending_verification",
           // Map database fields to expected interface
           name: s.entity?.name,
           mosqueCode: s.entity?.mosque_code,
@@ -194,13 +254,15 @@ export default function AdminDashboard() {
       .filter((s: any) => s.type === "business")
       .map((s: any) => {
         return {
-          ...s,
           ...s.entity,
+          ...s, // Spread subscription after entity so subscription.id overwrites entity.id
+          subscriptionId: s.id, // Explicitly preserve subscription ID
+          id: s.id, // Ensure id is subscription ID, not entity ID
           memberName: m.name,
           memberEmail: m.email,
           memberPhone: m.phone,
           memberId: m.id,
-          appStatus: s.entity?.status || "active",
+          appStatus: s.app_status || "pending_verification",
           // Map database fields to expected interface
           name: s.entity?.name,
           title: s.entity?.name,
@@ -225,13 +287,14 @@ export default function AdminDashboard() {
     m.subscriptions
       .filter((s: any) => s.type === "coupon")
       .map((s: any) => ({
-        ...s,
         ...s.entity,
+        ...s, // Spread subscription after entity to preserve subscription.id
+        subscriptionId: s.id, // Preserve subscription ID explicitly
         memberName: m.name,
         memberEmail: m.email,
         memberPhone: m.phone,
         memberId: m.id,
-        appStatus: s.entity?.status || "active",
+        appStatus: s.app_status || "pending_verification",
         // Map database fields to expected interface
         title: s.entity?.title,
         type: "coupon",
@@ -355,9 +418,6 @@ export default function AdminDashboard() {
     if (subscription.appStatus === "removed") {
       return "border-gray-400 bg-gray-400/5"
     }
-    if (subscription.appStatus === "pending_verification") {
-      return "border-green-500 bg-green-500/5"
-    }
     return "border-border"
   }
 
@@ -395,7 +455,19 @@ export default function AdminDashboard() {
   }
 
   // ADDED: getActionButton helper function
-  const getActionButton = (subscription: Subscription) => {
+  const getActionButton = (subscription: Subscription & { subscriptionId?: string }) => {
+    // Use subscriptionId if available (preserved subscription ID), otherwise use id
+    const subscriptionId = (subscription as any).subscriptionId || subscription.id
+    
+    // Debug: Log subscription data
+    console.log('[getActionButton] Subscription:', {
+      id: subscription.id,
+      subscriptionId: subscriptionId,
+      appStatus: subscription.appStatus,
+      status: subscription.status,
+      type: subscription.type
+    })
+    
     // If cancelled or removed, show "Mark as Removed" to clear and turn gray
     if (subscription.status === "cancelled" && subscription.appStatus !== "removed") {
       return (
@@ -405,7 +477,7 @@ export default function AdminDashboard() {
           className="bg-gray-400/10 hover:bg-gray-400/20 text-gray-600 border-gray-400/20"
           onClick={(e) => {
             e.stopPropagation()
-            updateAppStatus(subscription.id, "removed")
+            updateAppStatus(subscriptionId, "removed")
           }}
         >
           <X className="h-4 w-4 mr-1" />
@@ -416,6 +488,7 @@ export default function AdminDashboard() {
 
     // If removed, show "Mark as Added" to bring back online
     if (subscription.appStatus === "removed") {
+      const isUpdating = updatingSubscriptionId === subscriptionId
       return (
         <Button
           size="sm"
@@ -423,35 +496,81 @@ export default function AdminDashboard() {
           className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
           onClick={(e) => {
             e.stopPropagation()
-            updateAppStatus(subscription.id, "active")
+            updateAppStatus(subscriptionId, "active", "active")
           }}
+          disabled={isUpdating}
         >
-          <Check className="h-4 w-4 mr-1" />
-          Mark as Added
+          {isUpdating ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              Updating...
+            </>
+          ) : (
+            <>
+              <Check className="h-4 w-4 mr-1" />
+              Mark as Added
+            </>
+          )}
         </Button>
       )
     }
 
-    // If pending verification, show "Mark as Added"
+    // If pending verification, show "Approve" and "Reject" buttons
     if (subscription.appStatus === "pending_verification") {
+      const isUpdating = updatingSubscriptionId === subscriptionId
       return (
-        <Button
-          size="sm"
-          variant="outline"
-          className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
-          onClick={(e) => {
-            e.stopPropagation()
-            updateAppStatus(subscription.id, "active")
-          }}
-        >
-          <Check className="h-4 w-4 mr-1" />
-          Mark as Added
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={(e) => {
+              e.stopPropagation()
+              updateAppStatus(subscriptionId, "active", "active")
+            }}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Approving...
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-1" />
+                Approve
+              </>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="bg-red-500/10 hover:bg-red-500/20 text-red-600 border-red-500/20"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRejectClick(subscription)
+            }}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Rejecting...
+              </>
+            ) : (
+              <>
+                <X className="h-4 w-4 mr-1" />
+                Reject
+              </>
+            )}
+          </Button>
+        </div>
       )
     }
 
     // If active, show "Mark as Removed"
     if (subscription.appStatus === "active") {
+      const isUpdating = updatingSubscriptionId === subscriptionId
       return (
         <Button
           size="sm"
@@ -459,11 +578,21 @@ export default function AdminDashboard() {
           className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 border-orange-500/20"
           onClick={(e) => {
             e.stopPropagation()
-            updateAppStatus(subscription.id, "removed")
+            updateAppStatus(subscriptionId, "removed", "inactive")
           }}
+          disabled={isUpdating}
         >
-          <X className="h-4 w-4 mr-1" />
-          Mark as Removed
+          {isUpdating ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              Updating...
+            </>
+          ) : (
+            <>
+              <X className="h-4 w-4 mr-1" />
+              Mark as Removed
+            </>
+          )}
         </Button>
       )
     }
@@ -735,6 +864,7 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             {/* CHANGE: Make settings button functional */}
             <Button variant="ghost" size="icon" asChild>
               <Link href="/admin/settings">
@@ -2375,6 +2505,53 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Subscription?</AlertDialogTitle>
+            <div className="space-y-2">
+              <AlertDialogDescription>
+                Are you sure you want to reject <strong>{subscriptionToReject?.name || subscriptionToReject?.title || 'this subscription'}</strong>?
+              </AlertDialogDescription>
+              <div className="text-sm text-muted-foreground">
+                <p className="mb-2">This action will:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Mark the subscription as cancelled</li>
+                  <li>Mark the entity as rejected</li>
+                  <li>Remove it from the app listings</li>
+                </ul>
+                <p className="mt-2">
+                  This action cannot be undone. The user will need to create a new subscription if they want to try again.
+                </p>
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setRejectDialogOpen(false)
+              setSubscriptionToReject(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmReject}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={updatingSubscriptionId === subscriptionToReject?.id}
+            >
+              {updatingSubscriptionId === subscriptionToReject?.id ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                "Yes, Reject Subscription"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

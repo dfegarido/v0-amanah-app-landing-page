@@ -93,13 +93,15 @@ export async function GET(request: NextRequest) {
               .from(entityTable)
               .select('*')
               .eq('subscription_id', subscription.id)
-              .single()
+              .maybeSingle()
 
             if (entityError) {
               console.error(`Error fetching ${entityTable} for subscription ${subscription.id}:`, entityError)
-            } else {
+            } else if (entityData) {
               entity = entityData
               console.log(`[Admin API] Found ${entityTable} entity:`, entity?.name || entity?.title || 'unnamed')
+            } else {
+              console.warn(`No ${entityTable} entity found for subscription ${subscription.id}`)
             }
 
             return {
@@ -125,7 +127,8 @@ export async function GET(request: NextRequest) {
             price: sub.price_amount,
             interval: 'month', // Default to monthly
             next_billing_date: sub.next_billing_date,
-            created_at: sub.created_at
+            created_at: sub.created_at,
+            app_status: sub.app_status // Ensure app_status is included
           }))
         }
       })

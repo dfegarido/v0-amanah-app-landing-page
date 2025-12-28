@@ -20,7 +20,7 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 })
 
 export type NotificationType = 
-  | 'message_received'
+  | 'new_message'
   | 'donation_confirmed'
   | 'donation_failed'
   | 'event_created'
@@ -67,6 +67,15 @@ async function createNotification(
     }
 
     console.log('✅ Notification created:', { id: data.id, type, userId })
+    
+    // Trigger email/push delivery asynchronously (don't await to avoid blocking)
+    // Import delivery service dynamically to avoid circular dependencies
+    import('./delivery-service').then(({ deliverNotification }) => {
+      deliverNotification(data.id).catch((error) => {
+        console.error('Error delivering notification:', error)
+      })
+    })
+    
     return data
   } catch (error: any) {
     console.error('Exception creating notification:', error)
@@ -156,28 +165,40 @@ export async function onDonationConfirmed(params: {
     // Also notify admins (optional - you may want to filter this)
     const { data: admins } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, email')
       .eq('role', 'admin')
 
     if (admins && admins.length > 0) {
-      for (const admin of admins) {
-        await createNotification(
-          admin.id,
-          'donation_confirmed',
-          'New Donation Received',
-          `A donation of ${currency} ${amount.toFixed(2)} was made${donorName ? ` by ${donorName}` : ''}.`,
-          {
-            donation_id: donationId,
-            donor_name: donorName,
-            donor_email: donorEmail,
-            amount,
-            currency,
-            mosque_id: mosqueId,
-            mosque_code: mosqueCode,
-          },
-          'donation',
-          donationId
-        )
+      // Get admin notification record to send email
+      const adminNotification = await createNotification(
+        admins[0].id, // Use first admin for DB record
+        'donation_confirmed',
+        'New Donation Received',
+        `A donation of ${currency} ${amount.toFixed(2)} was made${donorName ? ` by ${donorName}` : ''}.`,
+        {
+          donation_id: donationId,
+          donor_name: donorName,
+          donor_email: donorEmail,
+          amount,
+          currency,
+          mosque_id: mosqueId,
+          mosque_code: mosqueCode,
+          is_anonymous: !donorName && !donorEmail,
+        },
+        'donation',
+        donationId
+      )
+
+      // Send email to all admins
+      if (adminNotification) {
+        const adminEmails = admins.map(a => a.email).filter(Boolean) as string[]
+        if (adminEmails.length > 0) {
+          import('./delivery-service').then(({ deliverAdminEmailNotification }) => {
+            deliverAdminEmailNotification(adminNotification, adminEmails).catch((error) => {
+              console.error('Error delivering admin emails:', error)
+            })
+          })
+        }
       }
     }
 

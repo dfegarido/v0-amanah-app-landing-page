@@ -91,8 +91,7 @@ export async function POST(request: NextRequest) {
           interval: 'month'
         },
         product_data: {
-          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`,
-          description: `Monthly subscription for ${type}`
+          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
         }
       })
       stripePriceId = price.id

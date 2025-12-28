@@ -36,11 +36,30 @@ export async function authenticatedGet<T>(url: string): Promise<T> {
   const response = await authenticatedFetch(url, { method: 'GET' })
   
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || error.message || 'Request failed')
+    // Try to parse error response, but handle non-JSON responses
+    let error
+    try {
+      const text = await response.text()
+      error = text ? JSON.parse(text) : { error: `Request failed with status ${response.status}`, message: response.statusText }
+    } catch {
+      // If response is not JSON (e.g., 404 page), create error object
+      error = { error: `Request failed with status ${response.status}`, message: response.statusText }
+    }
+    const errorMessage = new Error(error.error || error.message || `Request failed with status ${response.status}`)
+    ;(errorMessage as any).status = response.status
+    throw errorMessage
   }
   
-  return response.json()
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }
 
 /**
@@ -53,11 +72,32 @@ export async function authenticatedPost<T>(url: string, body?: any): Promise<T> 
   })
   
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || error.message || 'Request failed')
+    // Try to parse error response, but handle non-JSON responses
+    let error
+    try {
+      const text = await response.text()
+      error = text ? JSON.parse(text) : { error: `Request failed with status ${response.status}`, message: response.statusText }
+    } catch {
+      // If response is not JSON, create error object
+      error = { error: `Request failed with status ${response.status}`, message: response.statusText }
+    }
+    const errorMessage = new Error(error.error || error.message || `Request failed with status ${response.status}`)
+    ;(errorMessage as any).status = response.status
+    throw errorMessage
   }
   
-  return response.json()
+  // Check if response has content before parsing
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    // If not JSON, return text as response
+    return text as T
+  }
 }
 
 /**
@@ -70,11 +110,29 @@ export async function authenticatedPut<T>(url: string, body?: any): Promise<T> {
   })
   
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || error.message || 'Request failed')
+    // Try to parse error response, but handle non-JSON responses
+    let error
+    try {
+      const text = await response.text()
+      error = text ? JSON.parse(text) : { error: `Request failed with status ${response.status}`, message: response.statusText }
+    } catch {
+      error = { error: `Request failed with status ${response.status}`, message: response.statusText }
+    }
+    const errorMessage = new Error(error.error || error.message || `Request failed with status ${response.status}`)
+    ;(errorMessage as any).status = response.status
+    throw errorMessage
   }
   
-  return response.json()
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }
 
 /**
@@ -87,11 +145,29 @@ export async function authenticatedPatch<T>(url: string, body?: any): Promise<T>
   })
   
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || error.message || 'Request failed')
+    // Try to parse error response, but handle non-JSON responses
+    let error
+    try {
+      const text = await response.text()
+      error = text ? JSON.parse(text) : { error: `Request failed with status ${response.status}`, message: response.statusText }
+    } catch {
+      error = { error: `Request failed with status ${response.status}`, message: response.statusText }
+    }
+    const errorMessage = new Error(error.error || error.message || `Request failed with status ${response.status}`)
+    ;(errorMessage as any).status = response.status
+    throw errorMessage
   }
   
-  return response.json()
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }
 
 /**
@@ -101,9 +177,27 @@ export async function authenticatedDelete<T>(url: string): Promise<T> {
   const response = await authenticatedFetch(url, { method: 'DELETE' })
   
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || error.message || 'Request failed')
+    // Try to parse error response, but handle non-JSON responses
+    let error
+    try {
+      const text = await response.text()
+      error = text ? JSON.parse(text) : { error: `Request failed with status ${response.status}`, message: response.statusText }
+    } catch {
+      error = { error: `Request failed with status ${response.status}`, message: response.statusText }
+    }
+    const errorMessage = new Error(error.error || error.message || `Request failed with status ${response.status}`)
+    ;(errorMessage as any).status = response.status
+    throw errorMessage
   }
   
-  return response.json()
+  const text = await response.text()
+  if (!text) {
+    return {} as T
+  }
+  
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }

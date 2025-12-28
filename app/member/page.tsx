@@ -21,7 +21,9 @@ import {
   Heart,
   MessageCircle,
   Bell,
+  User,
 } from "lucide-react"
+import { NotificationBell } from "@/components/notification-bell"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -30,8 +32,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedGet } from "@/lib/api-client"
+import { authenticatedGet, authenticatedDelete } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
+import { AddPaymentMethodDialog } from "@/components/add-payment-method-dialog"
 
 export default function MemberDashboard() {
   const router = useRouter()
@@ -50,6 +54,15 @@ export default function MemberDashboard() {
   const [donations, setDonations] = useState<any[]>([])
   const [loadingDonations, setLoadingDonations] = useState(true)
 
+  // Messages state
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
+  const [messages, setMessages] = useState<any[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
+
+  // Payment method state
+  const [paymentMethod, setPaymentMethod] = useState<any>(null)
+  const [loadingPaymentMethod, setLoadingPaymentMethod] = useState(true)
+
   const handleLogout = async () => {
     await signOut()
     router.push("/auth/login")
@@ -61,6 +74,94 @@ export default function MemberDashboard() {
       router.push('/auth/login')
     }
   }, [user, loading, router])
+
+  // Fetch messages and unread count
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!user) return
+      
+      try {
+        setLoadingMessages(true)
+        const response: any = await authenticatedGet('/api/messages?folder=all&page=1&limit=50')
+        if (response.success && response.data) {
+          setMessages(response.data.messages || [])
+          
+          // Calculate unread count
+          const unread = (response.data.messages || []).filter(
+            (msg: any) => msg.recipient_id === user.id && !msg.read_at
+          ).length
+          setUnreadMessageCount(unread)
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error)
+      } finally {
+        setLoadingMessages(false)
+      }
+    }
+
+    if (user) {
+      fetchMessages()
+    }
+  }, [user])
+
+  // Set up real-time subscription for new messages
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel('dashboard-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        () => {
+            // Refresh messages and unread count when new message arrives
+          authenticatedGet('/api/messages?folder=all&page=1&limit=50')
+            .then((response: any) => {
+              if (response.success && response.data) {
+                setMessages(response.data.messages || [])
+                const unread = (response.data.messages || []).filter(
+                  (msg: any) => msg.recipient_id === user.id && !msg.read_at
+                ).length
+                setUnreadMessageCount(unread)
+              }
+            })
+            .catch(console.error)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        () => {
+            // Refresh messages and unread count when message is updated (e.g., marked as read)
+          authenticatedGet('/api/messages?folder=all&page=1&limit=50')
+            .then((response: any) => {
+              if (response.success && response.data) {
+                setMessages(response.data.messages || [])
+                const unread = (response.data.messages || []).filter(
+                  (msg: any) => msg.recipient_id === user.id && !msg.read_at
+                ).length
+                setUnreadMessageCount(unread)
+              }
+            })
+            .catch(console.error)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
 
   // Fetch subscriptions
   useEffect(() => {
@@ -162,8 +263,59 @@ export default function MemberDashboard() {
 
     if (user) {
       fetchDonations()
+      fetchPaymentMethod()
     }
   }, [user, toast])
+
+  // Fetch payment method
+  const fetchPaymentMethod = async () => {
+    if (!user) return
+    
+    try {
+      setLoadingPaymentMethod(true)
+      const response: any = await authenticatedGet('/api/stripe/payment-method')
+      if (response.success && response.data) {
+        setPaymentMethod(response.data.paymentMethod)
+      }
+    } catch (error) {
+      console.error('Error fetching payment method:', error)
+    } finally {
+      setLoadingPaymentMethod(false)
+    }
+  }
+
+  const handleRemovePaymentMethod = async () => {
+    if (!confirm('Are you sure you want to remove your payment method?')) {
+      return
+    }
+
+    try {
+      setLoadingPaymentMethod(true)
+      await authenticatedDelete('/api/stripe/payment-method')
+      setPaymentMethod(null)
+      toast({
+        title: "Payment method removed",
+        description: "Your payment method has been removed successfully.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Failed to remove",
+        description: error.message || "Failed to remove payment method",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingPaymentMethod(false)
+    }
+  }
+
+  const formatCardBrand = (brand: string) => {
+    return brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : 'Card'
+  }
+
+  const formatExpDate = (month: number, year: number) => {
+    if (!month || !year) return ''
+    return `${String(month).padStart(2, '0')}/${String(year).slice(-2)}`
+  }
 
   if (loading) {
     return (
@@ -243,6 +395,7 @@ export default function MemberDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Button variant="ghost" size="icon" asChild>
               <Link href="/member/settings">
                 <Settings className="h-5 w-5" />
@@ -294,7 +447,14 @@ export default function MemberDashboard() {
           <TabsList>
             <TabsTrigger value="subscriptions">My Subscriptions</TabsTrigger>
             <TabsTrigger value="donations">Donations</TabsTrigger>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsTrigger value="messages" className="relative">
+              Messages
+              {unreadMessageCount > 0 && (
+                <Badge className="ml-2 h-5 min-w-5 flex items-center justify-center px-1.5">
+                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="subscriptions" className="space-y-8">
@@ -438,18 +598,64 @@ export default function MemberDashboard() {
             {/* Payment Method */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Payment Method</h3>
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <CreditCard className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Payment Method</h3>
-                  <p className="text-muted-foreground text-center mb-4">
-                    Add a payment method when you create your first subscription.
-                  </p>
-                  <Button variant="outline">
-                    Add Payment Method
-                  </Button>
-                </CardContent>
-              </Card>
+              {loadingPaymentMethod ? (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                    <p className="text-muted-foreground">Loading payment method...</p>
+                  </CardContent>
+                </Card>
+              ) : paymentMethod ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                          <CreditCard className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {formatCardBrand(paymentMethod.brand)} •••• {paymentMethod.last4}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Expires {formatExpDate(paymentMethod.expMonth, paymentMethod.expYear)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <AddPaymentMethodDialog onPaymentMethodAdded={fetchPaymentMethod}>
+                          <Button variant="outline" size="sm">
+                            Update
+                          </Button>
+                        </AddPaymentMethodDialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRemovePaymentMethod}
+                          disabled={loadingPaymentMethod}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <CreditCard className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No Payment Method</h3>
+                    <p className="text-muted-foreground text-center mb-4">
+                      Add a payment method to use for subscriptions and recurring payments.
+                    </p>
+                    <AddPaymentMethodDialog onPaymentMethodAdded={fetchPaymentMethod}>
+                      <Button variant="default">
+                        Add Payment Method
+                      </Button>
+                    </AddPaymentMethodDialog>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </TabsContent>
 
@@ -578,26 +784,118 @@ export default function MemberDashboard() {
                 <h3 className="text-lg font-semibold text-foreground mb-2">Messages</h3>
                 <p className="text-sm text-muted-foreground">Communicate with administrators and other users</p>
               </div>
-              <Button variant="outline" asChild>
+              <Button asChild>
                 <Link href="/member/messages">
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  Open Messages
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Message
                 </Link>
               </Button>
             </div>
+
             <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-8">
-                  <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">
-                    Send and receive messages within the platform
-                  </p>
-                  <Button variant="outline" asChild>
-                    <Link href="/member/messages">
-                      Go to Messages
-                    </Link>
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle>Conversations</CardTitle>
+                <CardDescription>Your recent conversations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingMessages ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">Loading messages...</p>
+                  </div>
+                ) : (() => {
+                  // Group messages into conversations
+                  if (!user || !messages.length) {
+                    return (
+                      <div className="text-center py-8">
+                        <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground mb-4">
+                          No messages yet. Start a conversation!
+                        </p>
+                        <Button asChild>
+                          <Link href="/member/messages">
+                            New Message
+                          </Link>
+                        </Button>
+                      </div>
+                    )
+                  }
+
+                  const conversationMap = new Map<string, {
+                    userId: string
+                    userName: string
+                    userEmail: string
+                    lastMessage: any
+                    unreadCount: number
+                  }>()
+
+                  messages.forEach((message: any) => {
+                    const otherUserId = message.sender_id === user.id ? message.recipient_id : message.sender_id
+                    const otherUser = message.sender_id === user.id ? message.recipient : message.sender
+
+                    if (!otherUser) return
+
+                    if (!conversationMap.has(otherUserId)) {
+                      conversationMap.set(otherUserId, {
+                        userId: otherUserId,
+                        userName: otherUser.name || otherUser.email || "Unknown",
+                        userEmail: otherUser.email || "",
+                        lastMessage: message,
+                        unreadCount: 0,
+                      })
+                    }
+
+                    const conv = conversationMap.get(otherUserId)!
+                    if (new Date(message.created_at) > new Date(conv.lastMessage.created_at)) {
+                      conv.lastMessage = message
+                    }
+                    if (message.recipient_id === user.id && !message.read_at) {
+                      conv.unreadCount++
+                    }
+                  })
+
+                  const conversations = Array.from(conversationMap.values()).sort((a, b) =>
+                    new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+                  )
+
+                  return (
+                    <div className="space-y-2">
+                      {conversations.map((conv) => {
+                        const isUnread = conv.unreadCount > 0
+                        return (
+                          <Link
+                            key={conv.userId}
+                            href="/member/messages"
+                            className="block"
+                          >
+                            <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors border border-transparent hover:border-border">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                <User className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className={`text-sm font-medium truncate ${isUnread ? "font-semibold" : ""}`}>
+                                    {conv.userName}
+                                  </p>
+                                  {isUnread && (
+                                    <Badge variant="default" className="ml-2">
+                                      {conv.unreadCount}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {conv.lastMessage.body}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {new Date(conv.lastMessage.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
