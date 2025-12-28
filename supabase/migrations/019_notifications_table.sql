@@ -125,4 +125,3 @@ CREATE TRIGGER update_notifications_updated_at
 
 COMMENT ON TABLE public.notifications IS 'Stores notifications for users';
 COMMENT ON FUNCTION public.create_notification IS 'Creates a notification record. Can be called by API or triggers.';
-

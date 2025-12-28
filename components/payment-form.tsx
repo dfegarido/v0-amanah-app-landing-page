@@ -79,4 +79,3 @@ export default function PaymentForm({ clientSecret, onSuccess, onCancel }: Payme
     </form>
   )
 }
-

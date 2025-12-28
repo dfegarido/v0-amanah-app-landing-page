@@ -274,4 +274,3 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     console.log(`💰 Donation ${isPartial ? 'partially ' : ''}refunded:`, donation.id)
   }
 }
-

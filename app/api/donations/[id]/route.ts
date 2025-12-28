@@ -41,4 +41,3 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return errorResponse('Internal server error', 500)
   }
 }
-

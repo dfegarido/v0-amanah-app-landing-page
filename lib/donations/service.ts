@@ -106,4 +106,3 @@ export async function createPayPalDonationOrder(
   // This would use PayPal SDK to create an order
   throw new Error('PayPal integration not yet implemented')
 }
-

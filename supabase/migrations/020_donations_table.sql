@@ -158,4 +158,3 @@ CREATE TRIGGER update_donations_updated_at
 
 COMMENT ON TABLE public.donations IS 'Stores donation records with payment provider information';
 COMMENT ON FUNCTION public.update_donation_status IS 'Updates donation status from webhook. Idempotent via webhook_event_id.';
-

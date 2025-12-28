@@ -361,4 +361,3 @@ export async function onPaymentFailed(params: {
     console.error('Error in onPaymentFailed hook:', error)
   }
 }
-

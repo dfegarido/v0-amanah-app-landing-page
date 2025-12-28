@@ -230,4 +230,3 @@ async function handlePaymentCaptureRefunded(refund: any) {
 
   console.log(`💰 PayPal donation ${isPartial ? 'partially ' : ''}refunded:`, donation.id)
 }
-

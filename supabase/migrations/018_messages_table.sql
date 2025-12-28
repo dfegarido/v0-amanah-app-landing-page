@@ -88,4 +88,3 @@ CREATE TRIGGER update_messages_updated_at
 
 COMMENT ON TABLE public.messages IS 'Stores messages between users and admins';
 COMMENT ON COLUMN public.messages.parent_message_id IS 'Reference to parent message for threaded conversations';
-

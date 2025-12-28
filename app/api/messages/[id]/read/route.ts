@@ -51,4 +51,3 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return errorResponse('Internal server error', 500)
   }
 }
-
