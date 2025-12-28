@@ -19,6 +19,21 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 // Stripe webhook secret from environment
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
+// Disable body parsing - we need raw body for Stripe signature verification
+export const runtime = 'nodejs'
+
+/**
+ * GET /api/webhooks/stripe
+ * Test endpoint to verify webhook is accessible
+ */
+export async function GET(request: NextRequest) {
+  return Response.json({ 
+    message: 'Stripe webhook endpoint is active',
+    webhookSecretConfigured: !!webhookSecret,
+    timestamp: new Date().toISOString()
+  })
+}
+
 /**
  * POST /api/webhooks/stripe
  * 
@@ -26,55 +41,65 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
  * Supports: payment_intent.succeeded, payment_intent.payment_failed, etc.
  */
 export async function POST(request: NextRequest) {
-  const body = await request.text()
-  const headersList = headers()
-  const signature = headersList.get('stripe-signature')
-
-  if (!signature) {
-    console.error('Missing stripe-signature header')
-    return Response.json({ error: 'Missing signature' }, { status: 400 })
-  }
-
-  let event: Stripe.Event
-
   try {
-    // Get Stripe instance and verify webhook signature
-    const stripe = getStripe()
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
-  } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message)
-    return Response.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
-  }
+    const body = await request.text()
+    const headersList = await headers()
+    const signature = headersList.get('stripe-signature')
 
-  console.log('✅ Stripe webhook received:', event.type)
-
-  try {
-    // Handle different event types
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
-        break
-
-      case 'payment_intent.payment_failed':
-        await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
-        break
-
-      case 'payment_intent.canceled':
-        await handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent)
-        break
-
-      case 'charge.refunded':
-        await handleChargeRefunded(event.data.object as Stripe.Charge)
-        break
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`)
+    if (!signature) {
+      console.error('Missing stripe-signature header')
+      return Response.json({ error: 'Missing signature' }, { status: 400 })
     }
 
-    return Response.json({ received: true })
+    if (!webhookSecret) {
+      console.error('STRIPE_WEBHOOK_SECRET not configured')
+      return Response.json({ error: 'Webhook secret not configured' }, { status: 500 })
+    }
+
+    let event: Stripe.Event
+
+    try {
+      // Get Stripe instance and verify webhook signature
+      const stripe = getStripe()
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message)
+      return Response.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
+    }
+
+    console.log('✅ Stripe webhook received:', event.type)
+
+    try {
+      // Handle different event types
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
+          break
+
+        case 'payment_intent.payment_failed':
+          await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
+          break
+
+        case 'payment_intent.canceled':
+          await handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent)
+          break
+
+        case 'charge.refunded':
+          await handleChargeRefunded(event.data.object as Stripe.Charge)
+          break
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`)
+      }
+
+      return Response.json({ received: true })
+    } catch (error: any) {
+      console.error('Error processing webhook:', error)
+      return Response.json({ error: 'Webhook processing failed' }, { status: 500 })
+    }
   } catch (error: any) {
-    console.error('Error processing webhook:', error)
-    return Response.json({ error: 'Webhook processing failed' }, { status: 500 })
+    console.error('Error in webhook handler:', error)
+    return Response.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
 
