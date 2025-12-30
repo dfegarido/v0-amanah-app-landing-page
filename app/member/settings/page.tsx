@@ -424,6 +424,37 @@ export default function MemberSettingsPage() {
             </div>
             <Separator />
             <PushNotificationToggleInline />
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Test Email Configuration</p>
+                <p className="text-sm text-muted-foreground">Test Resend email service configuration</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const response = await authenticatedPost('/api/notifications/test-resend', {}) as any
+                    if (response.success) {
+                      toast({
+                        title: "Test email sent",
+                        description: `Test email sent to ${user?.email}. Check your inbox and server logs.`,
+                      })
+                    } else {
+                      throw new Error(response.error || 'Failed to send test email')
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to send test email. Check server logs for details.",
+                      variant: "destructive",
+                    })
+                  }
+                }}
+              >
+                Test Resend
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

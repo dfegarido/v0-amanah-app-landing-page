@@ -11,7 +11,7 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY || '')
 
 // Email configuration
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@amanah.app'
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@amanahbiz.com'
 const FROM_NAME = process.env.RESEND_FROM_NAME || 'Amanah'
 
 export interface EmailOptions {
@@ -29,9 +29,9 @@ export interface EmailResult {
 }
 
 /**
- * Send an email notification
+ * Send an email notification with retry logic for rate limits
  */
-export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
+export async function sendEmail(options: EmailOptions, retryCount = 0): Promise<EmailResult> {
   // If no API key, log and return (dev mode)
   if (!process.env.RESEND_API_KEY) {
     console.warn('⚠️ RESEND_API_KEY not configured. Email not sent.')
@@ -45,7 +45,18 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
     }
   }
 
+  const maxRetries = 3
+  const baseDelay = 1000 // 1 second base delay
+
   try {
+    console.log('📧 Sending email via Resend...')
+    console.log('   From:', `${FROM_NAME} <${FROM_EMAIL}>`)
+    console.log('   To:', Array.isArray(options.to) ? options.to : [options.to])
+    console.log('   Subject:', options.subject)
+    if (retryCount > 0) {
+      console.log(`   Retry attempt: ${retryCount}/${maxRetries}`)
+    }
+    
     const result = await resend.emails.send({
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
       to: Array.isArray(options.to) ? options.to : [options.to],
@@ -55,11 +66,26 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       replyTo: options.replyTo,
     })
 
+    console.log('📧 Resend API response:', JSON.stringify(result, null, 2))
+
     if (result.error) {
+      // Check if it's a rate limit error and we can retry
+      const isRateLimit = result.error.statusCode === 429 || 
+                         result.error.name === 'rate_limit_exceeded' ||
+                         (result.error.message && result.error.message.includes('Too many requests'))
+      
+      if (isRateLimit && retryCount < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = baseDelay * Math.pow(2, retryCount)
+        console.log(`⏳ Rate limit hit, retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return sendEmail(options, retryCount + 1)
+      }
+
       console.error('❌ Email send error:', result.error)
       return {
         success: false,
-        error: result.error.message || 'Unknown error',
+        error: result.error.message || JSON.stringify(result.error),
       }
     }
 
@@ -69,7 +95,24 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       messageId: result.data?.id,
     }
   } catch (error: any) {
+    // Check if it's a rate limit error in the exception
+    const isRateLimit = error.statusCode === 429 || 
+                       error.message?.includes('rate limit') ||
+                       error.message?.includes('Too many requests')
+    
+    if (isRateLimit && retryCount < maxRetries) {
+      const delay = baseDelay * Math.pow(2, retryCount)
+      console.log(`⏳ Rate limit exception, retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return sendEmail(options, retryCount + 1)
+    }
+
     console.error('❌ Email service exception:', error)
+    console.error('   Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    })
     return {
       success: false,
       error: error.message || 'Failed to send email',

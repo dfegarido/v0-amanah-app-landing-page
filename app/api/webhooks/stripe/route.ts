@@ -68,11 +68,13 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Stripe webhook received:', event.type)
+    console.log('📧 Event ID:', event.id)
 
     try {
       // Handle different event types
       switch (event.type) {
         case 'payment_intent.succeeded':
+          console.log('📧 Processing payment_intent.succeeded event...')
           await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
           break
 
@@ -130,9 +132,18 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     .single()
 
   if (donationError || !donation) {
-    console.error('Donation not found for payment intent:', paymentIntentId)
+    console.error('❌ Donation not found for payment intent:', paymentIntentId)
+    console.error('   Error:', donationError)
     return
   }
+
+  console.log('📧 Found donation:', {
+    id: donation.id,
+    userId: donation.user_id,
+    donorEmail: donation.donor_email,
+    amount: donation.amount,
+    status: donation.status,
+  })
 
   // Update donation status
   const { data: updatedDonation, error: updateError } = await supabaseAdmin
@@ -158,9 +169,24 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }
 
   console.log('✅ Donation confirmed:', updatedDonation.id)
+  console.log('📧 Donation details:', {
+    id: updatedDonation.id,
+    userId: updatedDonation.user_id,
+    donorEmail: updatedDonation.donor_email,
+    amount: updatedDonation.amount,
+    currency: updatedDonation.currency,
+  })
 
-  // Trigger notification hook
+  // Trigger notification hook - don't fail webhook if notification fails
   try {
+    console.log('📧 Calling onDonationConfirmed hook...')
+    console.log('📧 Hook parameters:', {
+      donationId: updatedDonation.id,
+      userId: updatedDonation.user_id,
+      donorEmail: updatedDonation.donor_email,
+      amount: updatedDonation.amount,
+    })
+    
     await onDonationConfirmed({
       donationId: updatedDonation.id,
       userId: updatedDonation.user_id || undefined,
@@ -171,8 +197,14 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       mosqueId: updatedDonation.mosque_id || undefined,
       mosqueCode: updatedDonation.mosque_code || undefined,
     })
-  } catch (hookError) {
-    console.error('Error triggering donation notification hook:', hookError)
+    
+    console.log('✅ onDonationConfirmed hook completed successfully')
+  } catch (hookError: any) {
+    // Log error but don't fail webhook - donation is already confirmed
+    console.error('❌ Error triggering donation notification hook:', hookError)
+    console.error('   Error message:', hookError?.message)
+    console.error('   Error stack:', hookError?.stack || 'No stack trace')
+    // Don't throw - we don't want to fail the webhook if notification fails
   }
 }
 

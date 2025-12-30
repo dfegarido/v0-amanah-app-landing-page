@@ -12,7 +12,13 @@ export interface EmailTemplateData {
 /**
  * Base email template wrapper
  */
-export function baseTemplate(content: string, title?: string): string {
+export function baseTemplate(content: string, title?: string, logoUrl?: string): string {
+  const logoHtml = logoUrl ? `
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="${logoUrl}" alt="Amanah Logo" style="max-width: 150px; height: auto;" />
+    </div>
+  ` : ''
+  
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -23,6 +29,7 @@ export function baseTemplate(content: string, title?: string): string {
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    ${logoHtml}
     <h1 style="color: white; margin: 0; font-size: 28px;">Amanah</h1>
   </div>
   <div style="background: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
@@ -80,8 +87,9 @@ export function donationConfirmedTemplate(data: {
   mosqueName?: string
   donationId?: string
   receiptLink?: string
+  logoUrl?: string
 }): string {
-  const { userName, amount, currency, mosqueName, receiptLink } = data
+  const { userName, amount, currency, mosqueName, receiptLink, logoUrl } = data
   
   const content = `
     <h2 style="color: #1f2937; margin-top: 0;">🎉 Donation Confirmed</h2>
@@ -102,7 +110,7 @@ export function donationConfirmedTemplate(data: {
     <p style="color: #6b7280; font-size: 14px;">Barak Allahu feekum (May Allah reward you with goodness).</p>
   `
   
-  return baseTemplate(content, 'Donation Confirmed')
+  return baseTemplate(content, 'Donation Confirmed', logoUrl)
 }
 
 /**

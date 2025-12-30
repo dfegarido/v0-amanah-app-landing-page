@@ -43,20 +43,29 @@ interface Notification {
  */
 async function getUserEmail(userId: string): Promise<string | null> {
   try {
+    console.log('📧 getUserEmail: Fetching email for userId:', userId)
     const { data: user, error } = await supabaseAdmin
       .from('users')
       .select('email, name')
       .eq('id', userId)
       .single()
 
-    if (error || !user) {
-      console.error('Error fetching user email:', error)
+    if (error) {
+      console.error('❌ getUserEmail: Error fetching user email:', error)
       return null
     }
 
+    if (!user) {
+      console.error('❌ getUserEmail: No user found for userId:', userId)
+      return null
+    }
+
+    console.log('✅ getUserEmail: User found, email:', user.email)
     return user.email
-  } catch (error) {
-    console.error('Exception fetching user email:', error)
+  } catch (error: any) {
+    console.error('❌ getUserEmail: Exception fetching user email:', error)
+    console.error('   Error message:', error?.message)
+    console.error('   Error stack:', error?.stack)
     return null
   }
 }
@@ -91,34 +100,72 @@ export async function deliverEmailNotification(
   notification: Notification
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('📧 deliverEmailNotification called for:', notification.id, notification.type)
+    console.log('📧 Notification details:', {
+      id: notification.id,
+      type: notification.type,
+      userId: notification.user_id,
+      title: notification.title,
+    })
+    
     // Check if email should be sent
+    console.log('📧 Checking if email should be sent...')
     const shouldSend = await shouldSendEmail(notification.user_id, notification.type)
+    console.log('📧 shouldSendEmail result:', shouldSend)
+    
     if (!shouldSend) {
       console.log('⏭️ Email skipped due to user preferences:', notification.id)
       return { success: true }
     }
 
-    // Get user email
-    const userEmail = await getUserEmail(notification.user_id)
+    // Get user info for template (includes email, so we don't need to fetch twice)
+    console.log('📧 Fetching user info for template (includes email)...')
+    let userEmail: string | null = null
+    let user: { name?: string; email?: string } | null = null
+    
+    try {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('name, email')
+        .eq('id', notification.user_id)
+        .single()
+
+      if (userError) {
+        console.error('❌ Error fetching user info:', userError)
+        return { success: false, error: 'User not found' }
+      }
+
+      if (!userData) {
+        console.warn('⚠️ No user found for userId:', notification.user_id)
+        return { success: false, error: 'User not found' }
+      }
+
+      user = userData
+      userEmail = userData.email || null
+      console.log('✅ User info fetched:', { name: user.name, email: userEmail })
+    } catch (error: any) {
+      console.error('❌ Exception fetching user info:', error)
+      return { success: false, error: error.message || 'Failed to fetch user info' }
+    }
+    
     if (!userEmail) {
       console.warn('⚠️ No email found for user:', notification.user_id)
       return { success: false, error: 'User email not found' }
     }
 
-    // Get user info for template
-    const { data: user } = await supabaseAdmin
-      .from('users')
-      .select('name, email')
-      .eq('id', notification.user_id)
-      .single()
+    console.log('📧 Preparing to send email to:', userEmail)
 
     const baseUrl = getBaseUrl()
     let html = ''
     let subject = notification.title
 
+    console.log('📧 Step 3: Generating email template for type:', notification.type)
+    console.log('📧 Notification metadata:', JSON.stringify(notification.metadata, null, 2))
+
     // Generate email template based on notification type
-    switch (notification.type) {
-      case 'message_received':
+    try {
+      switch (notification.type) {
+      case 'new_message':
         html = messageReceivedTemplate({
           userName: user?.name || undefined,
           senderName: notification.metadata?.sender_name || 'Someone',
@@ -137,6 +184,7 @@ export async function deliverEmailNotification(
           mosqueName: notification.metadata?.mosque_name,
           donationId: notification.related_entity_id,
           receiptLink: notification.metadata?.receipt_url || `${baseUrl}/member/donations`,
+          logoUrl: `${baseUrl}/images/logo-20amanaah.png`,
         })
         break
 
@@ -172,14 +220,32 @@ export async function deliverEmailNotification(
           <p>${notification.message}</p>
           <p style="color: #6b7280; font-size: 14px;">You can view this notification in your Amanah account.</p>
         `, notification.title)
+      }
+      console.log('📧 Template generated successfully, HTML length:', html.length)
+    } catch (templateError: any) {
+      console.error('❌ Error generating email template:', templateError)
+      throw templateError
     }
 
+    console.log('📧 Step 4: Template generation complete, preparing to send email...')
+    console.log('📧 Subject:', subject)
+    console.log('📧 HTML length:', html.length)
+
     // Send email
+    console.log('📧 Step 5: Calling sendEmail function...')
+    console.log('📧 Email details:', {
+      to: userEmail,
+      subject: subject,
+      htmlLength: html.length,
+    })
+    
     const result = await sendEmail({
       to: userEmail,
       subject,
       html,
     })
+
+    console.log('📧 sendEmail result:', JSON.stringify(result, null, 2))
 
     if (result.success) {
       console.log('✅ Email delivered:', notification.id, 'to', userEmail)
@@ -190,6 +256,8 @@ export async function deliverEmailNotification(
     }
   } catch (error: any) {
     console.error('❌ Exception delivering email:', error)
+    console.error('   Error message:', error.message)
+    console.error('   Error stack:', error.stack)
     return { success: false, error: error.message || 'Unknown error' }
   }
 }
@@ -234,16 +302,30 @@ export async function deliverAdminEmailNotification(
         `, notification.title)
     }
 
-    // Send to all admins
-    const results = await Promise.allSettled(
-      adminEmails.map((email) =>
-        sendEmail({
+    // Send to all admins with rate limiting (Resend allows 2 requests/second)
+    // Add delay between sends to avoid rate limits
+    const results = []
+    for (let i = 0; i < adminEmails.length; i++) {
+      const email = adminEmails[i]
+      // Add 600ms delay between emails to stay under 2 requests/second limit
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 600))
+      }
+      
+      try {
+        const result = await sendEmail({
           to: email,
           subject,
           html,
         })
-      )
-    )
+        results.push({ status: 'fulfilled' as const, value: result })
+      } catch (error: any) {
+        results.push({ 
+          status: 'rejected' as const, 
+          reason: error 
+        })
+      }
+    }
 
     const sent = results.filter((r) => r.status === 'fulfilled' && r.value.success).length
     const failed = results.length - sent
@@ -280,6 +362,21 @@ export async function deliverPushNotification(
       return { success: true }
     }
 
+    // Get base URL for navigation
+    const baseUrl = getBaseUrl()
+
+    // Determine URL based on notification type
+    let url = `${baseUrl}/member`
+    if (notification.type === 'new_message') {
+      url = `${baseUrl}/member/messages`
+    } else if (notification.type === 'donation_confirmed' || notification.type === 'donation_failed') {
+      url = `${baseUrl}/member/donations`
+    } else if (notification.type === 'event_created' || notification.type === 'event_updated') {
+      url = notification.related_entity_id
+        ? `${baseUrl}/events/${notification.related_entity_id}`
+        : `${baseUrl}/member`
+    }
+
     // Prepare push payload
     const payload = {
       title: notification.title,
@@ -293,24 +390,9 @@ export async function deliverPushNotification(
         relatedEntityType: notification.related_entity_type,
         relatedEntityId: notification.related_entity_id,
         metadata: notification.metadata || {},
+        url: url,
       },
-      requireInteraction: notification.type === 'donation_confirmed' || notification.type === 'message_received',
-    }
-
-    // Get base URL for navigation
-    const baseUrl = getBaseUrl()
-
-    // Add click action URL based on notification type
-    if (notification.type === 'message_received') {
-      payload.data.url = `${baseUrl}/member/messages`
-    } else if (notification.type === 'donation_confirmed' || notification.type === 'donation_failed') {
-      payload.data.url = `${baseUrl}/member/donations`
-    } else if (notification.type === 'event_created' || notification.type === 'event_updated') {
-      payload.data.url = notification.related_entity_id
-        ? `${baseUrl}/events/${notification.related_entity_id}`
-        : `${baseUrl}/member`
-    } else {
-      payload.data.url = `${baseUrl}/member`
+      requireInteraction: notification.type === 'donation_confirmed' || notification.type === 'new_message',
     }
 
     // Send push to all user's devices
@@ -340,6 +422,8 @@ export async function deliverNotification(
   notificationId: string
 ): Promise<{ emailSent: boolean; pushSent: boolean }> {
   try {
+    console.log('📧 deliverNotification called for notificationId:', notificationId)
+    
     // Fetch notification from database
     const { data: notification, error } = await supabaseAdmin
       .from('notifications')
@@ -348,12 +432,22 @@ export async function deliverNotification(
       .single()
 
     if (error || !notification) {
-      console.error('Error fetching notification:', error)
+      console.error('❌ Error fetching notification:', error)
+      console.error('   Notification ID:', notificationId)
       return { emailSent: false, pushSent: false }
     }
 
+    console.log('📧 Notification fetched:', {
+      id: notification.id,
+      type: notification.type,
+      userId: notification.user_id,
+      title: notification.title,
+    })
+
     // Deliver email
+    console.log('📧 Starting email delivery...')
     const emailResult = await deliverEmailNotification(notification)
+    console.log('📧 Email delivery completed:', emailResult)
 
     // Deliver push (TODO: implement)
     const pushResult = await deliverPushNotification(notification)
@@ -364,6 +458,8 @@ export async function deliverNotification(
     }
   } catch (error: any) {
     console.error('❌ Exception in deliverNotification:', error)
+    console.error('   Error message:', error.message)
+    console.error('   Error stack:', error.stack)
     return { emailSent: false, pushSent: false }
   }
 }

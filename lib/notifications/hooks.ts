@@ -7,6 +7,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import * as crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -71,9 +72,15 @@ async function createNotification(
     // Trigger email/push delivery asynchronously (don't await to avoid blocking)
     // Import delivery service dynamically to avoid circular dependencies
     import('./delivery-service').then(({ deliverNotification }) => {
-      deliverNotification(data.id).catch((error) => {
-        console.error('Error delivering notification:', error)
-      })
+      console.log('📧 Starting email delivery for notification:', data.id)
+      deliverNotification(data.id)
+        .then((result) => {
+          console.log('📧 Email delivery result:', result)
+        })
+        .catch((error) => {
+          console.error('❌ Error delivering notification:', error)
+          console.error('   Error stack:', error.stack)
+        })
     })
     
     return data
@@ -108,7 +115,7 @@ export async function onMessageCreated(params: {
     // Create notification for recipient
     await createNotification(
       recipientId,
-      'message_received',
+      'new_message',
       subject ? `New message: ${subject}` : 'New message received',
       `${senderName} sent you a message${subject ? `: ${subject}` : ''}`,
       {
@@ -142,10 +149,45 @@ export async function onDonationConfirmed(params: {
 }) {
   const { donationId, userId, donorName, donorEmail, amount, currency, mosqueId, mosqueCode } = params
 
+  console.log('📧 onDonationConfirmed called with:', {
+    donationId,
+    userId,
+    donorEmail,
+    amount,
+    currency,
+    mosqueId,
+  })
+
   try {
+    // Get base URL for receipt link
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+    
+    // Generate secure token for receipt access
+    const secret = process.env.RECEIPT_SECRET || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'default-secret'
+    const hmac = crypto.createHmac('sha256', secret)
+    hmac.update(donationId)
+    const token = hmac.digest('hex').substring(0, 32)
+    
+    // Link to PDF receipt endpoint with token
+    const receiptUrl = `${baseUrl}/api/donations/${donationId}/receipt?token=${token}`
+
+    // Get mosque name if mosqueId is provided
+    let mosqueName: string | undefined
+    if (mosqueId) {
+      const { data: mosque } = await supabaseAdmin
+        .from('mosques')
+        .select('name')
+        .eq('id', mosqueId)
+        .single()
+      mosqueName = mosque?.name
+      console.log('📧 Mosque name found:', mosqueName)
+    }
+
     // If user is logged in, notify them
     if (userId) {
-      await createNotification(
+      console.log('📧 Creating notification for user:', userId)
+      const notification = await createNotification(
         userId,
         'donation_confirmed',
         'Donation Confirmed',
@@ -156,10 +198,23 @@ export async function onDonationConfirmed(params: {
           currency,
           mosque_id: mosqueId,
           mosque_code: mosqueCode,
+          mosque_name: mosqueName,
+          receipt_url: receiptUrl,
         },
         'donation',
         donationId
       )
+      if (notification) {
+        console.log('✅ Notification created successfully:', notification.id)
+      } else {
+        console.error('❌ Failed to create notification - notification is null')
+      }
+    } else if (donorEmail) {
+      console.warn('⚠️ No userId provided but donorEmail exists:', donorEmail)
+      console.warn('   This is an anonymous donation - email will not be sent automatically')
+      console.warn('   Consider implementing direct email sending for anonymous donations if needed')
+    } else {
+      console.warn('⚠️ No userId and no donorEmail - cannot send notification')
     }
 
     // Also notify admins (optional - you may want to filter this)
@@ -204,7 +259,10 @@ export async function onDonationConfirmed(params: {
 
     console.log('✅ onDonationConfirmed hook executed')
   } catch (error: any) {
-    console.error('Error in onDonationConfirmed hook:', error)
+    console.error('❌ Error in onDonationConfirmed hook:', error)
+    console.error('   Error message:', error.message)
+    console.error('   Error stack:', error.stack)
+    throw error // Re-throw to ensure webhook handler sees the error
   }
 }
 

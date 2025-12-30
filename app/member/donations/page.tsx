@@ -158,117 +158,38 @@ export default function DonationsHistoryPage() {
 
   const handleDownloadReceipt = async (donationId: string) => {
     try {
-      // Fetch receipt data
-      const response: any = await authenticatedGet(`/api/donations/${donationId}/receipt`)
+      // Get the auth token for the request
+      const { data: { session } } = await supabase.auth.getSession()
       
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to fetch receipt data')
+      if (!session) {
+        throw new Error('You must be logged in to download receipts')
       }
 
-      const receipt = response.data
+      // Fetch PDF directly from API
+      const response = await fetch(`/api/donations/${donationId}/receipt`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
 
-      // Dynamically import jspdf for client-side PDF generation
-      const { jsPDF } = await import('jspdf')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch receipt')
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob()
       
-      const doc = new jsPDF()
-      let yPos = 20
-
-      // Header
-      doc.setFontSize(24)
-      doc.text('DONATION RECEIPT', 105, yPos, { align: 'center' })
-      yPos += 15
-
-      // Receipt Number and Date
-      doc.setFontSize(12)
-      doc.text(`Receipt Number: ${receipt.receipt_number}`, 105, yPos, { align: 'center' })
-      yPos += 7
-      doc.text(`Date: ${new Date(receipt.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 105, yPos, { align: 'center' })
-      yPos += 15
-
-      // Donor Information
-      doc.setFontSize(14)
-      doc.setFont(undefined, 'bold')
-      doc.text('DONOR INFORMATION', 20, yPos)
-      doc.setFont(undefined, 'normal')
-      yPos += 10
-      doc.setFontSize(12)
-      doc.text(`Name: ${receipt.donor.name}`, 20, yPos)
-      yPos += 7
-      if (receipt.donor.email) {
-        doc.text(`Email: ${receipt.donor.email}`, 20, yPos)
-        yPos += 7
-      }
-      yPos += 5
-
-      // Donation Details
-      doc.setFontSize(14)
-      doc.setFont(undefined, 'bold')
-      doc.text('DONATION DETAILS', 20, yPos)
-      doc.setFont(undefined, 'normal')
-      yPos += 10
-      doc.setFontSize(12)
-      doc.text(`Amount: ${receipt.donation.currency.toUpperCase()} ${Number(receipt.donation.amount).toFixed(2)}`, 20, yPos)
-      yPos += 7
-      doc.text(`Purpose: ${receipt.donation.purpose}`, 20, yPos)
-      yPos += 7
-      if (receipt.donation.campaign) {
-        doc.text(`Campaign: ${receipt.donation.campaign}`, 20, yPos)
-        yPos += 7
-      }
-      yPos += 5
-
-      // Recipient
-      doc.setFontSize(14)
-      doc.setFont(undefined, 'bold')
-      doc.text('RECIPIENT', 20, yPos)
-      doc.setFont(undefined, 'normal')
-      yPos += 10
-      doc.setFontSize(12)
-      doc.text(receipt.recipient.name, 20, yPos)
-      yPos += 7
-      if (receipt.recipient.address) {
-        doc.text(receipt.recipient.address, 20, yPos)
-        yPos += 7
-      }
-      if (receipt.recipient.email) {
-        doc.text(`Email: ${receipt.recipient.email}`, 20, yPos)
-        yPos += 7
-      }
-      if (receipt.recipient.phone) {
-        doc.text(`Phone: ${receipt.recipient.phone}`, 20, yPos)
-        yPos += 7
-      }
-      yPos += 5
-
-      // Payment Information
-      doc.setFontSize(14)
-      doc.setFont(undefined, 'bold')
-      doc.text('PAYMENT INFORMATION', 20, yPos)
-      doc.setFont(undefined, 'normal')
-      yPos += 10
-      doc.setFontSize(12)
-      doc.text(`Provider: ${receipt.payment.provider.toUpperCase()}`, 20, yPos)
-      yPos += 7
-      doc.text(`Transaction ID: ${receipt.payment.transaction_id}`, 20, yPos)
-      yPos += 7
-      doc.text(`Payment Date: ${new Date(receipt.payment.payment_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 20, yPos)
-      yPos += 15
-
-      // Footer
-      doc.setFontSize(12)
-      doc.setFont(undefined, 'bold')
-      doc.text('Thank you for your generous donation!', 105, yPos, { align: 'center' })
-      doc.setFont(undefined, 'normal')
-      yPos += 10
-      doc.setFontSize(10)
-      doc.text(receipt.organization.name, 105, yPos, { align: 'center' })
-      yPos += 5
-      doc.text(receipt.organization.email, 105, yPos, { align: 'center' })
-      yPos += 5
-      doc.text(receipt.organization.website, 105, yPos, { align: 'center' })
-
-      // Save PDF
-      doc.save(`receipt-${receipt.receipt_number}.pdf`)
+      // Create a download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `receipt-${donationId.substring(0, 8).toUpperCase()}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
 
       toast({
         title: "Receipt Downloaded",
