@@ -644,6 +644,10 @@ export default function MemberDashboard() {
         <Tabs defaultValue="subscriptions" className="space-y-6">
           <TabsList>
             <TabsTrigger value="subscriptions">My Subscriptions</TabsTrigger>
+            <TabsTrigger value="coupons">
+              <Ticket className="h-4 w-4 mr-2" />
+              Coupons
+            </TabsTrigger>
             <TabsTrigger value="donations">Donations</TabsTrigger>
             <TabsTrigger value="messages" className="relative">
               Messages
@@ -901,6 +905,129 @@ export default function MemberDashboard() {
                         Add Payment Method
                       </Button>
                     </AddPaymentMethodDialog>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="coupons" className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Coupon Directory</h3>
+              <p className="text-sm text-muted-foreground mb-6">Browse, save, and redeem coupons from Muslim businesses</p>
+              
+              {/* Quick Action Cards */}
+              <div className="grid gap-4 md:grid-cols-3 mb-6">
+                <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
+                  <Link href="/coupons">
+                    <CardHeader className="flex flex-row items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Ticket className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-base">Browse Coupons</CardTitle>
+                        <CardDescription>Discover deals & offers</CardDescription>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                  </Link>
+                </Card>
+
+                <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
+                  <Link href="/user/saved-coupons">
+                    <CardHeader className="flex flex-row items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Heart className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-base">Saved Coupons</CardTitle>
+                        <CardDescription>Your favorite deals</CardDescription>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                  </Link>
+                </Card>
+
+                <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
+                  <Link href="/user/redemptions">
+                    <CardHeader className="flex flex-row items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <FileText className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-base">My Redemptions</CardTitle>
+                        <CardDescription>Redemption history</CardDescription>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                  </Link>
+                </Card>
+              </div>
+
+              {/* Show "My Coupons" section only if user owns coupon subscriptions */}
+              {subscriptions.some(s => s.type === 'coupon') && (
+                <>
+                  <div className="border-t pt-6 mt-6">
+                    <h3 className="text-lg font-semibold text-foreground mb-4">My Coupons</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Manage your coupon listings
+                    </p>
+                    
+                    <div className="grid gap-4">
+                      {subscriptions
+                        .filter(s => s.type === 'coupon')
+                        .map((subscription: any) => {
+                          const couponName = subscription.entity?.title || 'Unnamed Coupon'
+                          const status = subscription.app_status
+                          
+                          return (
+                            <Card key={subscription.id}>
+                              <CardHeader>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                                      <Ticket className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <div>
+                                      <CardTitle className="text-base">{couponName}</CardTitle>
+                                      <CardDescription>
+                                        {status === 'active' && '🟢 Active'}
+                                        {status === 'pending_verification' && '🟡 Pending Review'}
+                                        {status === 'cancelled' && '🔴 Cancelled'}
+                                      </CardDescription>
+                                    </div>
+                                  </div>
+                                  <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/member/subscription/${subscription.id}`}>
+                                      Manage
+                                      <ChevronRight className="h-4 w-4 ml-2" />
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </CardHeader>
+                            </Card>
+                          )
+                        })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Call to action if user has no coupons */}
+              {!subscriptions.some(s => s.type === 'coupon') && (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <Ticket className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Create Your First Coupon</h3>
+                    <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
+                      Start offering deals to the Muslim community. Create a coupon listing for just ${(pricing.pricing_coupon / 100).toFixed(0)}/month.
+                    </p>
+                    <Button asChild>
+                      <Link href="/member/subscribe/coupon">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Coupon
+                      </Link>
+                    </Button>
                   </CardContent>
                 </Card>
               )}
