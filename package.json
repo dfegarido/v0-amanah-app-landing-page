@@ -16,7 +16,13 @@
     "test:e2e:mobile": "playwright test --project='Mobile Chrome'",
     "test:e2e:report": "playwright show-report",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:webkit": "playwright test --project=webkit"
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "cypress:run:chrome": "CYPRESS_VERIFY_TIMEOUT=100000 cypress run --browser chrome",
+    "cypress:run:electron": "cypress run --browser electron",
+    "cypress:run:firefox": "cypress run --browser firefox",
+    "cypress:run:headless": "cypress run --headless"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -83,9 +89,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
+    "@testing-library/cypress": "^10.1.0",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cypress": "^13.7.0",
     "dotenv": "^17.2.3",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",

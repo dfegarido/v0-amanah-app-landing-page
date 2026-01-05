@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireAuth, successResponse, errorResponse } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin, createActivityLog } from '@/lib/admin-helpers'
 
 interface RouteParams {
   params: Promise<{
@@ -30,21 +31,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const supabase = getServerSupabase(request)
 
     // Use service role key to bypass RLS for admin operations
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseAdmin = getSupabaseAdmin()
 
     // Get subscription to find the entity type (use admin client to bypass RLS)
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
-      .select('type, user_id')
+      .select('type, user_id, status, app_status')
       .eq('id', id)
       .single()
 
@@ -105,6 +97,63 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         console.error('Error updating entity status:', entityError)
         return errorResponse('Failed to update entity status', 500)
       }
+
+      // Create activity log for entity status change
+      let entityName = null
+      if (subscription.type === 'mosque') {
+        const { data } = await supabaseAdmin.from('mosques').select('name').eq('subscription_id', id).single()
+        entityName = data?.name
+      } else if (subscription.type === 'business') {
+        const { data } = await supabaseAdmin.from('businesses').select('name').eq('subscription_id', id).single()
+        entityName = data?.name
+      } else if (subscription.type === 'nonprofit') {
+        const { data } = await supabaseAdmin.from('nonprofits').select('name').eq('subscription_id', id).single()
+        entityName = data?.name
+      }
+
+      const action = entity_status === 'active' ? 'subscription_approved' : 
+                    entity_status === 'rejected' ? 'subscription_rejected' : 'other'
+      const actionDescription = `Updated ${subscription.type} status to ${entity_status}`
+
+      const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined
+      const userAgent = request.headers.get('user-agent') || undefined
+
+      await createActivityLog({
+        adminId: authResult.user.id,
+        action: action as any,
+        actionDescription,
+        entityType: subscription.type,
+        entityId: id,
+        entityName: entityName || undefined,
+        metadata: {
+          oldStatus: subscription.status,
+          newStatus: entity_status,
+          app_status: app_status || null
+        },
+        ipAddress,
+        userAgent
+      })
+    }
+
+    // Create activity log for app_status change
+    if (app_status) {
+      const actionDescription = `Updated subscription app_status to ${app_status}`
+      const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined
+      const userAgent = request.headers.get('user-agent') || undefined
+
+      await createActivityLog({
+        adminId: authResult.user.id,
+        action: app_status === 'active' ? 'subscription_approved' : 'other',
+        actionDescription,
+        entityType: 'subscription',
+        entityId: id,
+        metadata: {
+          oldAppStatus: subscription.status,
+          newAppStatus: app_status
+        },
+        ipAddress,
+        userAgent
+      })
     }
 
     return successResponse({

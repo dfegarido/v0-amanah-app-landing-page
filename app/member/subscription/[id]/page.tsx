@@ -915,6 +915,41 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
+  const getAppStatusBadge = (appStatus: string) => {
+    // Green for approved/active, Red for rejected/removed/cancelled
+    switch (appStatus) {
+      case "active":
+        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20 font-medium">Approved</Badge>
+      case "pending_verification":
+        return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Pending Verification</Badge>
+      case "removed":
+        return <Badge className="bg-red-500/10 text-red-500 border-red-500/20 font-medium">Rejected</Badge>
+      case "cancelled":
+        return <Badge className="bg-red-500/10 text-red-500 border-red-500/20 font-medium">Rejected</Badge>
+      case "update_pending":
+        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Update Pending</Badge>
+      default:
+        return <Badge variant="outline">{appStatus || "Unknown"}</Badge>
+    }
+  }
+
+  const getAppStatusText = (appStatus: string) => {
+    switch (appStatus) {
+      case "active":
+        return "Approved"
+      case "pending_verification":
+        return "Pending Verification"
+      case "removed":
+        return "Rejected"
+      case "cancelled":
+        return "Rejected"
+      case "update_pending":
+        return "Update Pending"
+      default:
+        return appStatus || "Unknown"
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -933,6 +968,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   {subscription.entity?.name || subscription.entity?.title || formData.name || "Unnamed"}
                 </h1>
                 {getStatusBadge(subscription.status)}
+                {subscription.app_status && getAppStatusBadge(subscription.app_status)}
                 {subscription.entity?.status && subscription.entity.status !== subscription.status && (
                   <Badge variant="outline">{subscription.entity.status}</Badge>
                 )}
@@ -962,6 +998,52 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
             </CardContent>
           </Card>
         )}
+
+        {/* Subscription Status Info */}
+        <Card className="mb-6 border-l-4" style={{
+          borderLeftColor: subscription.app_status === 'active' ? '#22c55e' : 
+                          (subscription.app_status === 'removed' || subscription.app_status === 'cancelled') ? '#ef4444' : 
+                          '#eab308'
+        }}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Subscription Status
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Current approval status of your listing
+                </CardDescription>
+              </div>
+              {subscription.app_status && getAppStatusBadge(subscription.app_status)}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <span className="text-sm font-medium text-foreground">
+                  {getAppStatusText(subscription.app_status)}
+                </span>
+              </div>
+              {subscription.app_status === 'pending_verification' && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Your listing is under review. You will be notified once it's approved.
+                </p>
+              )}
+              {subscription.app_status === 'active' && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Your listing has been approved and is live on the platform.
+                </p>
+              )}
+              {(subscription.app_status === 'removed' || subscription.app_status === 'cancelled') && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Your listing has been rejected. Please contact support for more information.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Subscription Details */}
         <Card className="mb-6">

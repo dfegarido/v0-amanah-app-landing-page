@@ -32,10 +32,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedGet, authenticatedDelete } from "@/lib/api-client"
+import { authenticatedGet, authenticatedDelete, authenticatedPost } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
 import { AddPaymentMethodDialog } from "@/components/add-payment-method-dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { format } from "date-fns"
 
 export default function MemberDashboard() {
   const router = useRouter()
@@ -58,6 +63,42 @@ export default function MemberDashboard() {
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [messages, setMessages] = useState<any[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
+
+  // Push Notifications state
+  const [pushNotifications, setPushNotifications] = useState<any[]>([])
+  const [loadingPushNotifications, setLoadingPushNotifications] = useState(false)
+  const [submittingPushNotification, setSubmittingPushNotification] = useState(false)
+  
+  // Push notification form state
+  const [pushForm, setPushForm] = useState({
+    mosque_subscription_id: '',
+    title: '',
+    message: '',
+    scheduled_date: undefined as Date | undefined,
+    scheduled_time: '',
+    timezone: 'America/New_York'
+  })
+  
+  // Time picker state
+  const [timePickerOpen, setTimePickerOpen] = useState(false)
+  const [selectedHour, setSelectedHour] = useState('12')
+  const [selectedMinute, setSelectedMinute] = useState('00')
+  const [selectedPeriod, setSelectedPeriod] = useState('PM')
+  
+  // Update scheduled_time when time picker values change
+  const updateScheduledTime = (hour: string, minute: string, period: string) => {
+    let hour24 = parseInt(hour)
+    if (period === 'PM' && hour24 !== 12) {
+      hour24 += 12
+    } else if (period === 'AM' && hour24 === 12) {
+      hour24 = 0
+    }
+    const timeString = `${hour24.toString().padStart(2, '0')}:${minute}`
+    setPushForm({ ...pushForm, scheduled_time: timeString })
+    setSelectedHour(hour)
+    setSelectedMinute(minute)
+    setSelectedPeriod(period)
+  }
 
   // Payment method state
   const [paymentMethod, setPaymentMethod] = useState<any>(null)
@@ -284,6 +325,114 @@ export default function MemberDashboard() {
     }
   }
 
+  // Fetch push notifications
+  const fetchPushNotifications = async () => {
+    if (!user) return
+    
+    try {
+      setLoadingPushNotifications(true)
+      const response: any = await authenticatedGet('/api/push-notifications')
+      if (response.success && response.data) {
+        setPushNotifications(response.data.requests || [])
+      }
+    } catch (error) {
+      console.error('Error fetching push notifications:', error)
+    } finally {
+      setLoadingPushNotifications(false)
+    }
+  }
+
+  // Submit push notification request
+  const handleSubmitPushNotification = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!pushForm.mosque_subscription_id || !pushForm.title || !pushForm.message || 
+        !pushForm.scheduled_date || !pushForm.scheduled_time) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setSubmittingPushNotification(true)
+      
+      // Get mosque details
+      const mosqueSub = subscriptions.find(s => s.id === pushForm.mosque_subscription_id)
+      if (!mosqueSub) {
+        toast({
+          title: "Error",
+          description: "Selected mosque not found",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Format date as YYYY-MM-DD
+      const formattedDate = format(pushForm.scheduled_date, 'yyyy-MM-dd')
+
+      const response: any = await authenticatedPost('/api/push-notifications', {
+        mosque_subscription_id: pushForm.mosque_subscription_id,
+        mosque_code: mosqueSub.mosqueCode,
+        mosque_name: mosqueSub.name,
+        title: pushForm.title,
+        message: pushForm.message,
+        scheduled_date: formattedDate,
+        scheduled_time: pushForm.scheduled_time,
+        timezone: pushForm.timezone
+      })
+
+      if (response.success) {
+        toast({
+          title: "Success!",
+          description: "Push notification request submitted for admin review",
+        })
+        
+        // Reset form
+        setPushForm({
+          mosque_subscription_id: '',
+          title: '',
+          message: '',
+          scheduled_date: undefined,
+          scheduled_time: '',
+          timezone: 'America/New_York'
+        })
+        
+        // Reset time picker
+        setSelectedHour('12')
+        setSelectedMinute('00')
+        setSelectedPeriod('PM')
+        
+        // Refresh push notifications
+        await fetchPushNotifications()
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to submit push notification request",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      console.error('Error submitting push notification:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit push notification request",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmittingPushNotification(false)
+    }
+  }
+
+  // Fetch push notifications when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchPushNotifications()
+    }
+  }, [user])
+
   const handleRemovePaymentMethod = async () => {
     if (!confirm('Are you sure you want to remove your payment method?')) {
       return
@@ -455,6 +604,18 @@ export default function MemberDashboard() {
                 </Badge>
               )}
             </TabsTrigger>
+            {/* Only show Push Notifications tab if user has a mosque subscription */}
+            {subscriptions.some(s => s.type === 'mosque') && (
+              <TabsTrigger value="push-notifications" className="relative">
+                <Bell className="h-4 w-4 mr-2" />
+                Push Notifications
+                {pushNotifications.filter(p => p.status === 'pending').length > 0 && (
+                  <Badge className="ml-2 h-5 min-w-5 flex items-center justify-center px-1.5 bg-primary">
+                    {pushNotifications.filter(p => p.status === 'pending').length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="subscriptions" className="space-y-8">
@@ -526,7 +687,16 @@ export default function MemberDashboard() {
 
             {/* Current Subscriptions */}
             <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Your Subscriptions</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">Your Subscriptions</h3>
+                {subscriptions.length > 0 && (
+                  <Button variant="outline" asChild>
+                    <Link href="/member/subscriptions">
+                      View All ({subscriptions.length})
+                    </Link>
+                  </Button>
+                )}
+              </div>
               {loadingSubscriptions ? (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
@@ -546,7 +716,10 @@ export default function MemberDashboard() {
                 </Card>
               ) : (
                 <div className="space-y-4">
-                  {subscriptions.map((subscription) => (
+                  {subscriptions
+                    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+                    .slice(0, 5)
+                    .map((subscription) => (
                     <Card key={subscription.id} className="transition-all hover:shadow-md">
                       <Link href={`/member/subscription/${subscription.id}`}>
                         <CardHeader className="flex flex-row items-center gap-4">
@@ -591,6 +764,24 @@ export default function MemberDashboard() {
                       </Link>
                     </Card>
                   ))}
+                  {subscriptions.length > 5 && (
+                    <div className="pt-2">
+                      <Button variant="outline" className="w-full" asChild>
+                        <Link href="/member/subscriptions">
+                          View All Subscriptions ({subscriptions.length})
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                  {subscriptions.length > 0 && subscriptions.length <= 5 && (
+                    <div className="pt-2">
+                      <Button variant="outline" className="w-full" asChild>
+                        <Link href="/member/subscriptions">
+                          View All Subscriptions ({subscriptions.length})
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -899,6 +1090,303 @@ export default function MemberDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Push Notifications Tab - Only visible if user has mosque subscription */}
+          {subscriptions.some(s => s.type === 'mosque') && (
+            <TabsContent value="push-notifications" className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Push Notification Requests</h3>
+                <p className="text-sm text-muted-foreground">
+                  Request to send a push notification to the Amanah community. Limited to 1 per month per mosque, must be scheduled 7+ days in advance.
+                </p>
+              </div>
+
+              {/* Submit New Request Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Submit New Request</CardTitle>
+                  <CardDescription>Create a new push notification request for admin review</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmitPushNotification} className="space-y-4">
+                    <div>
+                      <Label htmlFor="mosque">Select Mosque *</Label>
+                      <Select
+                        value={pushForm.mosque_subscription_id}
+                        onValueChange={(value) => setPushForm({ ...pushForm, mosque_subscription_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a mosque" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {/* Only shows current user's mosques (subscriptions are already filtered by user_id at API level) */}
+                          {subscriptions
+                            .filter(s => s.type === 'mosque' && s.status === 'active')
+                            .map(mosque => (
+                              <SelectItem key={mosque.id} value={mosque.id}>
+                                {mosque.name} (Code: #{mosque.mosqueCode})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="title">Title *</Label>
+                      <Input
+                        id="title"
+                        placeholder="e.g., Ramadan Schedule 2025"
+                        value={pushForm.title}
+                        onChange={(e) => setPushForm({ ...pushForm, title: e.target.value })}
+                        maxLength={100}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">{pushForm.title.length}/100 characters</p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="message">Message *</Label>
+                      <Textarea
+                        id="message"
+                        placeholder="e.g., Join us for Taraweeh prayers starting March 1st at 8:30 PM..."
+                        value={pushForm.message}
+                        onChange={(e) => setPushForm({ ...pushForm, message: e.target.value })}
+                        rows={4}
+                        maxLength={300}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">{pushForm.message.length}/300 characters</p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Scheduled Date *</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-full justify-start text-left font-normal ${
+                                !pushForm.scheduled_date && "text-muted-foreground"
+                              }`}
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {pushForm.scheduled_date ? format(pushForm.scheduled_date, "PPP") : "Pick a date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={pushForm.scheduled_date}
+                              onSelect={(date) => setPushForm({ ...pushForm, scheduled_date: date })}
+                              disabled={(date) => {
+                                const sevenDaysFromNow = new Date()
+                                sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+                                return date < sevenDaysFromNow
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs text-muted-foreground mt-1">Must be 7+ days in advance</p>
+                      </div>
+
+                      <div>
+                        <Label>Scheduled Time *</Label>
+                        <Popover open={timePickerOpen} onOpenChange={setTimePickerOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={`w-full justify-start text-left font-normal ${
+                                !pushForm.scheduled_time && "text-muted-foreground"
+                              }`}
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {pushForm.scheduled_time || "Select time"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-4" align="start">
+                            <div className="space-y-3">
+                              <div className="text-sm font-medium">Select Time</div>
+                              <div className="flex items-center gap-2">
+                                {/* Hour selector */}
+                                <Select
+                                  value={selectedHour}
+                                  onValueChange={(value) => updateScheduledTime(value, selectedMinute, selectedPeriod)}
+                                >
+                                  <SelectTrigger className="w-[70px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Array.from({ length: 12 }, (_, i) => {
+                                      const hour = i + 1
+                                      return (
+                                        <SelectItem key={hour} value={hour.toString()}>
+                                          {hour}
+                                        </SelectItem>
+                                      )
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                                
+                                <span className="text-xl font-semibold">:</span>
+                                
+                                {/* Minute selector */}
+                                <Select
+                                  value={selectedMinute}
+                                  onValueChange={(value) => updateScheduledTime(selectedHour, value, selectedPeriod)}
+                                >
+                                  <SelectTrigger className="w-[70px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {['00', '15', '30', '45'].map((minute) => (
+                                      <SelectItem key={minute} value={minute}>
+                                        {minute}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                
+                                {/* AM/PM selector */}
+                                <Select
+                                  value={selectedPeriod}
+                                  onValueChange={(value) => updateScheduledTime(selectedHour, selectedMinute, value)}
+                                >
+                                  <SelectTrigger className="w-[70px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="AM">AM</SelectItem>
+                                    <SelectItem value="PM">PM</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                onClick={() => setTimePickerOpen(false)}
+                              >
+                                Done
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs text-muted-foreground mt-1">Local time in selected timezone</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="timezone">Timezone</Label>
+                      <Select
+                        value={pushForm.timezone}
+                        onValueChange={(value) => setPushForm({ ...pushForm, timezone: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="America/New_York">Eastern Time (ET)</SelectItem>
+                          <SelectItem value="America/Chicago">Central Time (CT)</SelectItem>
+                          <SelectItem value="America/Denver">Mountain Time (MT)</SelectItem>
+                          <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
+                          <SelectItem value="America/Anchorage">Alaska Time (AKT)</SelectItem>
+                          <SelectItem value="Pacific/Honolulu">Hawaii Time (HT)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button type="submit" disabled={submittingPushNotification} className="w-full">
+                      {submittingPushNotification ? "Submitting..." : "Submit Request"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Request History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Request History</CardTitle>
+                  <CardDescription>View your past push notification requests</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingPushNotifications ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">Loading requests...</p>
+                    </div>
+                  ) : pushNotifications.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No push notification requests yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {pushNotifications.map((request) => (
+                        <div
+                          key={request.id}
+                          className={`p-4 rounded-lg border ${
+                            request.status === 'pending'
+                              ? 'bg-blue-500/10 border-blue-500/20'
+                              : request.status === 'sent'
+                              ? 'bg-green-500/10 border-green-500/20'
+                              : request.status === 'rejected'
+                              ? 'bg-red-500/10 border-red-500/20'
+                              : 'bg-secondary/30 border-border'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-semibold">{request.title}</p>
+                                <Badge
+                                  variant={
+                                    request.status === 'pending'
+                                      ? 'default'
+                                      : request.status === 'sent'
+                                      ? 'default'
+                                      : 'destructive'
+                                  }
+                                  className={
+                                    request.status === 'pending'
+                                      ? 'bg-blue-500'
+                                      : request.status === 'sent'
+                                      ? 'bg-green-500'
+                                      : ''
+                                  }
+                                >
+                                  {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-3">{request.message}</p>
+                              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  <span>
+                                    {new Date(request.scheduled_date).toLocaleDateString()} at {request.scheduled_time}
+                                  </span>
+                                </div>
+                                <span>Mosque: {request.mosque_name}</span>
+                                <span>Requested: {new Date(request.requested_at).toLocaleDateString()}</span>
+                              </div>
+                              {request.status === 'rejected' && request.rejection_reason && (
+                                <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive">
+                                  <strong>Rejection Reason:</strong> {request.rejection_reason}
+                                </div>
+                              )}
+                              {request.status === 'sent' && request.sent_at && (
+                                <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+                                  ✓ Sent on {new Date(request.sent_at).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

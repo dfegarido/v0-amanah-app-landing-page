@@ -205,10 +205,12 @@ export async function POST(request: NextRequest) {
 
     if (entityError) {
       console.error(`Error creating ${type} record:`, entityError)
+      console.error(`Error details:`, JSON.stringify(entityError, null, 2))
+      console.error(`Data sent:`, JSON.stringify(data, null, 2))
       // Rollback: Delete subscription and cancel Stripe subscription
       await supabase.from('subscriptions').delete().eq('id', subscription.id)
       await stripe.subscriptions.cancel(stripeSubscription.id)
-      return errorResponse(`Failed to create ${type} record`, 500)
+      return errorResponse(`Failed to create ${type} record: ${entityError.message || entityError.details || 'Unknown error'}`, 500)
     }
 
     // Get payment intent client secret if needed
@@ -307,40 +309,125 @@ async function createBusinessRecord(supabase: any, subscriptionId: string, userI
 
 // Helper function to create coupon record
 async function createCouponRecord(supabase: any, subscriptionId: string, userId: string, data: any) {
-  return await supabase
+  console.log('createCouponRecord - Raw input data:', JSON.stringify(data, null, 2))
+  console.log('createCouponRecord - Address value:', data.address, 'Type:', typeof data.address)
+  
+  // Format date to YYYY-MM-DD if it's a Date object or ISO string
+  const formatDate = (dateValue: any): string => {
+    if (!dateValue) return new Date().toISOString().split('T')[0]
+    if (typeof dateValue === 'string') {
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return dateValue
+      // Otherwise, try to parse and format
+      const date = new Date(dateValue)
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0]
+      }
+    }
+    if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+      return dateValue.toISOString().split('T')[0]
+    }
+    // Fallback to today
+    return new Date().toISOString().split('T')[0]
+  }
+
+  // Helper to safely get string value with fallback
+  const getRequiredString = (value: any, fallback: string): string => {
+    if (value === null || value === undefined) return fallback
+    const trimmed = String(value).trim()
+    return trimmed || fallback
+  }
+
+  // Ensure all required fields have values
+  const couponData: any = {
+    subscription_id: subscriptionId,
+    user_id: userId,
+    title: getRequiredString(data.title, 'Untitled Coupon'),
+    merchant: getRequiredString(data.merchant, 'Unknown Merchant'),
+    description: getRequiredString(data.description, 'No description provided'),
+    phone: getRequiredString(data.phone, 'N/A'),
+    email: getRequiredString(data.email, 'N/A'),
+    address: getRequiredString(data.address, 'N/A'),
+    start_date: formatDate(data.startDate),
+    status: 'pending'
+  }
+  
+  console.log('Coupon data after processing:', JSON.stringify(couponData, null, 2))
+
+  // Add optional fields
+  if (data.thumbnailDescription && data.thumbnailDescription.trim()) {
+    couponData.thumbnail_description = data.thumbnailDescription.trim()
+  }
+  if (data.popUpText && data.popUpText.trim()) {
+    couponData.pop_up_text = data.popUpText.trim()
+  }
+  if (data.website && data.website.trim()) {
+    couponData.website = data.website.trim()
+  }
+  if (data.redeemLimit) {
+    const limit = parseInt(data.redeemLimit.toString())
+    if (!isNaN(limit)) couponData.redeem_limit = limit
+  }
+  if (data.userRedeemLimit) {
+    const limit = parseInt(data.userRedeemLimit.toString())
+    if (!isNaN(limit)) couponData.user_redeem_limit = limit
+  }
+  if (data.userMonthlyLimit) {
+    const limit = parseInt(data.userMonthlyLimit.toString())
+    if (!isNaN(limit)) couponData.user_monthly_redeem_limit = limit
+  }
+  if (data.userWeeklyLimit) {
+    const limit = parseInt(data.userWeeklyLimit.toString())
+    if (!isNaN(limit)) couponData.user_weekly_redeem_limit = limit
+  }
+  if (data.discountAmount && data.discountAmount.toString().trim()) {
+    couponData.discount_amount = data.discountAmount.toString().trim()
+  }
+  if (data.discountPercentage && data.discountPercentage.toString().trim()) {
+    couponData.discount_percentage = data.discountPercentage.toString().trim()
+  }
+  if (data.couponCode && data.couponCode.trim()) {
+    couponData.coupon_code = data.couponCode.trim()
+  }
+  if (data.redeemCode && data.redeemCode.trim()) {
+    couponData.redeem_code = data.redeemCode.trim()
+  }
+  if (data.prefix && data.prefix.trim()) {
+    couponData.prefix = data.prefix.trim()
+  }
+  if (data.nextNo && data.nextNo.toString().trim()) {
+    couponData.next_no = data.nextNo.toString().trim()
+  }
+  if (data.endDate) {
+    couponData.end_date = formatDate(data.endDate)
+  }
+  if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+    couponData.photos = data.photos.filter((p: any) => p && typeof p === 'string')
+  }
+  if (data.affiliatedMosqueCode && data.affiliatedMosqueCode !== 'none') {
+    const mosqueCode = parseInt(data.affiliatedMosqueCode.toString())
+    if (!isNaN(mosqueCode)) {
+      couponData.affiliated_mosque_code = mosqueCode
+    }
+  }
+
+  console.log('Creating coupon with data:', JSON.stringify(couponData, null, 2))
+
+  const { data: result, error } = await supabase
     .from('coupons')
-    .insert({
-      subscription_id: subscriptionId,
-      user_id: userId,
-      title: data.title,
-      merchant: data.merchant,
-      description: data.description,
-      thumbnail_description: data.thumbnailDescription,
-      pop_up_text: data.popUpText,
-      phone: data.phone,
-      email: data.email,
-      website: data.website,
-      address: data.address,
-      redeem_limit: data.redeemLimit ? parseInt(data.redeemLimit) : null,
-      user_redeem_limit: data.userRedeemLimit ? parseInt(data.userRedeemLimit) : null,
-      user_monthly_redeem_limit: data.userMonthlyLimit ? parseInt(data.userMonthlyLimit) : null,
-      user_weekly_redeem_limit: data.userWeeklyLimit ? parseInt(data.userWeeklyLimit) : null,
-      discount_amount: data.discountAmount,
-      discount_percentage: data.discountPercentage,
-      coupon_code: data.couponCode,
-      redeem_code: data.redeemCode,
-      prefix: data.prefix,
-      next_no: data.nextNo,
-      start_date: data.startDate,
-      end_date: data.endDate,
-      photos: data.photos || [],
-      affiliated_mosque_code: data.affiliatedMosqueCode && data.affiliatedMosqueCode !== 'none'
-        ? parseInt(data.affiliatedMosqueCode)
-        : null,
-      status: 'pending'
-    })
+    .insert(couponData)
     .select()
     .single()
+
+  if (error) {
+    console.error('Coupon insert error:', error)
+    console.error('Error code:', error.code)
+    console.error('Error message:', error.message)
+    console.error('Error details:', error.details)
+    console.error('Error hint:', error.hint)
+  }
+
+  return { data: result, error }
 }
 
 // Helper function to create nonprofit record
@@ -351,10 +438,10 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
       subscription_id: subscriptionId,
       user_id: userId,
       name: data.orgName || data.name,
-      about: data.about,
-      address: data.address,
+      about: data.about || 'No description provided', // Required field - provide fallback
+      address: data.address || 'Address not provided', // Required field - provide fallback
       email: data.email,
-      phone: data.phone,
+      phone: data.phone || 'Not provided', // Required field - provide fallback
       website: data.website,
       donate_link: data.donateLink,
       social_media: data.socialMedia ? { raw: data.socialMedia } : null,

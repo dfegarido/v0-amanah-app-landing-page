@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users, Loader2 } from "lucide-react"
+import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users, Loader2, Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
@@ -151,6 +155,10 @@ export default function SubscribePage() {
   const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
   
+  // Date picker state for coupons
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  
   // Stripe payment state
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<any>(null)
@@ -171,22 +179,33 @@ export default function SubscribePage() {
   useEffect(() => {
     const fetchMosques = async () => {
       try {
-        const { data, error } = await supabase
-          .from('mosques')
-          .select('id, name, mosque_code, status')
-          .eq('status', 'active')
-          .order('mosque_code', { ascending: true })
-
-        if (!error && data) {
-          setAvailableMosques(data)
+        console.log('[Frontend] Fetching approved mosques for type:', type)
+        // Use API endpoint to get only approved mosques (server-side filtering)
+        const response: any = await authenticatedGet('/api/mosques/approved')
+        
+        console.log('[Frontend] API response:', response)
+        
+        if (response.success && response.data && response.data.mosques) {
+          console.log('[Frontend] Approved mosques fetched:', response.data.mosques.length, 'mosques')
+          console.log('[Frontend] Mosque list:', response.data.mosques.map((m: any) => `#${m.mosque_code} - ${m.name}`))
+          setAvailableMosques(response.data.mosques)
+        } else {
+          console.error('[Frontend] Failed to fetch approved mosques:', response.error)
+          setAvailableMosques([])
         }
       } catch (error) {
-        console.error('Error fetching mosques:', error)
+        console.error('[Frontend] Error fetching mosques:', error)
+        setAvailableMosques([])
       }
     }
 
-    fetchMosques()
-  }, [])
+    // Only fetch if type is business or coupon (they need mosque affiliation)
+    if (type === 'business' || type === 'coupon') {
+      fetchMosques()
+    } else {
+      setAvailableMosques([])
+    }
+  }, [type])
 
   // Get next mosque code (for display only)
   useEffect(() => {
@@ -500,6 +519,32 @@ export default function SubscribePage() {
     setIsProcessing(true)
     
     try {
+      // Validate required fields for coupon
+      if (type === 'coupon') {
+        const requiredFields = ['title', 'merchant', 'description', 'phone', 'email', 'address']
+        const missingFields = requiredFields.filter(field => !formData[field] || formData[field].trim() === '')
+        
+        if (missingFields.length > 0) {
+          toast({
+            title: "Missing required fields",
+            description: `Please fill in: ${missingFields.join(', ')}`,
+            variant: "destructive",
+          })
+          setIsProcessing(false)
+          return
+        }
+        
+        if (!startDate || !formData.startDate) {
+          toast({
+            title: "Start date required",
+            description: "Please select a start date for the coupon",
+            variant: "destructive",
+          })
+          setIsProcessing(false)
+          return
+        }
+      }
+
       // Prepare data based on subscription type
       const subscriptionData = {
         ...formData,
@@ -609,6 +654,31 @@ export default function SubscribePage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value })
+  }
+
+  // Handle date changes for coupon validity period
+  const handleStartDateChange = (date: Date | undefined) => {
+    setStartDate(date)
+    if (date) {
+      // Format date as YYYY-MM-DD for the form data
+      const formattedDate = format(date, 'yyyy-MM-dd')
+      setFormData({ ...formData, startDate: formattedDate })
+    } else {
+      const { startDate, ...rest } = formData
+      setFormData(rest)
+    }
+  }
+
+  const handleEndDateChange = (date: Date | undefined) => {
+    setEndDate(date)
+    if (date) {
+      // Format date as YYYY-MM-DD for the form data
+      const formattedDate = format(date, 'yyyy-MM-dd')
+      setFormData({ ...formData, endDate: formattedDate })
+    } else {
+      const { endDate, ...rest } = formData
+      setFormData(rest)
+    }
   }
 
   const renderDetailsForm = () => {
@@ -857,7 +927,7 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Basic Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="title">Business Title *</Label>
+                <Label htmlFor="title">Business Name *</Label>
                 <Input id="title" placeholder="Enter business name" onChange={handleInputChange} />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -1131,12 +1201,63 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Validity Period</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date *</Label>
-                <Input id="startDate" type="date" onChange={handleInputChange} />
+                <Label>Start Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, "PPP") : "Pick a start date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={handleStartDateChange}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input id="endDate" type="date" onChange={handleInputChange} />
+                <Label>End Date (Optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !endDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, "PPP") : "Pick an end date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={handleEndDateChange}
+                      disabled={(date) => {
+                        const today = new Date(new Date().setHours(0, 0, 0, 0))
+                        // Disable dates before today and before start date
+                        if (startDate) {
+                          return date < today || date < startDate
+                        }
+                        return date < today
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
