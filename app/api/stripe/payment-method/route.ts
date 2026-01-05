@@ -13,6 +13,12 @@ export async function GET(request: NextRequest) {
       return successResponse({ paymentMethod: null }, 'No payment method found')
     }
 
+    // Check if Stripe is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('[Payment Method API] STRIPE_SECRET_KEY not configured')
+      return errorResponse('Stripe is not configured', 503)
+    }
+
     // Get customer's payment methods
     const paymentMethods = await stripe.paymentMethods.list({
       customer: user.stripe_customer_id,
@@ -39,7 +45,15 @@ export async function GET(request: NextRequest) {
       'Payment method retrieved successfully'
     )
   } catch (error: any) {
-    console.error('Get payment method error:', error)
+    console.error('[Payment Method API] Error:', error)
+    
+    // Provide more specific error messages for Stripe errors
+    if (error.type === 'StripeAuthenticationError') {
+      return errorResponse('Stripe authentication failed - check API keys', 500)
+    } else if (error.type === 'StripeConnectionError') {
+      return errorResponse('Unable to connect to Stripe', 503)
+    }
+    
     return errorResponse(error.message || 'Failed to get payment method', 500)
   }
 }

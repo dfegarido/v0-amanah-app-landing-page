@@ -44,10 +44,10 @@ export default function AdminSettingsPage() {
     support_email: 'support@amanah.app',
     contact_phone: '+1 (555) 123-4567',
     website_url: 'https://amanah.app',
-    pricing_mosque: 100,
-    pricing_business: 10,
-    pricing_coupon: 10,
-    pricing_nonprofit: 50,
+    pricing_mosque: 100, // Displayed in dollars in UI
+    pricing_business: 10, // Displayed in dollars in UI
+    pricing_coupon: 10, // Displayed in dollars in UI
+    pricing_nonprofit: 50, // Displayed in dollars in UI
     mosque_kickback_percentage: 10,
     education_fund_percentage: 15,
     notification_email: 'josh@mobileappcity.com',
@@ -80,8 +80,16 @@ export default function AdminSettingsPage() {
         console.log('Settings API response:', response)
         
         if (response.success && response.data) {
-          setSettings(response.data)
-          console.log('Settings loaded successfully')
+          // Convert cents to dollars for display in UI
+          const loadedSettings = {
+            ...response.data,
+            pricing_mosque: response.data.pricing_mosque / 100,
+            pricing_business: response.data.pricing_business / 100,
+            pricing_coupon: response.data.pricing_coupon / 100,
+            pricing_nonprofit: response.data.pricing_nonprofit / 100
+          }
+          setSettings(loadedSettings)
+          console.log('Settings loaded successfully (converted cents to dollars for UI)')
         }
       } catch (error: any) {
         console.error('Error loading settings:', error)
@@ -107,7 +115,17 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      const response = await authenticatedPut('/api/admin/settings', settings) as any
+      // Convert dollars to cents before saving to database
+      const settingsToSave = {
+        ...settings,
+        pricing_mosque: Math.round(settings.pricing_mosque * 100),
+        pricing_business: Math.round(settings.pricing_business * 100),
+        pricing_coupon: Math.round(settings.pricing_coupon * 100),
+        pricing_nonprofit: Math.round(settings.pricing_nonprofit * 100)
+      }
+      
+      console.log('Saving settings (converted to cents):', settingsToSave)
+      const response = await authenticatedPut('/api/admin/settings', settingsToSave) as any
       
       if (response.success) {
         toast({

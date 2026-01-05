@@ -7,12 +7,38 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-12-18.acacia'
 })
 
-// Pricing configuration
-const SUBSCRIPTION_PRICING = {
+// Default pricing configuration (fallback if no settings in database)
+const DEFAULT_SUBSCRIPTION_PRICING = {
   mosque: { amount: 10000, currency: 'usd' }, // $100/month
   business: { amount: 1000, currency: 'usd' }, // $10/month
   coupon: { amount: 1000, currency: 'usd' }, // $10/month
   nonprofit: { amount: 5000, currency: 'usd' } // $50/month
+}
+
+// Fetch pricing from admin settings
+async function getSubscriptionPricing(supabase: any, type: 'mosque' | 'business' | 'coupon' | 'nonprofit') {
+  try {
+    const { data: settings } = await supabase
+      .from('admin_settings')
+      .select('pricing_mosque, pricing_business, pricing_coupon, pricing_nonprofit')
+      .single()
+
+    if (settings) {
+      const pricingMap: Record<string, number> = {
+        mosque: settings.pricing_mosque || DEFAULT_SUBSCRIPTION_PRICING.mosque.amount,
+        business: settings.pricing_business || DEFAULT_SUBSCRIPTION_PRICING.business.amount,
+        coupon: settings.pricing_coupon || DEFAULT_SUBSCRIPTION_PRICING.coupon.amount,
+        nonprofit: settings.pricing_nonprofit || DEFAULT_SUBSCRIPTION_PRICING.nonprofit.amount
+      }
+
+      return { amount: pricingMap[type], currency: 'usd' }
+    }
+  } catch (error) {
+    console.error('[Pricing] Error fetching pricing from settings:', error)
+  }
+
+  // Fallback to default pricing
+  return DEFAULT_SUBSCRIPTION_PRICING[type]
 }
 
 interface CreateSubscriptionRequest {
@@ -23,6 +49,12 @@ interface CreateSubscriptionRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify Stripe key is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('[Stripe] STRIPE_SECRET_KEY is not configured')
+      return errorResponse('Stripe configuration error. Please contact support.', 500)
+    }
+
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
 
@@ -34,6 +66,8 @@ export async function POST(request: NextRequest) {
     const { type, data, paymentMethodId } = body
     const userId = authResult.user.id
 
+    console.log(`[Subscription Create] Type: ${type}, User: ${userId}`)
+
     const supabase = getServerSupabase(request)
 
     // Get or create Stripe customer
@@ -44,6 +78,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (userError || !user) {
+      console.error('[Subscription Create] User not found:', userError)
       return errorResponse('User not found', 404)
     }
 
@@ -51,27 +86,37 @@ export async function POST(request: NextRequest) {
 
     // Create Stripe customer if doesn't exist
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: user.name || undefined,
-        metadata: {
-          user_id: userId
-        }
-      })
-      customerId = customer.id
+      console.log('[Stripe] Creating new customer for:', user.email)
+      try {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          name: user.name || undefined,
+          metadata: {
+            user_id: userId
+          }
+        })
+        customerId = customer.id
+        console.log('[Stripe] Customer created:', customerId)
 
-      // Update user with Stripe customer ID
-      await supabase
-        .from('users')
-        .update({ stripe_customer_id: customerId })
-        .eq('id', userId)
+        // Update user with Stripe customer ID
+        await supabase
+          .from('users')
+          .update({ stripe_customer_id: customerId })
+          .eq('id', userId)
+      } catch (stripeError: any) {
+        console.error('[Stripe] Customer creation failed:', stripeError.message)
+        console.error('[Stripe] Error details:', stripeError)
+        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      }
     }
 
-    // Get pricing for subscription type
-    const pricing = SUBSCRIPTION_PRICING[type]
+    // Get pricing for subscription type from admin settings
+    const pricing = await getSubscriptionPricing(supabase, type)
     if (!pricing) {
       return errorResponse('Invalid subscription type', 400)
     }
+    
+    console.log(`[Pricing] Using ${type} pricing: $${pricing.amount / 100}`)
 
     // Create or get Stripe price
     let stripePriceId: string
@@ -82,49 +127,75 @@ export async function POST(request: NextRequest) {
 
     if (cachedPriceId) {
       stripePriceId = cachedPriceId
+      console.log(`[Stripe] Using cached price ID: ${stripePriceId}`)
     } else {
       // Create a new price
-      const price = await stripe.prices.create({
-        currency: pricing.currency,
-        unit_amount: pricing.amount,
-        recurring: {
-          interval: 'month'
-        },
-        product_data: {
-          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
-        }
-      })
-      stripePriceId = price.id
+      console.log(`[Stripe] Creating new price for ${type}`)
+      try {
+        const price = await stripe.prices.create({
+          currency: pricing.currency,
+          unit_amount: pricing.amount,
+          recurring: {
+            interval: 'month'
+          },
+          product_data: {
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
+          }
+        })
+        stripePriceId = price.id
+        console.log(`[Stripe] Price created: ${stripePriceId}`)
+      } catch (stripeError: any) {
+        console.error('[Stripe] Price creation failed:', stripeError.message)
+        console.error('[Stripe] Error details:', stripeError)
+        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      }
     }
 
     // Attach payment method if provided
     if (paymentMethodId) {
-      await stripe.paymentMethods.attach(paymentMethodId, {
-        customer: customerId
-      })
+      console.log(`[Stripe] Attaching payment method: ${paymentMethodId}`)
+      try {
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: customerId
+        })
 
-      // Set as default payment method
-      await stripe.customers.update(customerId, {
-        invoice_settings: {
-          default_payment_method: paymentMethodId
-        }
-      })
+        // Set as default payment method
+        await stripe.customers.update(customerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId
+          }
+        })
+        console.log('[Stripe] Payment method attached successfully')
+      } catch (stripeError: any) {
+        console.error('[Stripe] Payment method attach failed:', stripeError.message)
+        console.error('[Stripe] Error details:', stripeError)
+        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      }
     }
 
     // Create Stripe subscription
-    const stripeSubscription = await stripe.subscriptions.create({
-      customer: customerId,
-      items: [{ price: stripePriceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: {
-        save_default_payment_method: 'on_subscription'
-      },
-      expand: ['latest_invoice.payment_intent'],
-      metadata: {
-        user_id: userId,
-        subscription_type: type
-      }
-    })
+    console.log(`[Stripe] Creating subscription for customer: ${customerId}`)
+    let stripeSubscription: Stripe.Subscription
+    try {
+      stripeSubscription = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: stripePriceId }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: {
+          save_default_payment_method: 'on_subscription'
+        },
+        expand: ['latest_invoice.payment_intent'],
+        metadata: {
+          user_id: userId,
+          subscription_type: type
+        }
+      })
+      console.log(`[Stripe] Subscription created: ${stripeSubscription.id}`)
+    } catch (stripeError: any) {
+      console.error('[Stripe] Subscription creation failed:', stripeError.message)
+      console.error('[Stripe] Error details:', stripeError)
+      return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+    }
 
     // Create subscription record in database
     const { data: subscription, error: subscriptionError } = await supabase
@@ -258,11 +329,16 @@ async function createMosqueRecord(supabase: any, subscriptionId: string, userId:
         twitter: data.twitter,
         other: data.otherSocial
       },
+      facebook: data.facebook,
+      instagram: data.instagram,
+      twitter: data.twitter,
+      other_social: data.otherSocial,
       logo: data.logo,
       photos: data.photos || [],
       donate_link: data.donateLink,
       prayer_times_link: data.prayerTimesLink,
       sunday_school: data.sundaySchool,
+      sunday_school_link: data.sundaySchoolLink,
       services: data.services,
       committee_members: data.committee,
       description: data.description,
@@ -438,13 +514,30 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
       subscription_id: subscriptionId,
       user_id: userId,
       name: data.orgName || data.name,
-      about: data.about || 'No description provided', // Required field - provide fallback
+      description: data.description || data.about || 'No description provided',
+      about: data.about || data.description || 'No description provided', // Required field - provide fallback
       address: data.address || 'Address not provided', // Required field - provide fallback
+      city: data.city,
+      state: data.state,
+      zip: data.zip,
+      country: data.country || 'USA',
       email: data.email,
       phone: data.phone || 'Not provided', // Required field - provide fallback
       website: data.website,
       donate_link: data.donateLink,
-      social_media: data.socialMedia ? { raw: data.socialMedia } : null,
+      programs_link: data.programsLink,
+      social_media: {
+        facebook: data.facebook,
+        instagram: data.instagram,
+        twitter: data.twitter,
+        other: data.otherSocial
+      },
+      facebook: data.facebook,
+      instagram: data.instagram,
+      twitter: data.twitter,
+      other_social: data.otherSocial,
+      services: data.services,
+      committee_members: data.committee,
       logo: data.logo,
       photos: data.photos || [],
       status: 'pending'

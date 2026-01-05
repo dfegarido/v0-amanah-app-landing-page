@@ -156,6 +156,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   const [showPhotoUpload, setShowPhotoUpload] = useState(false)
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(new Set())
   const [uploadingDocuments, setUploadingDocuments] = useState<Set<string>>(new Set())
+  const [showSaveConfirmDialog, setShowSaveConfirmDialog] = useState(false)
   
   // Refs
   const documentInputRef = useRef<HTMLInputElement>(null)
@@ -193,9 +194,16 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     donateLink: "",
     prayerTimesLink: "",
     sundaySchool: "",
+    sundaySchoolLink: "",
+    programsLink: "",
     services: "",
     committeeMembers: "",
+    committee: "",
     about: "",
+    facebook: "",
+    instagram: "",
+    twitter: "",
+    otherSocial: "",
   })
 
   // Fetch subscription data
@@ -211,6 +219,11 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
           
           if (foundSubscription) {
             setSubscription(foundSubscription)
+            
+            // Debug logging
+            console.log('[Subscription Details] Loaded subscription:', foundSubscription)
+            console.log('[Subscription Details] Entity:', foundSubscription.entity)
+            console.log('[Subscription Details] Logo:', foundSubscription.entity?.logo)
             
             // Set form data from entity
             const entity = foundSubscription.entity
@@ -239,16 +252,30 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 country: entity.country || "",
                 merchant: entity.merchant || "",
                 discount: entity.discount_amount || entity.discount_percentage || "",
+                discountAmount: entity.discount_amount || "",
+                discountPercentage: entity.discount_percentage || "",
+                discountDetails: entity.discount_details || "",
                 redeemCode: entity.redeem_code || "",
                 redeemLimit: entity.redeem_limit || "",
+                redemptionType: entity.redemption_type || "unlimited",
+                redeemPeriod: entity.redeem_period || "",
+                thumbnailDescription: entity.thumbnail_description || "",
+                popUpText: entity.pop_up_text || "",
                 startDate: entity.start_date || "",
                 endDate: entity.end_date || "",
                 donateLink: entity.donate_link || "",
                 prayerTimesLink: entity.prayer_times_link || "",
                 sundaySchool: entity.sunday_school || "",
+                sundaySchoolLink: entity.sunday_school_link || "",
+                programsLink: entity.programs_link || "",
                 services: entity.services || "",
                 committeeMembers: entity.committee_members || "",
+                committee: entity.committee || "",
                 about: entity.about || "",
+                facebook: entity.facebook || "",
+                instagram: entity.instagram || "",
+                twitter: entity.twitter || "",
+                otherSocial: entity.other_social || "",
               })
             }
           } else {
@@ -279,8 +306,18 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   }
 
   const handleSaveChanges = () => {
-    alert("Changes saved successfully! Your updates will be reviewed and applied within 1-2 business days.")
+    setShowSaveConfirmDialog(true)
+  }
+
+  const handleConfirmSave = () => {
+    // TODO: Implement API call to save changes
+    setShowSaveConfirmDialog(false)
     setIsEditing(false)
+    setShowPhotoUpload(false)
+    toast({
+      title: "Changes Submitted",
+      description: "Your updates will be reviewed and applied within 1-2 business days.",
+    })
   }
 
   const handleInputChange = (field: string, value: string) => {
@@ -350,6 +387,103 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       }
       reader.onerror = () => reject(new Error('Failed to read file'))
     })
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !subscription) return
+    
+    const file = e.target.files[0]
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPG, JPEG, or PNG file",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Create temp preview URL
+    const tempPreviewUrl = URL.createObjectURL(file)
+    
+    // Update local state immediately
+    setSubscription({
+      ...subscription,
+      entity: {
+        ...subscription.entity,
+        logo: tempPreviewUrl
+      }
+    })
+    
+    try {
+      // Process and upload
+      const processedFile = await resizeImage(file, 1) // Smaller size for logos
+      
+      const fileName = `logo-${subscription.type}-${Date.now()}-${Math.random().toString(36).substring(7)}.webp`
+      const filePath = `${getTableName(subscription.type)}/${fileName}`
+      
+      const { data, error: uploadError } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, processedFile, {
+          contentType: 'image/webp',
+          upsert: false
+        })
+      
+      if (uploadError) {
+        throw uploadError
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+      
+      // Update database
+      const tableName = getTableName(subscription.type)
+      const { error: dbError } = await supabase
+        .from(tableName)
+        .update({ logo: publicUrl })
+        .eq('id', subscription.entity.id)
+      
+      if (dbError) {
+        throw dbError
+      }
+      
+      // Update local state with final URL
+      setSubscription({
+        ...subscription,
+        entity: {
+          ...subscription.entity,
+          logo: publicUrl
+        }
+      })
+      
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Success",
+        description: "Logo uploaded successfully",
+      })
+    } catch (error: any) {
+      console.error('Logo upload error:', error)
+      
+      // Revert on error
+      setSubscription({
+        ...subscription,
+        entity: {
+          ...subscription.entity,
+          logo: subscription.entity.logo
+        }
+      })
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload logo",
+        variant: "destructive",
+      })
+    }
   }
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1005,42 +1139,29 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                           (subscription.app_status === 'removed' || subscription.app_status === 'cancelled') ? '#ef4444' : 
                           '#eab308'
         }}>
-          <CardHeader>
+          <CardContent className="py-4">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  Subscription Status
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  Current approval status of your listing
-                </CardDescription>
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-1">
+                  <h3 className="font-semibold text-foreground">Subscription Status</h3>
+                  {subscription.app_status && getAppStatusBadge(subscription.app_status)}
+                </div>
+                {subscription.app_status === 'pending_verification' && (
+                  <p className="text-sm text-muted-foreground">
+                    Your listing is under review. You will be notified once it's approved.
+                  </p>
+                )}
+                {subscription.app_status === 'active' && (
+                  <p className="text-sm text-muted-foreground">
+                    Your listing has been approved and is live on the platform.
+                  </p>
+                )}
+                {(subscription.app_status === 'removed' || subscription.app_status === 'cancelled') && (
+                  <p className="text-sm text-muted-foreground">
+                    Your listing has been rejected. Please contact support for more information.
+                  </p>
+                )}
               </div>
-              {subscription.app_status && getAppStatusBadge(subscription.app_status)}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Status:</span>
-                <span className="text-sm font-medium text-foreground">
-                  {getAppStatusText(subscription.app_status)}
-                </span>
-              </div>
-              {subscription.app_status === 'pending_verification' && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Your listing is under review. You will be notified once it's approved.
-                </p>
-              )}
-              {subscription.app_status === 'active' && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Your listing has been approved and is live on the platform.
-                </p>
-              )}
-              {(subscription.app_status === 'removed' || subscription.app_status === 'cancelled') && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Your listing has been rejected. Please contact support for more information.
-                </p>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -1065,7 +1186,10 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   </Button>
                 ) : (
                   <>
-                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                    <Button variant="outline" onClick={() => {
+                      setIsEditing(false)
+                      setShowPhotoUpload(false) // Close photo upload section when canceling
+                    }}>
                       <X className="h-4 w-4 mr-2" />
                       Cancel
                     </Button>
@@ -1089,6 +1213,9 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <p className="text-foreground">{formData.name}</p>
                   )}
                 </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Location</h3>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
@@ -1097,15 +1224,48 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    {isEditing ? (
+                      <Input value={formData.city || ''} onChange={(e) => handleInputChange("city", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.city || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>State</Label>
+                    {isEditing ? (
+                      <Input value={formData.state || ''} onChange={(e) => handleInputChange("state", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.state || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ZIP</Label>
+                    {isEditing ? (
+                      <Input value={formData.zip || ''} onChange={(e) => handleInputChange("zip", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.zip || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country</Label>
+                    {isEditing ? (
+                      <Input value={formData.country || 'USA'} onChange={(e) => handleInputChange("country", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.country || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Contact Information</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Email Address</Label>
                     {isEditing ? (
-                      <Input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
-                      />
+                      <Input type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} />
                     ) : (
                       <p className="text-foreground">{formData.email}</p>
                     )}
@@ -1113,69 +1273,186 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
                     {isEditing ? (
-                      <Input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                      />
+                      <Input type="tel" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} />
                     ) : (
                       <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <Label>Website</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.website || ''} onChange={(e) => handleInputChange("website", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.website || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Website</Label>
-                  {isEditing ? (
-                    <Input
-                      type="url"
-                      value={formData.website}
-                      onChange={(e) => handleInputChange("website", e.target.value)}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.website}</p>
-                  )}
+                
+                <Separator />
+                <h3 className="font-semibold">Social Media</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Facebook</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.facebook || ''} onChange={(e) => handleInputChange("facebook", e.target.value)} placeholder="https://facebook.com/yourpage" />
+                    ) : formData.facebook ? (
+                      <a href={formData.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.facebook}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Instagram</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.instagram || ''} onChange={(e) => handleInputChange("instagram", e.target.value)} placeholder="https://instagram.com/yourpage" />
+                    ) : formData.instagram ? (
+                      <a href={formData.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.instagram}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Twitter/X</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.twitter || ''} onChange={(e) => handleInputChange("twitter", e.target.value)} placeholder="https://twitter.com/yourpage" />
+                    ) : formData.twitter ? (
+                      <a href={formData.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.twitter}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Other Social Media</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.otherSocial || ''} onChange={(e) => handleInputChange("otherSocial", e.target.value)} placeholder="https://..." />
+                    ) : formData.otherSocial ? (
+                      <a href={formData.otherSocial} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.otherSocial}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Social Media Links</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.socialMedia}
-                      onChange={(e) => handleInputChange("socialMedia", e.target.value)}
-                      placeholder="facebook: https://...\ninstagram: https://..."
-                    />
-                  ) : (
-                    <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || "Not provided"}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Donate Link</Label>
-                  {isEditing ? (
-                    <Input
-                      type="url"
-                      value={formData.donateLink}
-                      onChange={(e) => handleInputChange("donateLink", e.target.value)}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.donateLink}</p>
-                  )}
-                </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Organization Details</h3>
                 <div className="space-y-2">
                   <Label>About Organization</Label>
                   {isEditing ? (
-                    <Textarea
-                      value={formData.about}
-                      onChange={(e) => handleInputChange("about", e.target.value)}
-                      rows={4}
+                    <Textarea 
+                      value={formData.about || formData.description || ''} 
+                      onChange={(e) => handleInputChange("description", e.target.value)} 
+                      rows={5}
+                      placeholder="Tell us about your organization..."
                     />
                   ) : (
-                    <p className="text-foreground">{formData.about}</p>
+                    <p className="text-foreground whitespace-pre-wrap">{formData.about || formData.description || <span className="text-muted-foreground">No description provided</span>}</p>
                   )}
                 </div>
+                
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
+                  <div className="space-y-2">
+                    <Label>Donate Link</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.donateLink || ''} onChange={(e) => handleInputChange("donateLink", e.target.value)} placeholder="https://donate.yourorg.com" />
+                    ) : formData.donateLink ? (
+                      <a href={formData.donateLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.donateLink}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Programs/Events Page</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.programsLink || ''} onChange={(e) => handleInputChange("programsLink", e.target.value)} placeholder="https://yourorg.com/programs" />
+                    ) : formData.programsLink ? (
+                      <a href={formData.programsLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.programsLink}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Services / Programs</h3>
+                {(() => {
+                  try {
+                    const services = typeof subscription.entity?.services === 'string' 
+                      ? JSON.parse(subscription.entity.services)
+                      : subscription.entity?.services || []
+                    
+                    return services.length > 0 ? (
+                      <div className="space-y-3">
+                        {services.map((service: any, idx: number) => (
+                          <div key={idx} className="border-l-2 border-primary pl-4">
+                            <p className="font-medium">{service.name}</p>
+                            {service.link && (
+                              <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                                {service.link}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No services/programs listed</p>
+                    )
+                  } catch (e) {
+                    return <p className="text-muted-foreground">No services/programs listed</p>
+                  }
+                })()}
+                
+                <Separator />
+                <h3 className="font-semibold">Board Members / Leadership Team</h3>
+                {(() => {
+                  try {
+                    const committee = typeof subscription.entity?.committee_members === 'string' 
+                      ? JSON.parse(subscription.entity.committee_members)
+                      : subscription.entity?.committee_members || []
+                    
+                    return committee.length > 0 ? (
+                      <div className="grid gap-4 md:grid-cols-3">
+                        {committee.map((member: any, idx: number) => (
+                          <div key={idx} className="border rounded-lg p-4 space-y-2">
+                            {member.photo && (
+                              <img 
+                                src={member.photo} 
+                                alt={member.name} 
+                                className="w-20 h-20 rounded-full object-cover mx-auto"
+                              />
+                            )}
+                            <div className="text-center">
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.title}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No board members listed</p>
+                    )
+                  } catch (e) {
+                    return <p className="text-muted-foreground">No board members listed</p>
+                  }
+                })()}
               </>
             )}
 
             {subscription.type === "coupon" && (
               <>
+                <Separator />
+                <h3 className="font-semibold text-foreground">Basic Information</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Title</Label>
@@ -1220,7 +1497,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                       <p className="text-foreground">{formData.email}</p>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <Label>Website</Label>
                     {isEditing ? (
                       <Input
@@ -1228,58 +1505,103 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                         value={formData.website}
                         onChange={(e) => handleInputChange("website", e.target.value)}
                       />
+                    ) : formData.website ? (
+                      <a href={formData.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        {formData.website}
+                      </a>
                     ) : (
-                      <p className="text-foreground">{formData.website}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Discount</Label>
-                    {isEditing ? (
-                      <Input
-                        value={formData.discount}
-                        onChange={(e) => handleInputChange("discount", e.target.value)}
-                        placeholder="20% off or $10 off"
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.discount}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Redeem Code</Label>
-                    {isEditing ? (
-                      <Input
-                        value={formData.redeemCode}
-                        onChange={(e) => handleInputChange("redeemCode", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.redeemCode}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Redeem Limit</Label>
-                    {isEditing ? (
-                      <Input
-                        type="number"
-                        value={formData.redeemLimit}
-                        onChange={(e) => handleInputChange("redeemLimit", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.redeemLimit}</p>
+                      <p className="text-muted-foreground">Not provided</p>
                     )}
                   </div>
                 </div>
+
+                <Separator />
+                <h3 className="font-semibold text-foreground">Redemption Options</h3>
                 <div className="space-y-2">
-                  <Label>Description</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.description}
-                      onChange={(e) => handleInputChange("description", e.target.value)}
-                      rows={3}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.description}</p>
+                  <Label>Redemption Type</Label>
+                  <p className="text-foreground">
+                    {formData.redemptionType === 'unlimited' ? 'Unlimited - No restrictions' : 'Limited Redemptions'}
+                  </p>
+                  {formData.redemptionType === 'limited' && formData.redeemLimit && formData.redeemPeriod && (
+                    <p className="text-sm text-muted-foreground">
+                      {formData.redeemLimit} redemption(s) per {formData.redeemPeriod}
+                    </p>
                   )}
                 </div>
+
+                <Separator />
+                <h3 className="font-semibold text-foreground">Discount Details</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {formData.discountAmount && (
+                    <div className="space-y-2">
+                      <Label>Discount Amount</Label>
+                      <p className="text-foreground">{formData.discountAmount}</p>
+                    </div>
+                  )}
+                  {formData.discountPercentage && (
+                    <div className="space-y-2">
+                      <Label>Discount Percentage</Label>
+                      <p className="text-foreground">{formData.discountPercentage}</p>
+                    </div>
+                  )}
+                </div>
+                {formData.discountDetails && (
+                  <div className="space-y-2">
+                    <Label>Offer Details</Label>
+                    <p className="text-foreground whitespace-pre-wrap">{formData.discountDetails}</p>
+                  </div>
+                )}
+
+                <Separator />
+                <h3 className="font-semibold text-foreground">Description & Display</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    {isEditing ? (
+                      <Textarea
+                        value={formData.description}
+                        onChange={(e) => handleInputChange("description", e.target.value)}
+                        rows={3}
+                      />
+                    ) : (
+                      <p className="text-foreground whitespace-pre-wrap">{formData.description}</p>
+                    )}
+                  </div>
+                  {formData.thumbnailDescription && (
+                    <div className="space-y-2">
+                      <Label>Thumbnail Description</Label>
+                      <p className="text-foreground">{formData.thumbnailDescription}</p>
+                    </div>
+                  )}
+                  {formData.popUpText && (
+                    <div className="space-y-2">
+                      <Label>Pop Up Text</Label>
+                      <p className="text-foreground">{formData.popUpText}</p>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+                <h3 className="font-semibold text-foreground">Validity Period</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <p className="text-foreground">{formData.startDate || 'Not set'}</p>
+                    {isEditing && (
+                      <p className="text-xs text-muted-foreground">Start date cannot be changed after creation</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End Date</Label>
+                    <p className="text-foreground">{formData.endDate || 'No end date'}</p>
+                    {isEditing && (
+                      <p className="text-xs text-muted-foreground">End date cannot be changed after creation</p>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+                <h3 className="font-semibold text-foreground">Location</h3>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
@@ -1287,32 +1609,6 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   ) : (
                     <p className="text-foreground">{formData.address}</p>
                   )}
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Start Date</Label>
-                    {isEditing ? (
-                      <Input
-                        type="date"
-                        value={formData.startDate}
-                        onChange={(e) => handleInputChange("startDate", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.startDate}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>End Date</Label>
-                    {isEditing ? (
-                      <Input
-                        type="date"
-                        value={formData.endDate}
-                        onChange={(e) => handleInputChange("endDate", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.endDate}</p>
-                    )}
-                  </div>
                 </div>
               </>
             )}
@@ -1474,6 +1770,9 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <p className="text-foreground">{formData.name}</p>
                   )}
                 </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Location</h3>
                 <div className="space-y-2">
                   <Label>Address</Label>
                   {isEditing ? (
@@ -1482,15 +1781,48 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <p className="text-foreground">{formData.address}</p>
                   )}
                 </div>
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    {isEditing ? (
+                      <Input value={formData.city || ''} onChange={(e) => handleInputChange("city", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.city || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>State</Label>
+                    {isEditing ? (
+                      <Input value={formData.state || ''} onChange={(e) => handleInputChange("state", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.state || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ZIP</Label>
+                    {isEditing ? (
+                      <Input value={formData.zip || ''} onChange={(e) => handleInputChange("zip", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.zip || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Country</Label>
+                    {isEditing ? (
+                      <Input value={formData.country || 'USA'} onChange={(e) => handleInputChange("country", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.country || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Contact Information</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Email Address</Label>
                     {isEditing ? (
-                      <Input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
-                      />
+                      <Input type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} />
                     ) : (
                       <p className="text-foreground">{formData.email}</p>
                     )}
@@ -1498,105 +1830,165 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
                     {isEditing ? (
-                      <Input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                      />
+                      <Input type="tel" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} />
                     ) : (
                       <p className="text-foreground">{formData.phone}</p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <Label>Website</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.website || ''} onChange={(e) => handleInputChange("website", e.target.value)} />
+                    ) : (
+                      <p className="text-foreground">{formData.website || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Website</Label>
-                  {isEditing ? (
-                    <Input
-                      type="url"
-                      value={formData.website}
-                      onChange={(e) => handleInputChange("website", e.target.value)}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.website || <span className="text-muted-foreground">Not provided</span>}</p>
-                  )}
+                
+                <Separator />
+                <h3 className="font-semibold">Social Media</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Facebook</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.facebook || ''} onChange={(e) => handleInputChange("facebook", e.target.value)} placeholder="https://facebook.com/yourpage" />
+                    ) : formData.facebook ? (
+                      <a href={formData.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.facebook}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Instagram</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.instagram || ''} onChange={(e) => handleInputChange("instagram", e.target.value)} placeholder="https://instagram.com/yourpage" />
+                    ) : formData.instagram ? (
+                      <a href={formData.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.instagram}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Twitter/X</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.twitter || ''} onChange={(e) => handleInputChange("twitter", e.target.value)} placeholder="https://twitter.com/yourpage" />
+                    ) : formData.twitter ? (
+                      <a href={formData.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.twitter}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Other Social Media</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.otherSocial || ''} onChange={(e) => handleInputChange("otherSocial", e.target.value)} placeholder="https://..." />
+                    ) : formData.otherSocial ? (
+                      <a href={formData.otherSocial} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.otherSocial}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Social Media Links (Optional)</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.socialMedia}
-                      onChange={(e) => handleInputChange("socialMedia", e.target.value)}
-                      placeholder="Facebook: https://facebook.com/yourpage&#10;Instagram: https://instagram.com/yourpage&#10;Twitter: https://twitter.com/yourpage"
-                      rows={4}
-                    />
-                  ) : (
-                    <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || <span className="text-muted-foreground">No social media links added</span>}</p>
-                  )}
+                
+                <Separator />
+                <h3 className="font-semibold">Links & Resources</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Donate Link</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.donateLink || ''} onChange={(e) => handleInputChange("donateLink", e.target.value)} placeholder="https://donate.yourwebsite.com" />
+                    ) : formData.donateLink ? (
+                      <a href={formData.donateLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.donateLink}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sunday School Page</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.sundaySchoolLink || ''} onChange={(e) => handleInputChange("sundaySchoolLink", e.target.value)} placeholder="https://yourmasjid.org/sunday-school" />
+                    ) : formData.sundaySchoolLink ? (
+                      <a href={formData.sundaySchoolLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.sundaySchoolLink}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Donate Link (Optional)</Label>
-                  {isEditing ? (
-                    <Input
-                      type="url"
-                      value={formData.donateLink}
-                      onChange={(e) => handleInputChange("donateLink", e.target.value)}
-                      placeholder="https://donate.yourwebsite.com"
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.donateLink || <span className="text-muted-foreground">Not provided</span>}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Prayer Times Link (Optional)</Label>
-                  {isEditing ? (
-                    <Input
-                      type="url"
-                      value={formData.prayerTimesLink}
-                      onChange={(e) => handleInputChange("prayerTimesLink", e.target.value)}
-                      placeholder="https://yourwebsite.com/prayer-times"
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.prayerTimesLink || <span className="text-muted-foreground">Not provided</span>}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Sunday School (Optional)</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.sundaySchool}
-                      onChange={(e) => handleInputChange("sundaySchool", e.target.value)}
-                      placeholder="Describe your Sunday school program, schedule, and activities..."
-                      rows={3}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.sundaySchool || <span className="text-muted-foreground">No Sunday school information</span>}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Services Offered (Optional)</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.services}
-                      onChange={(e) => handleInputChange("services", e.target.value)}
-                      placeholder="Daily prayers, Jummah, Nikah ceremonies, funeral services, Quran classes, youth programs, etc."
-                      rows={3}
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.services || <span className="text-muted-foreground">No services listed</span>}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Committee Members</Label>
-                  {isEditing ? (
-                    <Textarea
-                      value={formData.committeeMembers}
-                      onChange={(e) => handleInputChange("committeeMembers", e.target.value)}
-                      placeholder="List of committee members..."
-                    />
-                  ) : (
-                    <p className="text-foreground">{formData.committeeMembers}</p>
-                  )}
-                </div>
+                
+                <Separator />
+                <h3 className="font-semibold">Services Offered</h3>
+                {(() => {
+                  try {
+                    const services = typeof subscription.entity?.services === 'string' 
+                      ? JSON.parse(subscription.entity.services)
+                      : subscription.entity?.services || []
+                    
+                    return services.length > 0 ? (
+                      <div className="space-y-3">
+                        {services.map((service: any, idx: number) => (
+                          <div key={idx} className="border-l-2 border-primary pl-4">
+                            <p className="font-medium">{service.name}</p>
+                            {service.link && (
+                              <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                                {service.link}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No services listed</p>
+                    )
+                  } catch (e) {
+                    return <p className="text-muted-foreground">No services listed</p>
+                  }
+                })()}
+                
+                <Separator />
+                <h3 className="font-semibold">Committee / Board of Trustees</h3>
+                {(() => {
+                  try {
+                    const committee = typeof subscription.entity?.committee_members === 'string' 
+                      ? JSON.parse(subscription.entity.committee_members)
+                      : subscription.entity?.committee_members || []
+                    
+                    return committee.length > 0 ? (
+                      <div className="grid gap-4 md:grid-cols-3">
+                        {committee.map((member: any, idx: number) => (
+                          <div key={idx} className="border rounded-lg p-4 space-y-2">
+                            {member.photo && (
+                              <img 
+                                src={member.photo} 
+                                alt={member.name} 
+                                className="w-20 h-20 rounded-full object-cover mx-auto"
+                              />
+                            )}
+                            <div className="text-center">
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.title}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No committee members listed</p>
+                    )
+                  } catch (e) {
+                    return <p className="text-muted-foreground">No committee members listed</p>
+                  }
+                })()}
               </>
             )}
 
@@ -1626,59 +2018,120 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <ImageIcon className="h-5 w-5" />
-                  Logo & Photos
+                  {(subscription.type === 'business' || subscription.type === 'coupon') ? 'Photos' : 'Logo & Photos'}
                 </CardTitle>
-                <CardDescription>Manage your listing logo and photos</CardDescription>
+                <CardDescription>
+                  {(subscription.type === 'business' || subscription.type === 'coupon')
+                    ? `Manage your ${subscription.type} photos` 
+                    : 'Manage your listing logo and photos'}
+                </CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant={showPhotoUpload ? "secondary" : "default"} 
-                  size="sm" 
-                  onClick={() => setShowPhotoUpload(!showPhotoUpload)}
-                >
-                  {showPhotoUpload ? (
-                    <>
-                      <X className="h-4 w-4 mr-2" />
-                      Close Upload
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Photos
-                    </>
-                  )}
-                </Button>
-              </div>
+              {isEditing && (
+                <div className="flex gap-2">
+                  <Button 
+                    variant={showPhotoUpload ? "secondary" : "default"} 
+                    size="sm" 
+                    onClick={() => setShowPhotoUpload(!showPhotoUpload)}
+                  >
+                    {showPhotoUpload ? (
+                      <>
+                        <X className="h-4 w-4 mr-2" />
+                        Close Upload
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Photos
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Logo Section */}
-            {subscription.entity?.logo && (
+            {/* Logo Section - Hidden for business and coupon */}
+            {subscription.type !== 'business' && subscription.type !== 'coupon' && (
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Logo</Label>
-                <div className="flex items-start gap-4">
-                  <div className="relative group">
-                    <img
-                      src={subscription.entity.logo}
-                      alt="Logo"
-                      className="h-32 w-32 object-contain rounded-lg border bg-white"
-                    />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => window.open(subscription.entity.logo, '_blank')}
-                      >
-                        View
-                      </Button>
+                {subscription.entity?.logo ? (
+                  <div className="flex items-start gap-4">
+                    <div className="relative group">
+                      <img
+                        src={subscription.entity.logo}
+                        alt="Logo"
+                        className="h-32 w-32 object-contain rounded-lg border bg-white"
+                        onError={(e) => {
+                          console.error('Logo failed to load:', subscription.entity.logo)
+                          e.currentTarget.src = '/placeholder.svg'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => window.open(subscription.entity.logo, '_blank')}
+                        >
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-muted-foreground">
+                        Current logo for your listing
+                      </p>
+                      {isEditing && (
+                        <>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png"
+                            className="hidden"
+                            id="logo-upload-edit"
+                            onChange={handleLogoUpload}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => document.getElementById('logo-upload-edit')?.click()}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Change Logo
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      Current logo for your listing
-                    </p>
+                ) : (
+                  <div className="p-8 border-2 border-dashed border-muted rounded-lg text-center">
+                    <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">No logo uploaded</p>
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          className="hidden"
+                          id="logo-upload-new"
+                          onChange={handleLogoUpload}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={() => document.getElementById('logo-upload-new')?.click()}
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload Logo
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Click "Edit Details" to upload a logo
+                      </p>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -2052,6 +2505,26 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Save Confirmation Dialog */}
+      <Dialog open={showSaveConfirmDialog} onOpenChange={setShowSaveConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Changes?</DialogTitle>
+            <DialogDescription>
+              Your changes will be submitted for review. An admin will review and approve your updates within 1-2 business days.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveConfirmDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmSave}>
+              Confirm & Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

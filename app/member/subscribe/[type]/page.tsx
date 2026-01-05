@@ -150,9 +150,12 @@ export default function SubscribePage() {
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null)
   const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
-  const [formData, setFormData] = useState<any>({}) // Store all form data
+  const [formData, setFormData] = useState<any>({ redemptionType: 'unlimited', country: 'USA' }) // Store all form data, defaults
   const [availableMosques, setAvailableMosques] = useState<any[]>([])
   const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
+  const [serviceCount, setServiceCount] = useState<number>(1) // Start with 1 service field
+  const [committeeCount, setCommitteeCount] = useState<number>(1) // Start with 1 committee member field
+  const [committeeMembers, setCommitteeMembers] = useState<{ name: string; title: string; photo: string; uploading?: boolean }[]>([{ name: '', title: '', photo: '' }])
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
   
   // Date picker state for coupons
@@ -172,8 +175,214 @@ export default function SubscribePage() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
+  // Form validation state
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+
+  // Pricing state - fetch from API
+  const [pricing, setPricing] = useState({
+    pricing_mosque: 10000,
+    pricing_business: 1000,
+    pricing_coupon: 1000,
+    pricing_nonprofit: 5000
+  })
+  const [loadingPricing, setLoadingPricing] = useState(true)
+
   const info = subscriptionInfo[type]
   const Icon = info?.icon || Building2
+  
+  // Get current price from fetched pricing
+  const getCurrentPrice = () => {
+    const priceMap: Record<string, number> = {
+      mosque: pricing.pricing_mosque / 100,
+      business: pricing.pricing_business / 100,
+      coupon: pricing.pricing_coupon / 100,
+      nonprofit: pricing.pricing_nonprofit / 100
+    }
+    return priceMap[type] || info?.price || 0
+  }
+
+  // Validation functions
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const validatePhone = (phone: string): boolean => {
+    // Allow various phone formats
+    const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/
+    return phoneRegex.test(phone)
+  }
+
+  const validateUrl = (url: string): boolean => {
+    if (!url) return true // Optional fields
+    try {
+      new URL(url)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const validateField = (fieldName: string, value: any): string => {
+    // Common required fields for all types
+    const requiredFields: Record<string, string[]> = {
+      mosque: ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone'],
+      business: ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description'],
+      coupon: ['title', 'merchant', 'description', 'phone', 'email', 'address'],
+      nonprofit: ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
+    }
+
+    const isRequired = requiredFields[type]?.includes(fieldName)
+
+    // Check if field is empty
+    if (isRequired && (!value || String(value).trim() === '')) {
+      return 'This field is required'
+    }
+
+    // Email validation
+    if (fieldName === 'email' && value && !validateEmail(value)) {
+      return 'Please enter a valid email address'
+    }
+
+    // Phone validation
+    if (fieldName === 'phone' && value && !validatePhone(value)) {
+      return 'Please enter a valid phone number'
+    }
+
+    // URL validations
+    if (['website', 'sundaySchool', 'programsLink', 'donateLink'].includes(fieldName) && value && !validateUrl(value)) {
+      return 'Please enter a valid URL (e.g., https://example.com)'
+    }
+
+    // Zip code validation
+    if (fieldName === 'zip' && value && !/^\d{5}(-\d{4})?$/.test(value)) {
+      return 'Please enter a valid zip code'
+    }
+
+    return ''
+  }
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    // Get required fields based on type
+    let fieldsToValidate: string[] = []
+    
+    if (type === 'mosque') {
+      fieldsToValidate = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
+    } else if (type === 'business') {
+      fieldsToValidate = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+    } else if (type === 'coupon') {
+      fieldsToValidate = ['title', 'merchant', 'description', 'phone', 'email', 'address']
+    } else if (type === 'nonprofit') {
+      fieldsToValidate = ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
+    }
+
+    // Validate each field
+    fieldsToValidate.forEach(field => {
+      const error = validateField(field, formData[field])
+      if (error) {
+        newErrors[field] = error
+      }
+    })
+
+    // Additional validations
+    if (type === 'coupon') {
+      if (!startDate || !formData.startDate) {
+        newErrors.startDate = 'Start date is required'
+      }
+      if (!formData.discountAmount && !formData.discountPercentage) {
+        newErrors.discount = 'Either discount amount or percentage is required'
+      }
+    }
+
+    // Logo validation (not required for business and coupon)
+    if (type !== 'business' && type !== 'coupon' && !uploadedLogo) {
+      newErrors.logo = 'Logo is required'
+    }
+
+    // Images validation (at least 1 image)
+    if (uploadedImages.length === 0) {
+      newErrors.images = 'At least one image is required'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleFieldBlur = (fieldName: string) => {
+    setTouched({ ...touched, [fieldName]: true })
+    const error = validateField(fieldName, formData[fieldName])
+    if (error) {
+      setErrors({ ...errors, [fieldName]: error })
+    } else {
+      const newErrors = { ...errors }
+      delete newErrors[fieldName]
+      setErrors(newErrors)
+    }
+  }
+
+  const handleFieldChange = (fieldName: string, value: any) => {
+    setFormData({ ...formData, [fieldName]: value })
+    
+    // Clear error on change if field was touched
+    if (touched[fieldName]) {
+      const error = validateField(fieldName, value)
+      if (error) {
+        setErrors({ ...errors, [fieldName]: error })
+      } else {
+        const newErrors = { ...errors }
+        delete newErrors[fieldName]
+        setErrors(newErrors)
+      }
+    }
+  }
+
+  // Check if form is valid
+  const isFormValid = (): boolean => {
+    // Get required fields based on type
+    let fieldsToCheck: string[] = []
+    
+    if (type === 'mosque') {
+      fieldsToCheck = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
+    } else if (type === 'business') {
+      fieldsToCheck = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+    } else if (type === 'coupon') {
+      fieldsToCheck = ['title', 'merchant', 'description', 'phone', 'email', 'address']
+    } else if (type === 'nonprofit') {
+      fieldsToCheck = ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
+    }
+
+    // Check all required fields are filled
+    const allFieldsFilled = fieldsToCheck.every(field => {
+      const value = formData[field]
+      return value && String(value).trim() !== ''
+    })
+
+    // Check logo and images
+    const hasLogo = uploadedLogo !== null
+    const hasImages = uploadedImages.length > 0
+
+    // Coupon specific checks (no logo required)
+    if (type === 'coupon') {
+      const hasStartDate = startDate !== undefined && formData.startDate
+      const hasDiscount = formData.discountAmount || formData.discountPercentage
+      const hasNoErrors = Object.keys(errors).length === 0
+      return allFieldsFilled && hasImages && hasStartDate && hasDiscount && hasNoErrors
+    }
+
+    // Business doesn't require logo, just images
+    if (type === 'business') {
+      const hasNoErrors = Object.keys(errors).length === 0
+      return allFieldsFilled && hasImages && hasNoErrors
+    }
+
+    // Check no validation errors
+    const hasNoErrors = Object.keys(errors).length === 0
+
+    return allFieldsFilled && hasLogo && hasImages && hasNoErrors
+  }
 
   // Fetch active mosques on mount
   useEffect(() => {
@@ -224,6 +433,31 @@ export default function SubscribePage() {
       getNextCode()
     }
   }, [type])
+
+  // Fetch pricing settings on mount
+  useEffect(() => {
+    const fetchPricing = async () => {
+      try {
+        setLoadingPricing(true)
+        console.log('[Subscribe Form] Fetching pricing from API...')
+        const response = await fetch('/api/settings/pricing')
+        const result = await response.json()
+        
+        console.log('[Subscribe Form] Pricing API response:', result)
+        
+        if (result.success && result.data) {
+          console.log('[Subscribe Form] Setting pricing state:', result.data)
+          setPricing(result.data)
+        }
+      } catch (error) {
+        console.error('[Subscribe Form] Error fetching pricing settings:', error)
+      } finally {
+        setLoadingPricing(false)
+      }
+    }
+
+    fetchPricing()
+  }, [])
 
   if (!info) {
     return (
@@ -380,6 +614,7 @@ export default function SubscribePage() {
         newSet.delete(tempPreviewUrl)
         return newSet
       })
+      setTouched({ ...touched, images: true })
       
       // Clean up temp URL
       URL.revokeObjectURL(tempPreviewUrl)
@@ -483,6 +718,7 @@ export default function SubscribePage() {
       // Replace temp URL with real URL
       setUploadedLogo(publicUrl)
       setUploadingLogo(false)
+      setTouched({ ...touched, logo: true })
       
       // Clean up temp URL
       URL.revokeObjectURL(tempPreviewUrl)
@@ -515,10 +751,129 @@ export default function SubscribePage() {
     event.target.value = ''
   }
 
+  const handleCommitteePhotoUpload = async (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    
+    // Validate file type - only accept JPG, JPEG, PNG
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png']
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPG, JPEG, or PNG image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create temporary preview URL (optimistic UI)
+    const tempPreviewUrl = URL.createObjectURL(file)
+    
+    // Update member with temp preview and uploading status
+    const updatedMembers = [...committeeMembers]
+    updatedMembers[index] = { ...updatedMembers[index], photo: tempPreviewUrl, uploading: true }
+    setCommitteeMembers(updatedMembers)
+
+    try {
+      // Process and upload in background
+      const processedFile = await resizeImage(file, 1) // Smaller size for profile photos
+
+      const fileName = `committee-${type}-${Date.now()}-${Math.random().toString(36).substring(7)}.webp`
+      const filePath = `${getTableName(type)}/${fileName}`
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, processedFile, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Upload error:', error)
+        
+        // Remove temp preview on error
+        const resetMembers = [...committeeMembers]
+        resetMembers[index] = { ...resetMembers[index], photo: '', uploading: false }
+        setCommitteeMembers(resetMembers)
+        URL.revokeObjectURL(tempPreviewUrl)
+        
+        toast({
+          title: "Upload failed",
+          description: error.message || "Failed to upload photo",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      // Replace temp URL with real URL
+      const finalMembers = [...committeeMembers]
+      finalMembers[index] = { ...finalMembers[index], photo: publicUrl, uploading: false }
+      setCommitteeMembers(finalMembers)
+      
+      // Clean up temp URL
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload complete",
+        description: `Photo uploaded successfully`,
+      })
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      
+      // Remove temp preview on error
+      const resetMembers = [...committeeMembers]
+      resetMembers[index] = { ...resetMembers[index], photo: '', uploading: false }
+      setCommitteeMembers(resetMembers)
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "An error occurred while uploading the photo",
+        variant: "destructive",
+      })
+    }
+    
+    // Reset input
+    event.target.value = ''
+  }
+
   const handleSubmit = async () => {
+    // Mark all fields as touched to show errors
+    const allFields = Object.keys(formData)
+    const newTouched: Record<string, boolean> = {}
+    allFields.forEach(field => { newTouched[field] = true })
+    setTouched(newTouched)
+
+    // Validate form
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields correctly",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsProcessing(true)
     
     try {
+      // Serialize committee members to JSON for mosque and nonprofit types
+      if (type === 'mosque' || type === 'nonprofit') {
+        // Filter out empty committee members (ones with no name, title, or photo)
+        const validMembers = committeeMembers.filter(m => m.name || m.title || m.photo)
+        if (validMembers.length > 0) {
+          formData.committee = JSON.stringify(validMembers)
+        }
+      }
+
       // Validate required fields for coupon
       if (type === 'coupon') {
         const requiredFields = ['title', 'merchant', 'description', 'phone', 'email', 'address']
@@ -653,7 +1008,14 @@ export default function SubscribePage() {
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value })
+    const fieldName = e.target.id
+    const value = e.target.value
+    handleFieldChange(fieldName, value)
+    
+    // Debug logging
+    console.log('[Form Validation] Field changed:', fieldName, '=', value)
+    console.log('[Form Validation] Current formData:', formData)
+    console.log('[Form Validation] Is form valid?', isFormValid())
   }
 
   // Handle date changes for coupon validity period
@@ -703,28 +1065,161 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Basic Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Mosque Name *</Label>
-                <Input id="name" placeholder="Enter mosque name" onChange={handleInputChange} />
+                <Label htmlFor="name">
+                  Mosque Name <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="name" 
+                  value={formData.name || ''}
+                  placeholder="Enter mosque name" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('name')}
+                  className={touched.name && errors.name ? 'border-destructive' : ''}
+                />
+                {touched.name && errors.name && (
+                  <p className="text-sm text-destructive">{errors.name}</p>
+                )}
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">
+                  Address <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="address" 
+                  value={formData.address || ''}
+                  placeholder="Full address" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('address')}
+                  className={touched.address && errors.address ? 'border-destructive' : ''}
+                />
+                {touched.address && errors.address && (
+                  <p className="text-sm text-destructive">{errors.address}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address">Address *</Label>
-                <Input id="address" placeholder="Full address" onChange={handleInputChange} />
+                <Label htmlFor="city">
+                  City <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="city" 
+                  value={formData.city || ''}
+                  placeholder="City" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('city')}
+                  className={touched.city && errors.city ? 'border-destructive' : ''}
+                />
+                {touched.city && errors.city && (
+                  <p className="text-sm text-destructive">{errors.city}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input id="email" type="email" placeholder="mosque@example.com" onChange={handleInputChange} />
+                <Label htmlFor="state">
+                  State <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="state" 
+                  value={formData.state || ''}
+                  placeholder="State" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('state')}
+                  className={touched.state && errors.state ? 'border-destructive' : ''}
+                />
+                {touched.state && errors.state && (
+                  <p className="text-sm text-destructive">{errors.state}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number *</Label>
-                <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
+                <Label htmlFor="zip">
+                  ZIP Code <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="zip" 
+                  value={formData.zip || ''}
+                  placeholder="ZIP" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('zip')}
+                  className={touched.zip && errors.zip ? 'border-destructive' : ''}
+                />
+                {touched.zip && errors.zip && (
+                  <p className="text-sm text-destructive">{errors.zip}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="country">
+                  Country <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="country" 
+                  value={formData.country || 'USA'}
+                  placeholder="Country" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('country')}
+                  className={touched.country && errors.country ? 'border-destructive' : ''}
+                />
+                {touched.country && errors.country && (
+                  <p className="text-sm text-destructive">{errors.country}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">
+                  Email Address <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={formData.email || ''}
+                  placeholder="mosque@example.com" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('email')}
+                  className={touched.email && errors.email ? 'border-destructive' : ''}
+                />
+                {touched.email && errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="phone" 
+                  value={formData.phone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('phone')}
+                  className={touched.phone && errors.phone ? 'border-destructive' : ''}
+                />
+                {touched.phone && errors.phone && (
+                  <p className="text-sm text-destructive">{errors.phone}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
-                <Input id="website" placeholder="https://www.yourmasjid.org" onChange={handleInputChange} />
+                <Input 
+                  id="website" 
+                  value={formData.website || ''}
+                  placeholder="https://www.yourmasjid.org" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('website')}
+                  className={touched.website && errors.website ? 'border-destructive' : ''}
+                />
+                {touched.website && errors.website && (
+                  <p className="text-sm text-destructive">{errors.website}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="contactName">Contact Name (Leader) *</Label>
-                <Input id="contactName" placeholder="Imam name or administrator" onChange={handleInputChange} />
+                <Label htmlFor="contactName">Contact Name (Leader)</Label>
+                <Input 
+                  id="contactName" 
+                  value={formData.contactName || ''}
+                  placeholder="Imam name or administrator" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('contactName')}
+                  className={touched.contactName && errors.contactName ? 'border-destructive' : ''}
+                />
+                {touched.contactName && errors.contactName && (
+                  <p className="text-sm text-destructive">{errors.contactName}</p>
+                )}
               </div>
             </div>
           </div>
@@ -759,7 +1254,12 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Logo & Images</h3>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Logo (PNG File)</Label>
+                <Label>
+                  Logo (PNG File) <span className="text-destructive">*</span>
+                </Label>
+                {!uploadedLogo && touched.logo && (
+                  <p className="text-sm text-destructive">Logo is required</p>
+                )}
                 <div className="flex items-center gap-4">
                   {uploadedLogo ? (
                     <div className="relative">
@@ -801,7 +1301,12 @@ export default function SubscribePage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Images (PNG or JPG Files)</Label>
+                <Label>
+                  Images (PNG or JPG Files) <span className="text-destructive">*</span>
+                </Label>
+                {uploadedImages.length === 0 && touched.images && (
+                  <p className="text-sm text-destructive">At least one image is required</p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   {uploadedImages.map((img, idx) => {
                     const isUploading = uploadingImages.has(img)
@@ -863,28 +1368,165 @@ export default function SubscribePage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sundaySchool">Sunday School</Label>
-              <Textarea
-                id="sundaySchool"
-                placeholder="Describe your Sunday School program, timings, etc."
+              <Label htmlFor="sundaySchoolLink">Sunday School Page Link</Label>
+              <Input
+                id="sundaySchoolLink"
+                type="url"
+                placeholder="https://yourmasjid.org/sunday-school"
                 onChange={handleInputChange}
               />
+              <p className="text-xs text-muted-foreground">Link to your Sunday School information page</p>
             </div>
+            
+            {/* Services Section - Dynamic entries with links */}
             <div className="space-y-2">
-              <Label htmlFor="services">Services</Label>
-              <Textarea
-                id="services"
-                placeholder="List services offered (Jummah, Nikah, Funeral, Counseling, etc.)"
-                onChange={handleInputChange}
-              />
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Services Offered (Optional)</Label>
+                  <p className="text-sm text-muted-foreground">Add services with links to more information</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setServiceCount(serviceCount + 1)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Service
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {Array.from({ length: serviceCount }).map((_, idx) => (
+                  <div key={idx} className="grid md:grid-cols-2 gap-3 p-3 border rounded-lg relative">
+                    <Input
+                      placeholder={`Service name (e.g., ${idx === 0 ? 'Counseling Services' : idx === 1 ? 'Nikah Services' : 'Funeral Services'})`}
+                      onChange={(e) => {
+                        const services = formData.services ? JSON.parse(formData.services) : []
+                        services[idx] = { ...services[idx], name: e.target.value }
+                        setFormData({ ...formData, services: JSON.stringify(services.filter((s: any) => s?.name || s?.link)) })
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="url"
+                        placeholder="Service page link (optional)"
+                        className="flex-1"
+                        onChange={(e) => {
+                          const services = formData.services ? JSON.parse(formData.services) : []
+                          services[idx] = { ...services[idx], link: e.target.value }
+                          setFormData({ ...formData, services: JSON.stringify(services.filter((s: any) => s?.name || s?.link)) })
+                        }}
+                      />
+                      {serviceCount > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setServiceCount(Math.max(1, serviceCount - 1))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+            
+            {/* Committee/Trustee Section - Dynamic entries with photos */}
             <div className="space-y-2">
-              <Label htmlFor="committee">Committee Members</Label>
-              <Textarea
-                id="committee"
-                placeholder="List committee members and their roles"
-                onChange={handleInputChange}
-              />
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Committee / Board of Trustees (Optional)</Label>
+                  <p className="text-sm text-muted-foreground">Add committee members with their photos</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCommitteeMembers([...committeeMembers, { name: '', title: '', photo: '' }])
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Member
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {committeeMembers.map((member, idx) => (
+                  <div key={idx} className="grid md:grid-cols-3 gap-3 p-4 border rounded-lg relative">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Photo</Label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          className="hidden"
+                          id={`trustee-photo-${idx}`}
+                          onChange={(e) => handleCommitteePhotoUpload(idx, e)}
+                        />
+                        <Button 
+                          type="button"
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => document.getElementById(`trustee-photo-${idx}`)?.click()}
+                          disabled={member.uploading}
+                        >
+                          {member.uploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-1" />
+                              {member.photo ? 'Change' : 'Upload'}
+                            </>
+                          )}
+                        </Button>
+                        {member.photo && !member.uploading && (
+                          <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                            <img src={member.photo} alt={member.name || 'Member'} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="Full Name"
+                      value={member.name}
+                      onChange={(e) => {
+                        const updated = [...committeeMembers]
+                        updated[idx] = { ...updated[idx], name: e.target.value }
+                        setCommitteeMembers(updated)
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Title / Role (e.g., President)"
+                        className="flex-1"
+                        value={member.title}
+                        onChange={(e) => {
+                          const updated = [...committeeMembers]
+                          updated[idx] = { ...updated[idx], title: e.target.value }
+                          setCommitteeMembers(updated)
+                        }}
+                      />
+                      {committeeMembers.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setCommitteeMembers(committeeMembers.filter((_, i) => i !== idx))
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </>
@@ -927,22 +1569,43 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Basic Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="title">Business Name *</Label>
-                <Input id="title" placeholder="Enter business name" onChange={handleInputChange} />
+                <Label htmlFor="title">
+                  Business Name <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="title" 
+                  value={formData.title || ''}
+                  placeholder="Enter business name" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('title')}
+                  className={touched.title && errors.title ? 'border-destructive' : ''}
+                />
+                {touched.title && errors.title && (
+                  <p className="text-sm text-destructive">{errors.title}</p>
+                )}
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="description">Description *</Label>
+                <Label htmlFor="description">
+                  Description <span className="text-destructive">*</span>
+                </Label>
                 <Textarea
                   id="description"
+                  value={formData.description || ''}
                   placeholder="Describe your business..."
                   rows={4}
                   onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('description')}
+                  className={touched.description && errors.description ? 'border-destructive' : ''}
                 />
+                {touched.description && errors.description && (
+                  <p className="text-sm text-destructive">{errors.description}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categories">Categories *</Label>
+                <Label htmlFor="categories">Categories</Label>
                 <Input
                   id="categories"
+                  value={formData.categories || ''}
                   placeholder="e.g., Restaurant, Retail, Services (comma separated)"
                   onChange={handleInputChange}
                 />
@@ -951,6 +1614,7 @@ export default function SubscribePage() {
                 <Label htmlFor="subCategories">Sub Categories</Label>
                 <Input
                   id="subCategories"
+                  value={formData.subCategories || ''}
                   placeholder="e.g., Halal, Mediterranean (comma separated)"
                   onChange={handleInputChange}
                 />
@@ -961,8 +1625,15 @@ export default function SubscribePage() {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Photos (Image Size: 4/3 ratio – 400*300)</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <h3 className="font-semibold text-foreground">Business Photos</h3>
+            <div className="space-y-2">
+              <Label>
+                Photos (Image Size: 4/3 ratio – 400*300) <span className="text-destructive">*</span>
+              </Label>
+              {uploadedImages.length === 0 && touched.images && (
+                <p className="text-sm text-destructive">At least one image is required</p>
+              )}
+              <div className="grid grid-cols-3 gap-2">
               {uploadedImages.map((img, idx) => {
                 const isUploading = uploadingImages.has(img)
                 return (
@@ -1000,6 +1671,7 @@ export default function SubscribePage() {
                 <Plus className="h-6 w-6" />
               </Button>
             </div>
+            </div>
           </div>
 
           <Separator />
@@ -1008,24 +1680,84 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Location</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Address *</Label>
-                <Input id="address" placeholder="Street address" onChange={handleInputChange} />
+                <Label htmlFor="address">
+                  Address <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="address" 
+                  value={formData.address || ''}
+                  placeholder="Street address" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('address')}
+                  className={touched.address && errors.address ? 'border-destructive' : ''}
+                />
+                {touched.address && errors.address && (
+                  <p className="text-sm text-destructive">{errors.address}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="city">City *</Label>
-                <Input id="city" placeholder="City" onChange={handleInputChange} />
+                <Label htmlFor="city">
+                  City <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="city" 
+                  value={formData.city || ''}
+                  placeholder="City" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('city')}
+                  className={touched.city && errors.city ? 'border-destructive' : ''}
+                />
+                {touched.city && errors.city && (
+                  <p className="text-sm text-destructive">{errors.city}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="state">State *</Label>
-                <Input id="state" placeholder="State" onChange={handleInputChange} />
+                <Label htmlFor="state">
+                  State <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="state" 
+                  value={formData.state || ''}
+                  placeholder="State" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('state')}
+                  className={touched.state && errors.state ? 'border-destructive' : ''}
+                />
+                {touched.state && errors.state && (
+                  <p className="text-sm text-destructive">{errors.state}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="zip">Zip *</Label>
-                <Input id="zip" placeholder="Zip code" onChange={handleInputChange} />
+                <Label htmlFor="zip">
+                  Zip <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="zip" 
+                  value={formData.zip || ''}
+                  placeholder="Zip code" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('zip')}
+                  className={touched.zip && errors.zip ? 'border-destructive' : ''}
+                />
+                {touched.zip && errors.zip && (
+                  <p className="text-sm text-destructive">{errors.zip}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="country">Country *</Label>
-                <Input id="country" placeholder="Country" defaultValue="USA" onChange={handleInputChange} />
+                <Label htmlFor="country">
+                  Country <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="country" 
+                  value={formData.country || 'USA'}
+                  placeholder="Country" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('country')}
+                  className={touched.country && errors.country ? 'border-destructive' : ''}
+                />
+                {touched.country && errors.country && (
+                  <p className="text-sm text-destructive">{errors.country}</p>
+                )}
               </div>
             </div>
           </div>
@@ -1036,20 +1768,62 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Contact Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
-                <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
+                <Label htmlFor="phone">
+                  Phone <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="phone" 
+                  value={formData.phone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('phone')}
+                  className={touched.phone && errors.phone ? 'border-destructive' : ''}
+                />
+                {touched.phone && errors.phone && (
+                  <p className="text-sm text-destructive">{errors.phone}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fax">Fax</Label>
-                <Input id="fax" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
+                <Input 
+                  id="fax" 
+                  value={formData.fax || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input id="email" type="email" placeholder="business@example.com" onChange={handleInputChange} />
+                <Label htmlFor="email">
+                  Email <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={formData.email || ''}
+                  placeholder="business@example.com" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('email')}
+                  className={touched.email && errors.email ? 'border-destructive' : ''}
+                />
+                {touched.email && errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="website">Website</Label>
-                <Input id="website" placeholder="https://www.yourbusiness.com" onChange={handleInputChange} />
+                <Label htmlFor="website">
+                  Website <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="website" 
+                  value={formData.website || ''}
+                  placeholder="https://www.yourbusiness.com" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('website')}
+                  className={touched.website && errors.website ? 'border-destructive' : ''}
+                />
+                {touched.website && errors.website && (
+                  <p className="text-sm text-destructive">{errors.website}</p>
+                )}
               </div>
             </div>
           </div>
@@ -1117,24 +1891,83 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Basic Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="title">Title *</Label>
-                <Input id="title" placeholder="e.g., 10% Off First Order" onChange={handleInputChange} />
+                <Label htmlFor="title">
+                  Title <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="title" 
+                  value={formData.title || ''}
+                  placeholder="e.g., 10% Off First Order" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('title')}
+                  className={touched.title && errors.title ? 'border-destructive' : ''}
+                />
+                {touched.title && errors.title && (
+                  <p className="text-sm text-destructive">{errors.title}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="merchant">Merchant *</Label>
-                <Input id="merchant" placeholder="Your business name" onChange={handleInputChange} />
+                <Label htmlFor="merchant">
+                  Merchant <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="merchant" 
+                  value={formData.merchant || ''}
+                  placeholder="Your business name" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('merchant')}
+                  className={touched.merchant && errors.merchant ? 'border-destructive' : ''}
+                />
+                {touched.merchant && errors.merchant && (
+                  <p className="text-sm text-destructive">{errors.merchant}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
-                <Input id="phone" placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
+                <Label htmlFor="phone">
+                  Phone <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="phone" 
+                  value={formData.phone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('phone')}
+                  className={touched.phone && errors.phone ? 'border-destructive' : ''}
+                />
+                {touched.phone && errors.phone && (
+                  <p className="text-sm text-destructive">{errors.phone}</p>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input id="email" type="email" placeholder="coupons@yourbusiness.com" onChange={handleInputChange} />
+                <Label htmlFor="email">
+                  Email <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={formData.email || ''}
+                  placeholder="coupons@yourbusiness.com" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('email')}
+                  className={touched.email && errors.email ? 'border-destructive' : ''}
+                />
+                {touched.email && errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">Website</Label>
-                <Input id="website" placeholder="https://www.yourbusiness.com" onChange={handleInputChange} />
+                <Input 
+                  id="website" 
+                  value={formData.website || ''}
+                  placeholder="https://www.yourbusiness.com" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('website')}
+                  className={touched.website && errors.website ? 'border-destructive' : ''}
+                />
+                {touched.website && errors.website && (
+                  <p className="text-sm text-destructive">{errors.website}</p>
+                )}
               </div>
             </div>
           </div>
@@ -1142,24 +1975,77 @@ export default function SubscribePage() {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="font-semibold text-foreground">Redemption Limits</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="redeemLimit">Total Redeem Limit</Label>
-                <Input id="redeemLimit" type="number" placeholder="e.g., 500" onChange={handleInputChange} />
+            <h3 className="font-semibold text-foreground">Redemption Options</h3>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="unlimited"
+                    name="redemptionType"
+                    value="unlimited"
+                    checked={formData.redemptionType === 'unlimited'}
+                    onChange={(e) => setFormData({ ...formData, redemptionType: e.target.value, redeemLimit: '', redeemPeriod: '' })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="unlimited" className="font-normal cursor-pointer">
+                    Unlimited - No restrictions on redemptions
+                  </Label>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="limited"
+                      name="redemptionType"
+                      value="limited"
+                      checked={formData.redemptionType === 'limited'}
+                      onChange={(e) => setFormData({ ...formData, redemptionType: e.target.value })}
+                      className="w-4 h-4"
+                    />
+                    <Label htmlFor="limited" className="font-normal cursor-pointer">
+                      Limited Redemptions
+                    </Label>
+                  </div>
+                  
+                  {formData.redemptionType === 'limited' && (
+                    <div className="ml-6 grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="redeemLimit">Number of Redemptions</Label>
+                        <Input
+                          id="redeemLimit"
+                          type="number"
+                          min="1"
+                          placeholder="e.g., 1, 2, 3"
+                          value={formData.redeemLimit || ''}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="redeemPeriod">Per Period</Label>
+                        <Select
+                          value={formData.redeemPeriod || ''}
+                          onValueChange={(value) => setFormData({ ...formData, redeemPeriod: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select period" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="yearly">Yearly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="userRedeemLimit">User Redeem Limit</Label>
-                <Input id="userRedeemLimit" type="number" placeholder="e.g., 1" onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="userMonthlyLimit">User Monthly Redeem Limit</Label>
-                <Input id="userMonthlyLimit" type="number" placeholder="e.g., 2" onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="userWeeklyLimit">User Weekly Redeem Limit</Label>
-                <Input id="userWeeklyLimit" type="number" placeholder="e.g., 1" onChange={handleInputChange} />
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Examples: "3 redemptions per week" or "1 redemption per month"
+              </p>
             </div>
           </div>
 
@@ -1167,31 +2053,28 @@ export default function SubscribePage() {
 
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Discount Details</h3>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-4 mb-4">
               <div className="space-y-2">
-                <Label htmlFor="discountAmount">Discount Amount (or)</Label>
-                <Input id="discountAmount" placeholder="e.g., $5 off, Free Item" onChange={handleInputChange} />
+                <Label htmlFor="discountAmount">Discount Amount</Label>
+                <Input id="discountAmount" placeholder="e.g., $5 off, $2000 off" onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="discountPercentage">Discount Percentage</Label>
                 <Input id="discountPercentage" placeholder="e.g., 10%, 20%" onChange={handleInputChange} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="couponCode">Coupon/Voucher Code</Label>
-                <Input id="couponCode" placeholder="e.g., SAVE10" onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="redeemCode">Redeem Code</Label>
-                <Input id="redeemCode" placeholder="e.g., RD001" onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="prefix">Prefix</Label>
-                <Input id="prefix" placeholder="e.g., HD" onChange={handleInputChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nextNo">Next No.</Label>
-                <Input id="nextNo" placeholder="e.g., 001" onChange={handleInputChange} />
-              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="discountDetails">Discount Details (Please explain your offer to customers)</Label>
+              <Textarea
+                id="discountDetails"
+                placeholder="Example: Buy Spicy chicken Sandwich and get a second one free - limit one per customer per visit&#10;&#10;OR&#10;&#10;Get $2000 off any used car priced $15,000 and up - limit one car per customer or by household"
+                rows={5}
+                onChange={handleInputChange}
+              />
+              <p className="text-xs text-muted-foreground">
+                Be specific about what the customer gets and any restrictions or limitations
+              </p>
             </div>
           </div>
 
@@ -1268,18 +2151,27 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Description & Display</h3>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="description">Description *</Label>
+                <Label htmlFor="description">
+                  Description <span className="text-destructive">*</span>
+                </Label>
                 <Textarea
                   id="description"
+                  value={formData.description || ''}
                   placeholder="Full description of the offer..."
                   rows={3}
                   onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('description')}
+                  className={touched.description && errors.description ? 'border-destructive' : ''}
                 />
+                {touched.description && errors.description && (
+                  <p className="text-sm text-destructive">{errors.description}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="thumbnailDescription">Thumbnail Description</Label>
                 <Input
                   id="thumbnailDescription"
+                  value={formData.thumbnailDescription || ''}
                   placeholder="Short text for thumbnail display"
                   onChange={handleInputChange}
                 />
@@ -1288,6 +2180,7 @@ export default function SubscribePage() {
                 <Label htmlFor="popUpText">Pop Up Text</Label>
                 <Textarea
                   id="popUpText"
+                  value={formData.popUpText || ''}
                   placeholder="Text to show in pop-up..."
                   rows={2}
                   onChange={handleInputChange}
@@ -1345,12 +2238,20 @@ export default function SubscribePage() {
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Location</h3>
             <div className="space-y-2">
-              <Label htmlFor="address">Address *</Label>
+              <Label htmlFor="address">
+                Address <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address"
+                value={formData.address || ''}
                 placeholder="Full address where coupon can be redeemed"
                 onChange={handleInputChange}
+                onBlur={() => handleFieldBlur('address')}
+                className={touched.address && errors.address ? 'border-destructive' : ''}
               />
+              {touched.address && errors.address && (
+                <p className="text-sm text-destructive">{errors.address}</p>
+              )}
             </div>
           </div>
         </>
@@ -1359,121 +2260,239 @@ export default function SubscribePage() {
 
     if (type === "nonprofit") {
       return (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="orgName">Organization Name *</Label>
-            <Input id="orgName" required placeholder="Enter organization name" onChange={handleInputChange} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="address">Address *</Label>
-            <Input id="address" required placeholder="Street address" onChange={handleInputChange} />
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                placeholder="contact@nonprofit.org"
-                onChange={handleInputChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number *</Label>
-              <Input id="phone" type="tel" required placeholder="+1 (555) 000-0000" onChange={handleInputChange} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
-            <Input id="website" type="url" placeholder="https://yournonprofit.org" onChange={handleInputChange} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="socialMedia">Social Media Links</Label>
-            <Textarea
-              id="socialMedia"
-              placeholder="Facebook: https://facebook.com/yourorg&#10;Instagram: @yourorg&#10;Twitter: @yourorg"
-              rows={3}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="donateLink">Donate Link</Label>
-            <Input
-              id="donateLink"
-              type="url"
-              placeholder="https://donate.yournonprofit.org"
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="about">About Organization *</Label>
-            <Textarea
-              id="about"
-              required
-              placeholder="Tell us about your organization's mission and impact..."
-              rows={4}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="logo">Organization Logo (PNG) *</Label>
-            {uploadedLogo ? (
-              <div className="relative w-fit">
-                <img
-                  src={uploadedLogo}
-                  alt="Logo"
-                  className={`h-32 w-32 object-contain rounded-lg border ${uploadingLogo ? 'opacity-50' : ''}`}
+        <>
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Basic Information</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="orgName">
+                  Organization Name <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="orgName" 
+                  value={formData.orgName || ''}
+                  placeholder="Enter organization name" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('orgName')}
+                  className={touched.orgName && errors.orgName ? 'border-destructive' : ''}
                 />
-                {uploadingLogo && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
-                    <Loader2 className="h-8 w-8 text-white animate-spin" />
-                  </div>
+                {touched.orgName && errors.orgName && (
+                  <p className="text-sm text-destructive">{errors.orgName}</p>
                 )}
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="absolute -top-2 -right-2 h-6 w-6"
-                  onClick={() => setUploadedLogo(null)}
-                  disabled={uploadingLogo}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
-            ) : (
-              <>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleLogoUpload}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">
+                  Address <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="address" 
+                  value={formData.address || ''}
+                  placeholder="Street address" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('address')}
+                  className={touched.address && errors.address ? 'border-destructive' : ''}
                 />
-                <div 
-                  className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => logoInputRef.current?.click()}
-                >
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">Click or drag to upload logo</p>
-                  <p className="text-xs text-muted-foreground mt-1">PNG format recommended</p>
-                </div>
-              </>
-            )}
+                {touched.address && errors.address && (
+                  <p className="text-sm text-destructive">{errors.address}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">
+                  City <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="city" 
+                  value={formData.city || ''}
+                  placeholder="City" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('city')}
+                  className={touched.city && errors.city ? 'border-destructive' : ''}
+                />
+                {touched.city && errors.city && (
+                  <p className="text-sm text-destructive">{errors.city}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="state">
+                  State <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="state" 
+                  value={formData.state || ''}
+                  placeholder="State" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('state')}
+                  className={touched.state && errors.state ? 'border-destructive' : ''}
+                />
+                {touched.state && errors.state && (
+                  <p className="text-sm text-destructive">{errors.state}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="zip">
+                  ZIP Code <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="zip" 
+                  value={formData.zip || ''}
+                  placeholder="ZIP" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('zip')}
+                  className={touched.zip && errors.zip ? 'border-destructive' : ''}
+                />
+                {touched.zip && errors.zip && (
+                  <p className="text-sm text-destructive">{errors.zip}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="country">
+                  Country <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="country" 
+                  value={formData.country || 'USA'}
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('country')}
+                  className={touched.country && errors.country ? 'border-destructive' : ''}
+                />
+                {touched.country && errors.country && (
+                  <p className="text-sm text-destructive">{errors.country}</p>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="images">Organization Images (PNG or JPG)</Label>
-            <div className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
-                {uploadedImages.map((img, idx) => {
-                  const isUploading = uploadingImages.has(img)
-                  return (
-                    <div key={idx} className="relative">
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Contact Information</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone">
+                  Phone <span className="text-destructive">*</span>
+                </Label>
+                <Input 
+                  id="phone" 
+                  type="tel" 
+                  value={formData.phone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('phone')}
+                  className={touched.phone && errors.phone ? 'border-destructive' : ''}
+                />
+                {touched.phone && errors.phone && (
+                  <p className="text-sm text-destructive">{errors.phone}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">
+                  Email <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email || ''}
+                  placeholder="contact@nonprofit.org"
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('email')}
+                  className={touched.email && errors.email ? 'border-destructive' : ''}
+                />
+                {touched.email && errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="website">Website</Label>
+                <Input 
+                  id="website" 
+                  type="url" 
+                  value={formData.website || ''}
+                  placeholder="https://yournonprofit.org" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('website')}
+                  className={touched.website && errors.website ? 'border-destructive' : ''}
+                />
+                {touched.website && errors.website && (
+                  <p className="text-sm text-destructive">{errors.website}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactName">Contact Person Name</Label>
+                <Input 
+                  id="contactName" 
+                  value={formData.contactName || ''}
+                  placeholder="Primary contact name" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Social Media</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="facebook">Facebook</Label>
+                <Input id="facebook" placeholder="https://facebook.com/yourorg" onChange={handleInputChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instagram">Instagram</Label>
+                <Input id="instagram" placeholder="https://instagram.com/yourorg" onChange={handleInputChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="twitter">X (Twitter)</Label>
+                <Input id="twitter" placeholder="https://twitter.com/yourorg" onChange={handleInputChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otherSocial">Other Social Media</Label>
+                <Input id="otherSocial" placeholder="https://..." onChange={handleInputChange} />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Organization Details</h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="description">
+                  About Organization <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  id="description"
+                  value={formData.description || ''}
+                  placeholder="Tell us about your organization's mission and impact..."
+                  rows={4}
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('description')}
+                  className={touched.description && errors.description ? 'border-destructive' : ''}
+                />
+                {touched.description && errors.description && (
+                  <p className="text-sm text-destructive">{errors.description}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Media</h3>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Organization Logo (PNG or JPG) *</Label>
+                <div className="space-y-2">
+                  {uploadedLogo ? (
+                    <div className="relative w-fit">
                       <img
-                        src={img}
-                        alt={`Upload ${idx + 1}`}
-                        className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                        src={uploadedLogo || "/placeholder.svg"}
+                        alt="Logo"
+                        className={`h-32 w-32 object-contain rounded-lg border ${uploadingLogo ? 'opacity-50' : ''}`}
                       />
-                      {isUploading && (
+                      {uploadingLogo && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
                           <Loader2 className="h-6 w-6 text-white animate-spin" />
                         </div>
@@ -1482,33 +2501,257 @@ export default function SubscribePage() {
                         variant="destructive"
                         size="icon"
                         className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => removeImage(idx)}
-                        disabled={isUploading}
+                        onClick={() => setUploadedLogo(null)}
+                        disabled={uploadingLogo}
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                  )
-                })}
+                  ) : (
+                    <>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={handleLogoUpload}
+                      />
+                      <Button variant="outline" onClick={() => logoInputRef.current?.click()}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Logo
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-              <div 
-                className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => imageInputRef.current?.click()}
-              >
-                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">Click or drag to upload images</p>
-                <p className="text-xs text-muted-foreground mt-1">Multiple images showing your organization's work</p>
+              <div className="space-y-2">
+                <Label>
+                  Images (PNG or JPG Files) <span className="text-destructive">*</span>
+                </Label>
+                {uploadedImages.length === 0 && touched.images && (
+                  <p className="text-sm text-destructive">At least one image is required</p>
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  {uploadedImages.map((img, idx) => {
+                    const isUploading = uploadingImages.has(img)
+                    return (
+                      <div key={idx} className="relative">
+                        <img
+                          src={img || "/placeholder.svg"}
+                          alt={`Upload ${idx + 1}`}
+                          className={`h-24 w-full object-cover rounded-lg ${isUploading ? 'opacity-50' : ''}`}
+                        />
+                        {isUploading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                            <Loader2 className="h-6 w-6 text-white animate-spin" />
+                          </div>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6"
+                          onClick={() => removeImage(idx)}
+                          disabled={isUploading}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <Button variant="outline" className="h-24 bg-transparent" onClick={() => imageInputRef.current?.click()}>
+                    <Plus className="h-6 w-6" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Links & Programs</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="donateLink">Donate Link *</Label>
+                <Input
+                  id="donateLink"
+                  type="url"
+                  required
+                  placeholder="https://donate.yournonprofit.org"
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sundaySchoolLink">Programs/Events Page Link</Label>
+                <Input
+                  id="sundaySchoolLink"
+                  type="url"
+                  placeholder="https://yourorg.org/programs"
+                  onChange={handleInputChange}
+                />
+                <p className="text-xs text-muted-foreground">Link to your programs or events page</p>
+              </div>
+            </div>
+            
+            {/* Services Section - Dynamic entries */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Services/Programs Offered (Optional)</Label>
+                  <p className="text-sm text-muted-foreground">Add services with links to more information</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setServiceCount(serviceCount + 1)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Program
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {Array.from({ length: serviceCount }).map((_, idx) => (
+                  <div key={idx} className="grid md:grid-cols-2 gap-3 p-3 border rounded-lg">
+                    <Input
+                      placeholder={`Program name (e.g., ${idx === 0 ? 'Food Bank' : idx === 1 ? 'Youth Programs' : 'Community Outreach'})`}
+                      onChange={(e) => {
+                        const services = formData.services ? JSON.parse(formData.services) : []
+                        services[idx] = { ...services[idx], name: e.target.value }
+                        setFormData({ ...formData, services: JSON.stringify(services.filter((s: any) => s?.name || s?.link)) })
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="url"
+                        placeholder="Program page link (optional)"
+                        className="flex-1"
+                        onChange={(e) => {
+                          const services = formData.services ? JSON.parse(formData.services) : []
+                          services[idx] = { ...services[idx], link: e.target.value }
+                          setFormData({ ...formData, services: JSON.stringify(services.filter((s: any) => s?.name || s?.link)) })
+                        }}
+                      />
+                      {serviceCount > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setServiceCount(Math.max(1, serviceCount - 1))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Committee Section - Dynamic entries */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Board Members / Leadership Team (Optional)</Label>
+                  <p className="text-sm text-muted-foreground">Add board members with their photos</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCommitteeMembers([...committeeMembers, { name: '', title: '', photo: '' }])
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Member
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {committeeMembers.map((member, idx) => (
+                  <div key={idx} className="grid md:grid-cols-3 gap-3 p-4 border rounded-lg">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Photo</Label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/jpg,image/png"
+                          className="hidden"
+                          id={`board-photo-${idx}`}
+                          onChange={(e) => handleCommitteePhotoUpload(idx, e)}
+                        />
+                        <Button 
+                          type="button"
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => document.getElementById(`board-photo-${idx}`)?.click()}
+                          disabled={member.uploading}
+                        >
+                          {member.uploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-1" />
+                              {member.photo ? 'Change' : 'Upload'}
+                            </>
+                          )}
+                        </Button>
+                        {member.photo && !member.uploading && (
+                          <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                            <img src={member.photo} alt={member.name || 'Member'} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Input
+                      placeholder="Full Name"
+                      value={member.name}
+                      onChange={(e) => {
+                        const updated = [...committeeMembers]
+                        updated[idx] = { ...updated[idx], name: e.target.value }
+                        setCommitteeMembers(updated)
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Title / Role (e.g., Director)"
+                        className="flex-1"
+                        value={member.title}
+                        onChange={(e) => {
+                          const updated = [...committeeMembers]
+                          updated[idx] = { ...updated[idx], title: e.target.value }
+                          setCommitteeMembers(updated)
+                        }}
+                      />
+                      {committeeMembers.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setCommitteeMembers(committeeMembers.filter((_, i) => i !== idx))
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )
     }
 
@@ -1529,7 +2772,9 @@ export default function SubscribePage() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-foreground">{info.title}</h1>
-              <p className="text-sm text-muted-foreground">${info.price}/month</p>
+              <p className="text-sm text-muted-foreground">
+                {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
+              </p>
             </div>
           </div>
         </div>
@@ -1568,9 +2813,88 @@ export default function SubscribePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {renderDetailsForm()}
-              <Button onClick={() => setStep(2)} className="w-full">
-                Continue to Payment
-              </Button>
+              <div className="space-y-2">
+                {!isFormValid() && (
+                  <div className="text-sm text-destructive text-center space-y-1">
+                    <p className="font-semibold">Please complete the following:</p>
+                    {(() => {
+                      const missing = []
+                      let fieldsToCheck: string[] = []
+                      
+                      if (type === 'mosque') {
+                        fieldsToCheck = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
+                      } else if (type === 'business') {
+                        fieldsToCheck = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+                      } else if (type === 'coupon') {
+                        fieldsToCheck = ['title', 'merchant', 'description', 'phone', 'email', 'address']
+                      } else if (type === 'nonprofit') {
+                        fieldsToCheck = ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
+                      }
+                      
+                      // Check required fields
+                      const fieldLabels: Record<string, string> = {
+                        title: 'Business Name',
+                        name: 'Name',
+                        orgName: 'Organization Name',
+                        description: 'Description',
+                        address: 'Address',
+                        city: 'City',
+                        state: 'State',
+                        zip: 'ZIP Code',
+                        country: 'Country',
+                        email: 'Email',
+                        phone: 'Phone',
+                        website: 'Website',
+                        merchant: 'Merchant',
+                      }
+                      
+                      fieldsToCheck.forEach(field => {
+                        const value = formData[field]
+                        if (!value || String(value).trim() === '') {
+                          const label = fieldLabels[field] || field.charAt(0).toUpperCase() + field.slice(1)
+                          missing.push(`• ${label} is required`)
+                        }
+                      })
+                      
+                      // Check logo (not required for business and coupon)
+                      if (type !== 'business' && type !== 'coupon' && !uploadedLogo) {
+                        missing.push('• Logo upload is required')
+                      }
+                      
+                      // Check images
+                      if (uploadedImages.length === 0) {
+                        missing.push('• At least one image is required')
+                      }
+                      
+                      // Check coupon specific
+                      if (type === 'coupon') {
+                        if (!startDate || !formData.startDate) {
+                          missing.push('• Start date is required')
+                        }
+                        if (!formData.discountAmount && !formData.discountPercentage) {
+                          missing.push('• Discount amount or percentage is required')
+                        }
+                      }
+                      
+                      // Check validation errors
+                      if (Object.keys(errors).length > 0) {
+                        Object.entries(errors).forEach(([field, error]) => {
+                          missing.push(`• ${error}`)
+                        })
+                      }
+                      
+                      return missing.map((msg, idx) => <p key={idx} className="text-xs">{msg}</p>)
+                    })()}
+                  </div>
+                )}
+                <Button 
+                  onClick={() => setStep(2)} 
+                  className="w-full"
+                  disabled={!isFormValid()}
+                >
+                  Continue to Payment
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -1586,7 +2910,9 @@ export default function SubscribePage() {
               <div className="p-4 rounded-lg bg-secondary">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-muted-foreground">{info.title}</span>
-                  <span className="font-semibold">${info.price}/month</span>
+                  <span className="font-semibold">
+                    {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
+                  </span>
                 </div>
                 {(type === "business" || type === "coupon") &&
                   affiliatedMosqueCode &&
@@ -1599,7 +2925,9 @@ export default function SubscribePage() {
                 <Separator className="my-2" />
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">Total</span>
-                  <span className="font-bold text-lg">${info.price}/month</span>
+                  <span className="font-bold text-lg">
+                    {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
+                  </span>
                 </div>
               </div>
 
@@ -1635,10 +2963,10 @@ export default function SubscribePage() {
               )}
 
               <div className="flex gap-4">
-                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1" disabled={isProcessing}>
                   Back
                 </Button>
-                <Button onClick={handleSubmit} disabled={isProcessing} className="flex-1">
+                <Button onClick={handleSubmit} disabled={isProcessing || !isFormValid()} className="flex-1">
                   {isProcessing ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

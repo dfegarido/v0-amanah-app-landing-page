@@ -52,17 +52,17 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch settings', 500)
     }
 
-    // Return default settings if none exist
+    // Return default settings if none exist (values in cents)
     if (!settings) {
       return successResponse({
         platform_name: 'Amanah',
         support_email: 'support@amanah.app',
         contact_phone: '+1 (555) 123-4567',
         website_url: 'https://amanah.app',
-        pricing_mosque: 100,
-        pricing_business: 10,
-        pricing_coupon: 10,
-        pricing_nonprofit: 50,
+        pricing_mosque: 10000, // $100 in cents
+        pricing_business: 1000, // $10 in cents
+        pricing_coupon: 1000, // $10 in cents
+        pricing_nonprofit: 5000, // $50 in cents
         mosque_kickback_percentage: 10,
         education_fund_percentage: 15,
         notification_email: 'josh@mobileappcity.com',

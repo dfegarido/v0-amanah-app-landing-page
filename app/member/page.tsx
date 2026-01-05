@@ -85,6 +85,15 @@ export default function MemberDashboard() {
   const [selectedMinute, setSelectedMinute] = useState('00')
   const [selectedPeriod, setSelectedPeriod] = useState('PM')
   
+  // Pricing state
+  const [pricing, setPricing] = useState({
+    pricing_mosque: 10000, // Default values in cents
+    pricing_business: 1000,
+    pricing_coupon: 1000,
+    pricing_nonprofit: 5000
+  })
+  const [loadingPricing, setLoadingPricing] = useState(true)
+  
   // Update scheduled_time when time picker values change
   const updateScheduledTime = (hour: string, minute: string, period: string) => {
     let hour24 = parseInt(hour)
@@ -115,6 +124,39 @@ export default function MemberDashboard() {
       router.push('/auth/login')
     }
   }, [user, loading, router])
+
+  // Fetch pricing settings
+  useEffect(() => {
+    const fetchPricing = async () => {
+      try {
+        setLoadingPricing(true)
+        console.log('[Member Portal] Fetching pricing from API...')
+        const response = await fetch('/api/settings/pricing')
+        const result = await response.json()
+        
+        console.log('[Member Portal] Pricing API response:', result)
+        
+        if (result.success && result.data) {
+          console.log('[Member Portal] Setting pricing state:', result.data)
+          setPricing(result.data)
+          console.log('[Member Portal] Pricing state updated. Values:', {
+            mosque: `$${(result.data.pricing_mosque / 100).toFixed(0)}`,
+            business: `$${(result.data.pricing_business / 100).toFixed(0)}`,
+            coupon: `$${(result.data.pricing_coupon / 100).toFixed(0)}`,
+            nonprofit: `$${(result.data.pricing_nonprofit / 100).toFixed(0)}`
+          })
+        } else {
+          console.error('[Member Portal] Invalid response format:', result)
+        }
+      } catch (error) {
+        console.error('[Member Portal] Error fetching pricing settings:', error)
+      } finally {
+        setLoadingPricing(false)
+      }
+    }
+
+    fetchPricing()
+  }, [])
 
   // Fetch messages and unread count
   useEffect(() => {
@@ -318,8 +360,13 @@ export default function MemberDashboard() {
       if (response.success && response.data) {
         setPaymentMethod(response.data.paymentMethod)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching payment method:', error)
+      // Gracefully handle Stripe connection errors - don't show error to user
+      // Payment method will just appear as null/not loaded
+      if (error.message?.includes('Stripe')) {
+        console.warn('[Member Dashboard] Stripe connection issue - payment method not available')
+      }
     } finally {
       setLoadingPaymentMethod(false)
     }
@@ -494,15 +541,17 @@ export default function MemberDashboard() {
   }
 
   const getSubscriptionPrice = (type: string) => {
+    const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}/month`
+    
     switch (type) {
       case "mosque":
-        return "$100/month"
+        return formatPrice(pricing.pricing_mosque)
       case "business":
-        return "$10/month"
+        return formatPrice(pricing.pricing_business)
       case "coupon":
-        return "$10/month"
+        return formatPrice(pricing.pricing_coupon)
       case "nonprofit":
-        return "$50/month"
+        return formatPrice(pricing.pricing_nonprofit)
       default:
         return ""
     }
@@ -631,7 +680,9 @@ export default function MemberDashboard() {
                       </div>
                       <div className="flex-1">
                         <CardTitle className="text-base">Add Mosque</CardTitle>
-                        <CardDescription>$100/month</CardDescription>
+                        <CardDescription>
+                          {loadingPricing ? "Loading..." : `$${(pricing.pricing_mosque / 100).toFixed(0)}/month`}
+                        </CardDescription>
                       </div>
                       <Plus className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
@@ -646,7 +697,9 @@ export default function MemberDashboard() {
                       </div>
                       <div className="flex-1">
                         <CardTitle className="text-base">Add Business</CardTitle>
-                        <CardDescription>$10/month</CardDescription>
+                        <CardDescription>
+                          {loadingPricing ? "Loading..." : `$${(pricing.pricing_business / 100).toFixed(0)}/month`}
+                        </CardDescription>
                       </div>
                       <Plus className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
@@ -661,7 +714,9 @@ export default function MemberDashboard() {
                       </div>
                       <div className="flex-1">
                         <CardTitle className="text-base">Add Coupon</CardTitle>
-                        <CardDescription>$10/month per coupon</CardDescription>
+                        <CardDescription>
+                          {loadingPricing ? "Loading..." : `$${(pricing.pricing_coupon / 100).toFixed(0)}/month per coupon`}
+                        </CardDescription>
                       </div>
                       <Plus className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
@@ -676,7 +731,9 @@ export default function MemberDashboard() {
                       </div>
                       <div className="flex-1">
                         <CardTitle className="text-base">Add Nonprofit</CardTitle>
-                        <CardDescription>$50/month</CardDescription>
+                        <CardDescription>
+                          {loadingPricing ? "Loading..." : `$${(pricing.pricing_nonprofit / 100).toFixed(0)}/month`}
+                        </CardDescription>
                       </div>
                       <Plus className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
