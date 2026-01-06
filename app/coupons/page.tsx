@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Search, Heart, MapPin, Calendar, TrendingUp, Filter, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -15,16 +16,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { RedeemCouponDialog } from "@/components/redeem-coupon-dialog"
 
 export default function CouponsPage() {
-  const { user } = useAuth()
-  const { toast } = useToast()
-  
-  const [coupons, setCoupons] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [sortBy, setSortBy] = useState("newest")
-  const [selectedCoupon, setSelectedCoupon] = useState<any>(null)
-  const [showRedeemDialog, setShowRedeemDialog] = useState(false)
-  const [savedCouponIds, setSavedCouponIds] = useState<Set<string>>(new Set())
+  const router = useRouter()
+
+  // Redirect to homepage - this page is disabled
+  useEffect(() => {
+    router.push("/")
+  }, [])
+
+  // Return null while redirecting
+  return null
 
   // Fetch coupons
   useEffect(() => {

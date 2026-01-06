@@ -16,20 +16,14 @@ import { QRCodeSVG } from "qrcode.react"
 
 export default function UserRedemptionsPage() {
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
-  const { toast } = useToast()
-  
-  const [redemptions, setRedemptions] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedStatus, setSelectedStatus] = useState("all")
-  const [selectedRedemption, setSelectedRedemption] = useState<any>(null)
 
-  // Redirect if not logged in
+  // Redirect to homepage - this page is disabled
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/auth/login')
-    }
-  }, [user, authLoading, router])
+    router.push("/")
+  }, [])
+
+  // Return null while redirecting
+  return null
 
   useEffect(() => {
     if (user) {

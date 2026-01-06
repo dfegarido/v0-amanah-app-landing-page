@@ -391,37 +391,6 @@ export default function AmanahLanding() {
         </div>
       </section>
 
-      {/* Browse Coupons Section */}
-      <section className="px-4 py-16 bg-gradient-to-br from-primary/5 to-primary/10 border-y border-primary/20">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 mx-auto">
-            <Store className="h-8 w-8 text-primary" />
-          </div>
-          <h3 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
-            {language === "en" ? "Exclusive Muslim Business Coupons" : "كوبونات حصرية للأعمال الإسلامية"}
-          </h3>
-          <p className="mb-8 text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-            {language === "en"
-              ? "Discover amazing deals and discounts from trusted Muslim-owned businesses in your community. Save money while supporting the ummah."
-              : "اكتشف عروضًا وخصومات مذهلة من الشركات الموثوقة المملوكة للمسلمين في مجتمعك. وفر المال مع دعم الأمة."}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" asChild className="gap-2">
-              <Link href="/coupons">
-                <Store className="h-5 w-5" />
-                {language === "en" ? "Browse Coupons" : "تصفح الكوبونات"}
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild className="gap-2">
-              <Link href="/member/register">
-                <Plus className="h-5 w-5" />
-                {language === "en" ? "List Your Business" : "أدرج عملك"}
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
       {/* Add Mosque / Business / Coupon Section */}
       <section className="px-4 py-16 bg-secondary/30">
         <div className="mx-auto max-w-3xl text-center">

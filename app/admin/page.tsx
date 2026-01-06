@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Separator } from "@/components/ui/separator"
 // Removed mock data import - now using real API
 import type { MosqueSubscription, BusinessSubscription, CouponSubscription, Subscription } from "@/lib/types" // Added Subscription type
 import { Dialog, DialogContent, DialogHeader, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
@@ -2467,6 +2468,10 @@ export default function AdminDashboard() {
                         <p className="font-medium">{nonprofit.name}</p>
                       </div>
                       <div>
+                        <Label className="text-muted-foreground">Contact Person</Label>
+                        <p>{(nonprofit as any).contact_name || 'N/A'}</p>
+                      </div>
+                      <div>
                         <Label className="text-muted-foreground">Email</Label>
                         <div className="flex items-center gap-2">
                           <p>{(nonprofit as any).email}</p>
@@ -2492,36 +2497,225 @@ export default function AdminDashboard() {
                           </Button>
                         </div>
                       </div>
-                      <div>
+                      <div className="md:col-span-2">
                         <Label className="text-muted-foreground">Website</Label>
-                        <p>{(nonprofit as any).website}</p>
+                        <p>
+                          {(nonprofit as any).website ? (
+                            <a
+                              href={(nonprofit as any).website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {(nonprofit as any).website}
+                            </a>
+                          ) : (
+                            'N/A'
+                          )}
+                        </p>
                       </div>
                       <div className="md:col-span-2">
                         <Label className="text-muted-foreground">Address</Label>
                         <div className="flex items-center gap-2">
-                          <p>{(nonprofit as any).address}</p>
+                          <p>
+                            {(nonprofit as any).address}
+                            {(nonprofit as any).city && `, ${(nonprofit as any).city}`}
+                            {(nonprofit as any).state && `, ${(nonprofit as any).state}`}
+                            {(nonprofit as any).zip && ` ${(nonprofit as any).zip}`}
+                            {(nonprofit as any).country && `, ${(nonprofit as any).country}`}
+                          </p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigator.clipboard.writeText((nonprofit as any).address)}
+                            onClick={() => navigator.clipboard.writeText(`${(nonprofit as any).address}, ${(nonprofit as any).city}, ${(nonprofit as any).state} ${(nonprofit as any).zip}`)}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
                       <div className="md:col-span-2">
-                        <Label className="text-muted-foreground">About</Label>
-                        <p>{(nonprofit as any).about}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Donate Link</Label>
-                        <p>{(nonprofit as any).donateLink || (nonprofit as any).donate_link}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Social Media</Label>
-                        <p className="whitespace-pre-wrap">{(nonprofit as any).socialMedia || (nonprofit as any).social_media}</p>
+                        <Label className="text-muted-foreground">About Organization</Label>
+                        <p className="whitespace-pre-wrap">{(nonprofit as any).description || (nonprofit as any).about || 'N/A'}</p>
                       </div>
                     </div>
+
+                    <Separator />
+
+                    {/* Links & Programs */}
+                    <div>
+                      <h4 className="font-semibold mb-3">Links & Programs</h4>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label className="text-muted-foreground">Donate Link</Label>
+                          <p>
+                            {(nonprofit as any).donate_link ? (
+                              <a
+                                href={(nonprofit as any).donate_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                {(nonprofit as any).donate_link}
+                              </a>
+                            ) : (
+                              'N/A'
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Programs/Events Page</Label>
+                          <p>
+                            {(nonprofit as any).programs_link ? (
+                              <a
+                                href={(nonprofit as any).programs_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                {(nonprofit as any).programs_link}
+                              </a>
+                            ) : (
+                              'N/A'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Services/Programs List */}
+                    {(nonprofit as any).services && (() => {
+                      try {
+                        const services = typeof (nonprofit as any).services === 'string' 
+                          ? JSON.parse((nonprofit as any).services) 
+                          : (nonprofit as any).services
+                        if (Array.isArray(services) && services.length > 0) {
+                          return (
+                            <div>
+                              <Label className="text-muted-foreground mb-2 block">Services / Programs</Label>
+                              <div className="space-y-2">
+                                {services.map((service: any, idx: number) => (
+                                  <div key={idx} className="p-3 bg-secondary/30 rounded-lg">
+                                    <p className="font-medium text-sm mb-1">{service.name}</p>
+                                    {service.link && (
+                                      <a
+                                        href={service.link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-primary hover:underline break-all"
+                                      >
+                                        <Globe className="h-3 w-3 inline mr-1" />
+                                        {service.link}
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+                      } catch (e) {
+                        return null
+                      }
+                      return null
+                    })()}
+
+                    {/* Board Members / Leadership Team */}
+                    {(nonprofit as any).committee_members && (() => {
+                      try {
+                        const committee = typeof (nonprofit as any).committee_members === 'string' 
+                          ? JSON.parse((nonprofit as any).committee_members) 
+                          : (nonprofit as any).committee_members
+                        if (Array.isArray(committee) && committee.length > 0) {
+                          return (
+                            <div>
+                              <Label className="text-muted-foreground mb-2 block">Board Members / Leadership Team</Label>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {committee.map((member: any, idx: number) => (
+                                  <div key={idx} className="flex flex-col items-center text-center p-3 bg-secondary/30 rounded-lg">
+                                    {member.photo && (
+                                      <img
+                                        src={member.photo}
+                                        alt={member.name}
+                                        className="h-20 w-20 rounded-full object-cover mb-2"
+                                      />
+                                    )}
+                                    <p className="font-medium text-sm">{member.name}</p>
+                                    <p className="text-xs text-muted-foreground">{member.title}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+                      } catch (e) {
+                        return null
+                      }
+                      return null
+                    })()}
+
+                    {/* Social Media */}
+                    <div>
+                      <Label className="text-muted-foreground mb-2 block">Social Media</Label>
+                      {(() => {
+                        const socialMedia = (nonprofit as any).social_media
+                        if (!socialMedia) return <p className="text-muted-foreground text-sm">N/A</p>
+                        if (typeof socialMedia === 'string') return <p className="whitespace-pre-wrap text-sm">{socialMedia}</p>
+                        // If it's an object, display individual links
+                        return (
+                          <div className="space-y-1">
+                            {socialMedia.facebook && (
+                              <p className="text-sm">
+                                <span className="font-medium">Facebook:</span>{' '}
+                                <a href={socialMedia.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  {socialMedia.facebook}
+                                </a>
+                              </p>
+                            )}
+                            {socialMedia.instagram && (
+                              <p className="text-sm">
+                                <span className="font-medium">Instagram:</span>{' '}
+                                <a href={socialMedia.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  {socialMedia.instagram}
+                                </a>
+                              </p>
+                            )}
+                            {socialMedia.twitter && (
+                              <p className="text-sm">
+                                <span className="font-medium">X (Twitter):</span>{' '}
+                                <a href={socialMedia.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  {socialMedia.twitter}
+                                </a>
+                              </p>
+                            )}
+                            {socialMedia.other_social && (
+                              <p className="text-sm">
+                                <span className="font-medium">Other:</span>{' '}
+                                <a href={socialMedia.other_social} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  {socialMedia.other_social}
+                                </a>
+                              </p>
+                            )}
+                            {!socialMedia.facebook && !socialMedia.instagram && !socialMedia.twitter && !socialMedia.other_social && (
+                              <p className="text-muted-foreground text-sm">N/A</p>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Logo */}
+                    {(nonprofit as any).logo && (
+                      <div>
+                        <Label className="text-muted-foreground mb-2 block">Logo</Label>
+                        <img
+                          src={(nonprofit as any).logo}
+                          alt="Organization Logo"
+                          className="h-24 w-24 object-contain rounded-lg border"
+                        />
+                      </div>
+                    )}
+
+                    {/* Photos */}
                     {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-2">

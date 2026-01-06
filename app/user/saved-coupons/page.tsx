@@ -14,20 +14,14 @@ import { RedeemCouponDialog } from "@/components/redeem-coupon-dialog"
 
 export default function SavedCouponsPage() {
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
-  const { toast } = useToast()
-  
-  const [savedCoupons, setSavedCoupons] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedCoupon, setSelectedCoupon] = useState<any>(null)
-  const [showRedeemDialog, setShowRedeemDialog] = useState(false)
 
-  // Redirect if not logged in
+  // Redirect to homepage - this page is disabled
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/auth/login')
-    }
-  }, [user, authLoading, router])
+    router.push("/")
+  }, [])
+
+  // Return null while redirecting
+  return null
 
   useEffect(() => {
     if (user) {
