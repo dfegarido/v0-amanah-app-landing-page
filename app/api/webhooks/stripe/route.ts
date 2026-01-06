@@ -193,12 +193,14 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
         .insert({
           mosque_id: mosque.id,
           mosque_code: mosque.mosque_code,
+          subscription_id: subscription.id,
           stripe_account_id: mosque.stripe_account_id,
           stripe_transfer_id: transfer.id,
           amount: kickbackAmount,
           period_start: periodStart.toISOString().split('T')[0],
           period_end: periodEnd.toISOString().split('T')[0],
-          status: 'completed',
+          status: 'paid',
+          payout_date: new Date().toISOString().split('T')[0],
           affiliate_breakdown: {
             [subscription.type + 's']: [{
               id: subscription.id,
@@ -223,6 +225,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
         .insert({
           mosque_id: mosque.id,
           mosque_code: mosque.mosque_code,
+          subscription_id: subscription.id,
           stripe_account_id: mosque.stripe_account_id,
           amount: kickbackAmount,
           period_start: periodStart.toISOString().split('T')[0],

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -41,6 +41,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format } from "date-fns"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 
 export default function MemberDashboard() {
   const router = useRouter()
@@ -48,13 +56,24 @@ export default function MemberDashboard() {
   const { toast } = useToast()
   
   // Real user data - no mock data
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date(2024, 9, 1)) // Oct 1, 2024
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date(2024, 11, 31)) // Dec 31, 2024
+  // Default date range: one month back to today
+  const getDefaultDateRange = () => {
+    const today = new Date()
+    const oneMonthAgo = new Date()
+    oneMonthAgo.setMonth(today.getMonth() - 1)
+    return { start: oneMonthAgo, end: today }
+  }
+  
+  const defaultDateRange = getDefaultDateRange()
+  const [startDate, setStartDate] = useState<Date | undefined>(defaultDateRange.start)
+  const [endDate, setEndDate] = useState<Date | undefined>(defaultDateRange.end)
   const [selectedMosqueId, setSelectedMosqueId] = useState<string>("")
   
   // Affiliate earnings state
   const [affiliateData, setAffiliateData] = useState<any>(null)
   const [loadingAffiliates, setLoadingAffiliates] = useState(false)
+  const [affiliateCurrentPage, setAffiliateCurrentPage] = useState(1)
+  const affiliatesPerPage = 10
   
   // Subscriptions state
   const [subscriptions, setSubscriptions] = useState<any[]>([])
@@ -311,6 +330,11 @@ export default function MemberDashboard() {
 
     fetchAffiliateData()
   }, [selectedMosqueId, subscriptions, startDate, endDate])
+
+  // Reset pagination when date range changes
+  useEffect(() => {
+    setAffiliateCurrentPage(1)
+  }, [startDate, endDate])
 
   // Fetch donations
   useEffect(() => {
@@ -995,8 +1019,9 @@ export default function MemberDashboard() {
                               size="sm"
                               className="mt-5"
                               onClick={() => {
-                                setStartDate(new Date(2024, 9, 1))
-                                setEndDate(new Date(2024, 11, 31))
+                                const { start, end } = getDefaultDateRange()
+                                setStartDate(start)
+                                setEndDate(end)
                               }}
                             >
                               Reset
@@ -1023,7 +1048,11 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-yellow-600">
                           ${affiliateData?.summary?.pendingEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">Current month</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {startDate && endDate 
+                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
+                            : "Date range"}
+                        </p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1032,7 +1061,11 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-green-600">
                           ${affiliateData?.summary?.paidEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">Previous months</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {startDate && endDate 
+                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
+                            : "Date range"}
+                        </p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1041,7 +1074,11 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-primary">
                           ${affiliateData?.summary?.totalEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">All time</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {startDate && endDate 
+                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
+                            : "All time"}
+                        </p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1063,100 +1100,148 @@ export default function MemberDashboard() {
                     <CardDescription>Monthly breakdown of your 10% kickback earnings</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Month</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="text-right">Fee</TableHead>
-                            <TableHead className="text-right">Kickback (10%)</TableHead>
-                            <TableHead className="text-center">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {affiliateData?.affiliates && affiliateData.affiliates.length > 0 ? (
-                            affiliateData.affiliates
-                              .sort((a: any, b: any) => {
-                                // Sort by periodStart date, latest first
-                                return new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime()
-                              })
-                              .map((affiliate: any) => {
-                                const periodStart = new Date(affiliate.periodStart)
-                                const month = periodStart.toISOString().slice(0, 7) // YYYY-MM format
-                                
-                                // Determine if paid or pending
-                                const now = new Date()
-                                const currentMonth = now.getMonth()
-                                const currentYear = now.getFullYear()
-                                const isPending = periodStart.getMonth() === currentMonth && periodStart.getFullYear() === currentYear
-                                
-                                return (
-                                  <TableRow key={`${affiliate.type}-${affiliate.id}-${month}`}>
-                                  <TableCell className="font-medium">{month}</TableCell>
-                                  <TableCell>
-                                    <Badge 
-                                      variant="outline" 
-                                      className={
-                                        affiliate.type === 'business'
-                                          ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                                          : affiliate.type === 'coupon'
-                                          ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
-                                          : "bg-green-500/10 text-green-600 border-green-500/20"
-                                      }
-                                    >
-                                      {affiliate.type === 'business' ? (
-                                        <>
-                                          <Store className="h-3 w-3 mr-1" />
-                                          Business
-                                        </>
-                                      ) : affiliate.type === 'coupon' ? (
-                                        <>
-                                          <Ticket className="h-3 w-3 mr-1" />
-                                          Coupon
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Heart className="h-3 w-3 mr-1" />
-                                          Nonprofit
-                                        </>
-                                      )}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>{affiliate.name}</TableCell>
-                                  <TableCell className="text-right">${affiliate.fee.toFixed(2)}</TableCell>
-                                  <TableCell 
-                                    className={`text-right font-semibold ${
-                                      isPending ? 'text-primary' : 'text-green-600'
-                                    }`}
-                                  >
-                                    ${affiliate.kickback.toFixed(2)}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <Badge 
-                                      className={
-                                        isPending
-                                          ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                                          : "bg-green-500/10 text-green-600 border-green-500/20"
-                                      }
-                                    >
-                                      {isPending ? 'Pending' : 'Paid'}
-                                    </Badge>
-                                  </TableCell>
+                    {(() => {
+                      // Calculate paginated affiliates
+                      const sortedAffiliates = affiliateData?.affiliates
+                        ? [...affiliateData.affiliates].sort((a: any, b: any) => {
+                            // Sort by periodStart date, latest first
+                            return new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime()
+                          })
+                        : []
+                      
+                      const totalAffiliates = sortedAffiliates.length
+                      const totalPages = Math.ceil(totalAffiliates / affiliatesPerPage)
+                      const startIndex = (affiliateCurrentPage - 1) * affiliatesPerPage
+                      const endIndex = startIndex + affiliatesPerPage
+                      const paginatedAffiliates = sortedAffiliates.slice(startIndex, endIndex)
+                      
+                      return (
+                        <>
+                          <div className="rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Month</TableHead>
+                                  <TableHead>Type</TableHead>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead className="text-right">Fee</TableHead>
+                                  <TableHead className="text-right">Kickback (10%)</TableHead>
+                                  <TableHead className="text-center">Status</TableHead>
                                 </TableRow>
-                              )
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                No affiliate data found for this mosque.
-                              </TableCell>
-                            </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {paginatedAffiliates.length > 0 ? (
+                                  paginatedAffiliates.map((affiliate: any) => {
+                                    const periodStart = new Date(affiliate.periodStart)
+                                    const month = periodStart.toISOString().slice(0, 7) // YYYY-MM format
+                                    
+                                    // Use the status from the API (Paid/Pending) instead of calculating from date
+                                    const isPending = affiliate.status === 'Pending'
+                                    
+                                    return (
+                                      <TableRow key={`${affiliate.type}-${affiliate.id}-${month}`}>
+                                        <TableCell className="font-medium">{month}</TableCell>
+                                        <TableCell>
+                                          <Badge 
+                                            variant="outline" 
+                                            className={
+                                              affiliate.type === 'business'
+                                                ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                                : affiliate.type === 'coupon'
+                                                ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                                                : "bg-green-500/10 text-green-600 border-green-500/20"
+                                            }
+                                          >
+                                            {affiliate.type === 'business' ? (
+                                              <>
+                                                <Store className="h-3 w-3 mr-1" />
+                                                Business
+                                              </>
+                                            ) : affiliate.type === 'coupon' ? (
+                                              <>
+                                                <Ticket className="h-3 w-3 mr-1" />
+                                                Coupon
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Heart className="h-3 w-3 mr-1" />
+                                                Nonprofit
+                                              </>
+                                            )}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell>{affiliate.name}</TableCell>
+                                        <TableCell className="text-right">${affiliate.fee.toFixed(2)}</TableCell>
+                                        <TableCell 
+                                          className={`text-right font-semibold ${
+                                            isPending ? 'text-primary' : 'text-green-600'
+                                          }`}
+                                        >
+                                          ${affiliate.kickback.toFixed(2)}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          <Badge 
+                                            className={
+                                              isPending
+                                                ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                                : "bg-green-500/10 text-green-600 border-green-500/20"
+                                            }
+                                          >
+                                            {isPending ? 'Pending' : 'Paid'}
+                                          </Badge>
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  })
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                      No affiliate data found for this mosque.
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          
+                          {/* Pagination Controls */}
+                          {totalAffiliates > 0 && (
+                            <div className="flex items-center justify-between mt-4">
+                              <div className="text-sm text-muted-foreground">
+                                Showing {startIndex + 1} to {Math.min(endIndex, totalAffiliates)} of {totalAffiliates} affiliates
+                              </div>
+                              <Pagination>
+                                <PaginationContent>
+                                  <PaginationItem>
+                                    <PaginationPrevious 
+                                      onClick={() => setAffiliateCurrentPage(prev => Math.max(1, prev - 1))}
+                                      className={affiliateCurrentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                  </PaginationItem>
+                                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                    <PaginationItem key={page}>
+                                      <PaginationLink
+                                        onClick={() => setAffiliateCurrentPage(page)}
+                                        isActive={affiliateCurrentPage === page}
+                                        className="cursor-pointer"
+                                      >
+                                        {page}
+                                      </PaginationLink>
+                                    </PaginationItem>
+                                  ))}
+                                  <PaginationItem>
+                                    <PaginationNext 
+                                      onClick={() => setAffiliateCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                      className={affiliateCurrentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                  </PaginationItem>
+                                </PaginationContent>
+                              </Pagination>
+                            </div>
                           )}
-                        </TableBody>
-                      </Table>
-                    </div>
+                        </>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
 

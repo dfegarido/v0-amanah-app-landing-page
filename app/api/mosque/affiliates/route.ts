@@ -100,6 +100,32 @@ export async function GET(request: NextRequest) {
       console.error('[Mosque Affiliates API] Error fetching nonprofits:', nonprofitError)
     }
 
+    // Fetch all mosque payouts to determine payment status
+    const { data: payouts, error: payoutError } = await supabase
+      .from('mosque_payouts')
+      .select('subscription_id, status, payout_date')
+      .eq('mosque_code', parseInt(mosqueCode))
+
+    console.log('[Mosque Affiliates API] Fetched payouts:', JSON.stringify(payouts, null, 2))
+    if (payoutError) {
+      console.error('[Mosque Affiliates API] Error fetching payouts:', payoutError)
+    }
+
+    // Create a map of subscription_id to payout status
+    const payoutStatusMap = new Map<string, { status: string; paidDate?: string }>()
+    if (payouts) {
+      payouts.forEach(payout => {
+        if (payout.subscription_id) {
+          console.log(`[Mosque Affiliates API] Adding to map: ${payout.subscription_id} -> status: ${payout.status}`)
+          payoutStatusMap.set(payout.subscription_id, {
+            status: payout.status === 'paid' ? 'paid' : 'pending',
+            paidDate: payout.payout_date
+          })
+        }
+      })
+    }
+    console.log('[Mosque Affiliates API] Payout status map size:', payoutStatusMap.size)
+
     // Process and format the data
     const affiliates: any[] = []
     
@@ -118,14 +144,21 @@ export async function GET(request: NextRequest) {
           // price_amount is already stored in dollars in the database
           const feeInDollars = subscription.price_amount
           
+          // Determine payment status from mosque_payouts table
+          const payoutInfo = payoutStatusMap.get(subscription.id)
+          const paymentStatus = payoutInfo?.status === 'paid' ? 'Paid' : 'Pending'
+          console.log(`[Mosque Affiliates API] Business ${business.name} (sub: ${subscription.id}): payout=${!!payoutInfo}, status=${payoutInfo?.status}, final=${paymentStatus}`)
+          
           affiliates.push({
             id: business.id,
             name: business.name,
             type: 'business',
             subscriptionId: subscription.id,
+            subscriptionStatus: subscription.status,
             fee: feeInDollars,
             kickback: feeInDollars * 0.10,
-            status: subscription.status,
+            status: paymentStatus,
+            paidDate: payoutInfo?.paidDate,
             createdAt: subscription.created_at,
             periodStart: subscription.current_period_start,
             periodEnd: subscription.current_period_end,
@@ -150,14 +183,21 @@ export async function GET(request: NextRequest) {
           // price_amount is already stored in dollars in the database
           const feeInDollars = subscription.price_amount
           
+          // Determine payment status from mosque_payouts table
+          const payoutInfo = payoutStatusMap.get(subscription.id)
+          const paymentStatus = payoutInfo?.status === 'paid' ? 'Paid' : 'Pending'
+          console.log(`[Mosque Affiliates API] Coupon ${coupon.title} (sub: ${subscription.id}): payout=${!!payoutInfo}, status=${payoutInfo?.status}, final=${paymentStatus}`)
+          
           affiliates.push({
             id: coupon.id,
             name: coupon.title,
             type: 'coupon',
             subscriptionId: subscription.id,
+            subscriptionStatus: subscription.status,
             fee: feeInDollars,
             kickback: feeInDollars * 0.10,
-            status: subscription.status,
+            status: paymentStatus,
+            paidDate: payoutInfo?.paidDate,
             createdAt: subscription.created_at,
             periodStart: subscription.current_period_start,
             periodEnd: subscription.current_period_end,
@@ -182,14 +222,21 @@ export async function GET(request: NextRequest) {
           // price_amount is already stored in dollars in the database
           const feeInDollars = subscription.price_amount
           
+          // Determine payment status from mosque_payouts table
+          const payoutInfo = payoutStatusMap.get(subscription.id)
+          const paymentStatus = payoutInfo?.status === 'paid' ? 'Paid' : 'Pending'
+          console.log(`[Mosque Affiliates API] Nonprofit ${nonprofit.name} (sub: ${subscription.id}): payout=${!!payoutInfo}, status=${payoutInfo?.status}, final=${paymentStatus}`)
+          
           affiliates.push({
             id: nonprofit.id,
             name: nonprofit.name,
             type: 'nonprofit',
             subscriptionId: subscription.id,
+            subscriptionStatus: subscription.status,
             fee: feeInDollars,
             kickback: feeInDollars * 0.10,
-            status: subscription.status,
+            status: paymentStatus,
+            paidDate: payoutInfo?.paidDate,
             createdAt: subscription.created_at,
             periodStart: subscription.current_period_start,
             periodEnd: subscription.current_period_end,
@@ -199,31 +246,43 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Calculate earnings summary
-    const now = new Date()
-    const currentMonth = now.getMonth()
-    const currentYear = now.getFullYear()
+    // Calculate earnings summary based on date range
+    let filterStartDate: Date | null = null
+    let filterEndDate: Date | null = null
+    
+    if (startDate) {
+      filterStartDate = new Date(startDate)
+      filterStartDate.setHours(0, 0, 0, 0)
+    }
+    if (endDate) {
+      filterEndDate = new Date(endDate)
+      filterEndDate.setHours(23, 59, 59, 999)
+    }
 
-    const currentMonthAffiliates = affiliates.filter(a => {
-      if (a.status !== 'active') return false
+    // Filter affiliates within the date range
+    const filteredAffiliates = affiliates.filter(a => {
+      if (a.subscriptionStatus !== 'active') return false
+      
       const periodStart = new Date(a.periodStart)
-      return periodStart.getMonth() === currentMonth && periodStart.getFullYear() === currentYear
+      periodStart.setHours(0, 0, 0, 0)
+      
+      if (filterStartDate && periodStart < filterStartDate) return false
+      if (filterEndDate && periodStart > filterEndDate) return false
+      
+      return true
     })
 
-    const previousMonthsAffiliates = affiliates.filter(a => {
-      if (a.cancelledAt) {
-        const cancelledDate = new Date(a.cancelledAt)
-        return cancelledDate < now
-      }
-      if (a.status !== 'active') return false
-      const periodStart = new Date(a.periodStart)
-      return periodStart < new Date(currentYear, currentMonth, 1)
-    })
-
-    const pendingEarnings = currentMonthAffiliates.reduce((sum, a) => sum + a.kickback, 0)
-    const paidEarnings = previousMonthsAffiliates.reduce((sum, a) => sum + a.kickback, 0)
+    // Calculate pending and paid earnings within the date range
+    const pendingEarnings = filteredAffiliates
+      .filter(a => a.status === 'Pending')
+      .reduce((sum, a) => sum + a.kickback, 0)
+    
+    const paidEarnings = filteredAffiliates
+      .filter(a => a.status === 'Paid')
+      .reduce((sum, a) => sum + a.kickback, 0)
+    
     const totalEarnings = pendingEarnings + paidEarnings
-    const activeAffiliatesCount = affiliates.filter(a => a.status === 'active').length
+    const activeAffiliatesCount = filteredAffiliates.length
 
     console.log(`[Mosque Affiliates API] Found ${affiliates.length} total affiliates, ${activeAffiliatesCount} active`)
     console.log(`[Mosque Affiliates API] Pending: $${pendingEarnings}, Paid: $${paidEarnings}, Total: $${totalEarnings}`)
