@@ -22,6 +22,7 @@ import {
   Bell,
   Plus,
   Loader2,
+  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -2228,34 +2229,86 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
 
-        {/* Third Party Logins - Mosque Only */}
+        {/* Third Party Integrations - Mosque Only */}
         {subscription.type === "mosque" && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key className="h-5 w-5" />
-                Third Party App Logins
+                Third Party Integrations
               </CardTitle>
-              <CardDescription>Login credentials for connected services (managed by admin)</CardDescription>
+              <CardDescription>Connected services and integrations (managed by admin)</CardDescription>
             </CardHeader>
             <CardContent>
-              {(subscription as any).thirdPartyLogins?.length > 0 ? (
-                <div className="space-y-3">
-                  {(subscription as any).thirdPartyLogins.map((login: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-foreground">{login.platform}</p>
-                        <p className="text-sm text-muted-foreground">Username: {login.username}</p>
-                      </div>
-                      <Badge variant="outline">Admin Managed</Badge>
-                    </div>
-                  ))}
+              <div className="space-y-3">
+                {/* Amanah App - Coming Soon */}
+                <div className="p-3 rounded-lg bg-secondary/50 border border-dashed">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-muted-foreground">Amanah App Login</p>
+                    <Badge variant="outline" className="text-muted-foreground">Coming Soon</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Login credentials will be available in the next version
+                  </p>
                 </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">
-                  No third party logins configured. Contact admin to set up.
-                </p>
-              )}
+                
+                {/* Stripe Connected Account */}
+                <div className="p-3 rounded-lg bg-secondary/50 border">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium">Stripe Connected Account</p>
+                    {subscription.entity?.stripe_onboarding_complete ? (
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                        <Check className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    ) : subscription.entity?.stripe_account_id ? (
+                      <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                        Onboarding Incomplete
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Not Connected
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {subscription.entity?.stripe_account_id ? (
+                    <div className="space-y-2">
+                      <div className="text-sm space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Status:</span>
+                          {subscription.entity?.stripe_charges_enabled && subscription.entity?.stripe_payouts_enabled ? (
+                            <span className="text-green-600 font-medium">Fully Enabled</span>
+                          ) : (
+                            <span className="text-yellow-600 font-medium">Setup Required</span>
+                          )}
+                        </div>
+                        {subscription.entity?.stripe_charges_enabled && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3 w-3 text-green-600" />
+                            <span className="text-sm">Can accept payments</span>
+                          </div>
+                        )}
+                        {subscription.entity?.stripe_payouts_enabled && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-3 w-3 text-green-600" />
+                            <span className="text-sm">Can receive payouts</span>
+                          </div>
+                        )}
+                      </div>
+                      {!subscription.entity?.stripe_onboarding_complete && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Contact admin to complete Stripe onboarding
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Contact admin to connect your Stripe account and receive affiliate earnings
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

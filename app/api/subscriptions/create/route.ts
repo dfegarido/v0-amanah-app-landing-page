@@ -1,11 +1,18 @@
 import { NextRequest } from 'next/server'
 import { getServerSupabase } from '@/lib/auth'
 import { successResponse, errorResponse, requireAuth, parseRequestBody } from '@/lib/api-helpers'
+import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-12-18.acacia'
 })
+
+// Service role Supabase client for admin operations (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // Default pricing configuration (fallback if no settings in database)
 const DEFAULT_SUBSCRIPTION_PRICING = {
@@ -15,13 +22,22 @@ const DEFAULT_SUBSCRIPTION_PRICING = {
   nonprofit: { amount: 5000, currency: 'usd' } // $50/month
 }
 
-// Fetch pricing from admin settings
-async function getSubscriptionPricing(supabase: any, type: 'mosque' | 'business' | 'coupon' | 'nonprofit') {
+// Fetch pricing from admin settings (uses service role to bypass RLS)
+async function getSubscriptionPricing(type: 'mosque' | 'business' | 'coupon' | 'nonprofit') {
   try {
-    const { data: settings } = await supabase
+    console.log('[Pricing] Fetching pricing from admin_settings for type:', type)
+    const { data: settings, error: fetchError } = await supabaseAdmin
       .from('admin_settings')
       .select('pricing_mosque, pricing_business, pricing_coupon, pricing_nonprofit')
       .single()
+
+    if (fetchError) {
+      console.error('[Pricing] Error fetching admin_settings:', fetchError)
+      console.log('[Pricing] Falling back to default pricing')
+      return DEFAULT_SUBSCRIPTION_PRICING[type]
+    }
+
+    console.log('[Pricing] Admin settings fetched:', JSON.stringify(settings, null, 2))
 
     if (settings) {
       const pricingMap: Record<string, number> = {
@@ -31,13 +47,17 @@ async function getSubscriptionPricing(supabase: any, type: 'mosque' | 'business'
         nonprofit: settings.pricing_nonprofit || DEFAULT_SUBSCRIPTION_PRICING.nonprofit.amount
       }
 
+      console.log('[Pricing] Pricing map:', pricingMap)
+      console.log('[Pricing] Selected pricing for', type, ':', pricingMap[type], 'cents ($' + (pricingMap[type] / 100) + ')')
+
       return { amount: pricingMap[type], currency: 'usd' }
     }
   } catch (error) {
-    console.error('[Pricing] Error fetching pricing from settings:', error)
+    console.error('[Pricing] Exception fetching pricing from settings:', error)
   }
 
   // Fallback to default pricing
+  console.log('[Pricing] Using fallback default pricing for', type)
   return DEFAULT_SUBSCRIPTION_PRICING[type]
 }
 
@@ -67,6 +87,7 @@ export async function POST(request: NextRequest) {
     const userId = authResult.user.id
 
     console.log(`[Subscription Create] Type: ${type}, User: ${userId}`)
+    console.log(`[Subscription Create] Data:`, JSON.stringify(data, null, 2))
 
     const supabase = getServerSupabase(request)
 
@@ -111,44 +132,44 @@ export async function POST(request: NextRequest) {
     }
 
     // Get pricing for subscription type from admin settings
-    const pricing = await getSubscriptionPricing(supabase, type)
+    let pricing = await getSubscriptionPricing(type)
     if (!pricing) {
       return errorResponse('Invalid subscription type', 400)
     }
     
+    // For coupons, check if custom price is provided in the data
+    if (type === 'coupon' && data.customPrice) {
+      const customPriceInCents = Math.round(parseFloat(data.customPrice) * 100)
+      if (!isNaN(customPriceInCents) && customPriceInCents > 0) {
+        console.log(`[Pricing] Using custom coupon price: $${data.customPrice} (${customPriceInCents} cents)`)
+        pricing = { amount: customPriceInCents, currency: 'usd' }
+      }
+    }
+    
     console.log(`[Pricing] Using ${type} pricing: $${pricing.amount / 100}`)
 
-    // Create or get Stripe price
+    // Create a new Stripe price for this subscription
+    // Always create new prices to ensure they match current admin pricing
     let stripePriceId: string
-
-    // Check if we have a cached price ID in environment
-    const envPriceKey = `STRIPE_PRICE_${type.toUpperCase()}_MONTHLY`
-    const cachedPriceId = process.env[envPriceKey]
-
-    if (cachedPriceId) {
-      stripePriceId = cachedPriceId
-      console.log(`[Stripe] Using cached price ID: ${stripePriceId}`)
-    } else {
-      // Create a new price
-      console.log(`[Stripe] Creating new price for ${type}`)
-      try {
-        const price = await stripe.prices.create({
-          currency: pricing.currency,
-          unit_amount: pricing.amount,
-          recurring: {
-            interval: 'month'
-          },
-          product_data: {
-            name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
-          }
-        })
-        stripePriceId = price.id
-        console.log(`[Stripe] Price created: ${stripePriceId}`)
-      } catch (stripeError: any) {
-        console.error('[Stripe] Price creation failed:', stripeError.message)
-        console.error('[Stripe] Error details:', stripeError)
-        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
-      }
+    
+    console.log(`[Stripe] Creating new price for ${type} at $${pricing.amount / 100}`)
+    try {
+      const price = await stripe.prices.create({
+        currency: pricing.currency,
+        unit_amount: pricing.amount,
+        recurring: {
+          interval: 'month'
+        },
+        product_data: {
+          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
+        }
+      })
+      stripePriceId = price.id
+      console.log(`[Stripe] Price created: ${stripePriceId} for $${pricing.amount / 100}`)
+    } catch (stripeError: any) {
+      console.error('[Stripe] Price creation failed:', stripeError.message)
+      console.error('[Stripe] Error details:', stripeError)
+      return errorResponse(`Stripe error: ${stripeError.message}`, 500)
     }
 
     // Attach payment method if provided
@@ -508,6 +529,12 @@ async function createCouponRecord(supabase: any, subscriptionId: string, userId:
 
 // Helper function to create nonprofit record
 async function createNonprofitRecord(supabase: any, subscriptionId: string, userId: string, data: any) {
+  // Handle mosque affiliation
+  let mosqueCode = null
+  if (data.affiliatedMosqueCode && data.affiliatedMosqueCode !== 'none') {
+    mosqueCode = parseInt(data.affiliatedMosqueCode)
+  }
+
   return await supabase
     .from('nonprofits')
     .insert({
@@ -524,6 +551,7 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
       email: data.email,
       phone: data.phone || 'Not provided', // Required field - provide fallback
       website: data.website,
+      contact_name: data.contactName,
       donate_link: data.donateLink,
       programs_link: data.programsLink,
       social_media: {
@@ -540,6 +568,7 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
       committee_members: data.committee,
       logo: data.logo,
       photos: data.photos || [],
+      affiliated_mosque_code: mosqueCode,
       status: 'pending'
     })
     .select()

@@ -48,8 +48,13 @@ export default function MemberDashboard() {
   const { toast } = useToast()
   
   // Real user data - no mock data
-  const [startDate, setStartDate] = useState("2024-10-01")
-  const [endDate, setEndDate] = useState("2024-12-31")
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date(2024, 9, 1)) // Oct 1, 2024
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date(2024, 11, 31)) // Dec 31, 2024
+  const [selectedMosqueId, setSelectedMosqueId] = useState<string>("")
+  
+  // Affiliate earnings state
+  const [affiliateData, setAffiliateData] = useState<any>(null)
+  const [loadingAffiliates, setLoadingAffiliates] = useState(false)
   
   // Subscriptions state
   const [subscriptions, setSubscriptions] = useState<any[]>([])
@@ -310,6 +315,37 @@ export default function MemberDashboard() {
       fetchSubscriptions()
     }
   }, [user, toast])
+
+  // Fetch affiliate earnings when mosque selection changes
+  useEffect(() => {
+    const fetchAffiliateData = async () => {
+      if (!selectedMosqueId) return
+
+      const mosqueSubscription = subscriptions.find(s => s.id === selectedMosqueId)
+      if (!mosqueSubscription?.mosqueCode) return
+
+      try {
+        setLoadingAffiliates(true)
+        const params = new URLSearchParams({
+          mosqueCode: mosqueSubscription.mosqueCode.toString(),
+          ...(startDate && { startDate: startDate.toISOString() }),
+          ...(endDate && { endDate: endDate.toISOString() })
+        })
+
+        const response: any = await authenticatedGet(`/api/mosque/affiliates?${params}`)
+        
+        if (response.success && response.data) {
+          setAffiliateData(response.data)
+        }
+      } catch (error) {
+        console.error('[Member Dashboard] Error fetching affiliate data:', error)
+      } finally {
+        setLoadingAffiliates(false)
+      }
+    }
+
+    fetchAffiliateData()
+  }, [selectedMosqueId, subscriptions, startDate, endDate])
 
   // Fetch donations
   useEffect(() => {
@@ -644,7 +680,10 @@ export default function MemberDashboard() {
         <Tabs defaultValue="subscriptions" className="space-y-6">
           <TabsList>
             <TabsTrigger value="subscriptions">My Subscriptions</TabsTrigger>
-            <TabsTrigger value="donations">Donations</TabsTrigger>
+            <TabsTrigger value="donations">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Affiliate Earnings
+            </TabsTrigger>
             <TabsTrigger value="messages" className="relative">
               Messages
               {unreadMessageCount > 0 && (
@@ -796,7 +835,7 @@ export default function MemberDashboard() {
                             <CardDescription className="flex items-center gap-2 flex-wrap">
                               <span className="capitalize">{subscription.type}</span>
                               <span>•</span>
-                              <span>{getSubscriptionPrice(subscription.type)}</span>
+                              <span>${subscription.price}/month</span>
                               {subscription.mosqueCode && (
                                 <>
                                   <span>•</span>
@@ -907,123 +946,393 @@ export default function MemberDashboard() {
             </div>
           </TabsContent>
 
-          <TabsContent value="donations" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">Donations</h3>
-                <p className="text-sm text-muted-foreground">Make donations and view your donation history</p>
-              </div>
-              <Button asChild>
-                <Link href="/member/donate">
-                  <Heart className="h-4 w-4 mr-2" />
-                  Make a Donation
-                </Link>
-              </Button>
-            </div>
+          <TabsContent value="donations" className="space-y-6">
+            {/* Only show if user has mosque subscription */}
+            {subscriptions.some(s => s.type === 'mosque') ? (
+              <>
+                {(() => {
+                  // Get all mosque subscriptions
+                  const mosqueSubscriptions = subscriptions.filter(s => s.type === 'mosque')
+                  
+                  // Set initial selected mosque if not set
+                  if (!selectedMosqueId && mosqueSubscriptions.length > 0) {
+                    setSelectedMosqueId(mosqueSubscriptions[0].id)
+                  }
+                  
+                  // Get the selected mosque subscription
+                  const mosqueSubscription = mosqueSubscriptions.find(s => s.id === selectedMosqueId) || mosqueSubscriptions[0]
+                  const mosqueCode = mosqueSubscription?.mosqueCode
+                  const mosqueName = mosqueSubscription?.name || 'Your Mosque'
+                  const hasMultipleMosques = mosqueSubscriptions.length > 1
 
-            {/* Donation Summary */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>Total Donated</CardDescription>
-                  <CardTitle className="text-2xl">
-                    ${donations.filter((d) => d.status === "succeeded").reduce((sum, d) => sum + Number(d.amount || 0), 0).toFixed(2)}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>Total Donations</CardDescription>
-                  <CardTitle className="text-2xl">{donations.length}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>Successful</CardDescription>
-                  <CardTitle className="text-2xl">
-                    {donations.filter((d) => d.status === "succeeded").length}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-            </div>
-
-            {/* Donations List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Donations</CardTitle>
-                <CardDescription>Your recent donation activity</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingDonations ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">Loading donations...</p>
-                  </div>
-                ) : donations.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4">
-                      No donations yet. Make your first donation to get started!
-                    </p>
-                    <Button asChild>
-                      <Link href="/member/donate">
-                        Make a Donation
-                      </Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {donations.slice(0, 5).map((donation) => (
-                      <div
-                        key={donation.id}
-                        className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Heart className="h-5 w-5 text-primary" />
-                          <div>
-                            <p className="font-medium">
-                              ${Number(donation.amount || 0).toFixed(2)} {donation.currency || 'USD'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {donation.mosque?.name || 'General Donation'}
-                              {donation.campaign_name && ` • ${donation.campaign_name}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(donation.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
+                  return (
+                    <>
+                      {/* Header with Mosque Info */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          {hasMultipleMosques ? (
+                            <div className="space-y-2">
+                              <Label className="text-sm text-muted-foreground">Select Mosque</Label>
+                              <Select value={selectedMosqueId} onValueChange={setSelectedMosqueId}>
+                                <SelectTrigger className="w-full max-w-md">
+                                  <SelectValue>
+                                    <div className="flex items-center gap-2">
+                                      <Building2 className="h-4 w-4 text-primary" />
+                                      <span className="font-semibold">{mosqueName}</span>
+                                      <span className="text-muted-foreground">• Code #{mosqueCode}</span>
+                                    </div>
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {mosqueSubscriptions.map((mosque) => (
+                                    <SelectItem key={mosque.id} value={mosque.id}>
+                                      <div className="flex items-center gap-2">
+                                        <Building2 className="h-4 w-4 text-primary" />
+                                        <span className="font-semibold">{mosque.name}</span>
+                                        <span className="text-muted-foreground">• Code #{mosque.mosqueCode}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground">
+                                Share code #{mosqueCode} with businesses for 10% kickback
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+                                <Building2 className="h-5 w-5 text-primary" />
+                                {mosqueName}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                Mosque Code: <span className="font-mono font-bold text-primary">#{mosqueCode}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Share this code with businesses for 10% kickback
+                              </p>
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {donation.status === "succeeded" && (
-                            <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                              Completed
-                            </Badge>
-                          )}
-                          {donation.status === "pending" && (
-                            <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
-                              Pending
-                            </Badge>
-                          )}
-                          {donation.status === "failed" && (
-                            <Badge className="bg-red-500/10 text-red-500 border-red-500/20">
-                              Failed
-                            </Badge>
-                          )}
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              if (!affiliateData?.affiliates || affiliateData.affiliates.length === 0) {
+                                toast({
+                                  title: "No Data",
+                                  description: "No affiliate data to export",
+                                  variant: "destructive"
+                                })
+                                return
+                              }
+
+                              // Generate CSV
+                              const headers = ['Month', 'Type', 'Name', 'Fee', 'Kickback (10%)', 'Status']
+                              const rows = affiliateData.affiliates
+                                .sort((a: any, b: any) => {
+                                  // Sort by periodStart date, latest first
+                                  return new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime()
+                                })
+                                .map((affiliate: any) => {
+                                  const periodStart = new Date(affiliate.periodStart)
+                                  const month = periodStart.toISOString().slice(0, 7)
+                                  const now = new Date()
+                                  const currentMonth = now.getMonth()
+                                  const currentYear = now.getFullYear()
+                                  const isPending = periodStart.getMonth() === currentMonth && periodStart.getFullYear() === currentYear
+                                  
+                                  return [
+                                    month,
+                                    affiliate.type.charAt(0).toUpperCase() + affiliate.type.slice(1),
+                                    affiliate.name,
+                                    `$${affiliate.fee.toFixed(2)}`,
+                                    `$${affiliate.kickback.toFixed(2)}`,
+                                    isPending ? 'Pending' : 'Paid'
+                                  ]
+                                })
+
+                              const csvContent = [
+                                headers.join(','),
+                                ...rows.map((row: string[]) => row.map((cell: string) => `"${cell}"`).join(','))
+                              ].join('\n')
+
+                              // Download CSV
+                              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                              const link = document.createElement('a')
+                              const url = URL.createObjectURL(blob)
+                              link.setAttribute('href', url)
+                              
+                              // Get the current mosque for the filename
+                              const currentMosque = mosqueSubscriptions.find((s: any) => s.id === selectedMosqueId) || mosqueSubscriptions[0]
+                              const currentMosqueCode = currentMosque?.mosqueCode || 'mosque'
+                              
+                              link.setAttribute('download', `affiliate-earnings-${currentMosqueCode}-${new Date().toISOString().slice(0, 10)}.csv`)
+                              link.style.visibility = 'hidden'
+                              document.body.appendChild(link)
+                              link.click()
+                              document.body.removeChild(link)
+
+                              toast({
+                                title: "Success",
+                                description: "Affiliate earnings exported successfully"
+                              })
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export CSV
+                          </Button>
                         </div>
                       </div>
-                    ))}
-                    {donations.length > 5 && (
-                      <div className="pt-2">
-                        <Button variant="outline" className="w-full" asChild>
-                          <Link href="/member/donations">
-                            View All Donations ({donations.length})
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
+
+                      {/* Date Range Filter */}
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm">Filter by Date Range</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                              <Label className="text-xs text-muted-foreground">From</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left font-normal mt-1"
+                                  >
+                                    <Calendar className="mr-2 h-4 w-4" />
+                                    {startDate ? format(startDate, "PPP") : "Pick a date"}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <CalendarComponent
+                                    mode="single"
+                                    selected={startDate}
+                                    onSelect={setStartDate}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <div className="flex-1">
+                              <Label className="text-xs text-muted-foreground">To</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left font-normal mt-1"
+                                  >
+                                    <Calendar className="mr-2 h-4 w-4" />
+                                    {endDate ? format(endDate, "PPP") : "Pick a date"}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <CalendarComponent
+                                    mode="single"
+                                    selected={endDate}
+                                    onSelect={setEndDate}
+                                    disabled={(date) => {
+                                      // Disable dates before start date if start date is set
+                                      if (startDate) {
+                                        return date < startDate
+                                      }
+                                      return false
+                                    }}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="mt-5"
+                              onClick={() => {
+                                setStartDate(new Date(2024, 9, 1))
+                                setEndDate(new Date(2024, 11, 31))
+                              }}
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )
+                })()}
+
+                {/* Earnings Summary */}
+                {loadingAffiliates ? (
+                  <Card>
+                    <CardContent className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardDescription>Pending Earnings</CardDescription>
+                        <CardTitle className="text-2xl text-yellow-600">
+                          ${affiliateData?.summary?.pendingEarnings?.toFixed(2) || '0.00'}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">Current month</p>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardDescription>Paid Earnings</CardDescription>
+                        <CardTitle className="text-2xl text-green-600">
+                          ${affiliateData?.summary?.paidEarnings?.toFixed(2) || '0.00'}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">Previous months</p>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardDescription>Total Earnings</CardDescription>
+                        <CardTitle className="text-2xl text-primary">
+                          ${affiliateData?.summary?.totalEarnings?.toFixed(2) || '0.00'}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">All time</p>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardDescription>Affiliates</CardDescription>
+                        <CardTitle className="text-2xl">
+                          {affiliateData?.summary?.activeAffiliatesCount || 0}
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-1">Active subscriptions</p>
+                      </CardHeader>
+                    </Card>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+
+                {/* Affiliated Businesses & Coupons Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Affiliated Businesses & Coupons</CardTitle>
+                    <CardDescription>Monthly breakdown of your 10% kickback earnings</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Month</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead className="text-right">Fee</TableHead>
+                            <TableHead className="text-right">Kickback (10%)</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {affiliateData?.affiliates && affiliateData.affiliates.length > 0 ? (
+                            affiliateData.affiliates
+                              .sort((a: any, b: any) => {
+                                // Sort by periodStart date, latest first
+                                return new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime()
+                              })
+                              .map((affiliate: any) => {
+                                const periodStart = new Date(affiliate.periodStart)
+                                const month = periodStart.toISOString().slice(0, 7) // YYYY-MM format
+                                
+                                // Determine if paid or pending
+                                const now = new Date()
+                                const currentMonth = now.getMonth()
+                                const currentYear = now.getFullYear()
+                                const isPending = periodStart.getMonth() === currentMonth && periodStart.getFullYear() === currentYear
+                                
+                                return (
+                                  <TableRow key={`${affiliate.type}-${affiliate.id}-${month}`}>
+                                  <TableCell className="font-medium">{month}</TableCell>
+                                  <TableCell>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={
+                                        affiliate.type === 'business'
+                                          ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                          : affiliate.type === 'coupon'
+                                          ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                                          : "bg-green-500/10 text-green-600 border-green-500/20"
+                                      }
+                                    >
+                                      {affiliate.type === 'business' ? (
+                                        <>
+                                          <Store className="h-3 w-3 mr-1" />
+                                          Business
+                                        </>
+                                      ) : affiliate.type === 'coupon' ? (
+                                        <>
+                                          <Ticket className="h-3 w-3 mr-1" />
+                                          Coupon
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Heart className="h-3 w-3 mr-1" />
+                                          Nonprofit
+                                        </>
+                                      )}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{affiliate.name}</TableCell>
+                                  <TableCell className="text-right">${affiliate.fee.toFixed(2)}</TableCell>
+                                  <TableCell 
+                                    className={`text-right font-semibold ${
+                                      isPending ? 'text-primary' : 'text-green-600'
+                                    }`}
+                                  >
+                                    ${affiliate.kickback.toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge 
+                                      className={
+                                        isPending
+                                          ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                          : "bg-green-500/10 text-green-600 border-green-500/20"
+                                      }
+                                    >
+                                      {isPending ? 'Pending' : 'Paid'}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                No affiliate data found for this mosque.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+
+              </>
+            ) : (
+              /* Show message for non-mosque users */
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Building2 className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Mosque Subscription Required</h3>
+                  <p className="text-muted-foreground text-center mb-4 max-w-md">
+                    Affiliate earnings are only available for mosque subscriptions. Subscribe to a mosque plan to start earning 10% kickbacks from affiliated businesses and coupons.
+                  </p>
+                  <Button asChild>
+                    <Link href="/member/subscribe/mosque">
+                      <Building2 className="h-4 w-4 mr-2" />
+                      Subscribe to Mosque Plan
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="messages" className="space-y-4">

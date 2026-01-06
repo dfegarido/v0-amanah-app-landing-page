@@ -21,6 +21,7 @@ import {
   Check,
   ImageIcon,
   Key,
+  Edit,
   LogOut,
   Settings,
   DollarSign,
@@ -31,6 +32,8 @@ import {
   ArrowUpRight,
   Ban,
   X,
+  XCircle,
+  ExternalLink,
   Heart,
   Bell,
   Loader2,
@@ -64,7 +67,7 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedGet, authenticatedPatch } from "@/lib/api-client"
+import { authenticatedGet, authenticatedPatch, authenticatedPost } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 import { NotificationBell } from "@/components/notification-bell"
 
@@ -93,6 +96,7 @@ export default function AdminDashboard() {
   const [payoutsMonth, setPayoutsMonth] = useState(new Date())
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [cancellingLoading, setCancellingLoading] = useState(false)
+  const [refreshingStripeId, setRefreshingStripeId] = useState<string | null>(null)
   const [members, setMembers] = useState<any[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
@@ -542,6 +546,7 @@ export default function AdminDashboard() {
             ...s, // Spread subscription after entity so subscription.id overwrites entity.id
             subscriptionId: s.id, // Explicitly preserve subscription ID
             id: s.id, // Ensure id is subscription ID, not entity ID
+            entityId: s.entity?.id, // Preserve entity ID for API calls
             memberName: m.name,
             memberEmail: m.email,
             memberPhone: m.phone,
@@ -758,8 +763,20 @@ export default function AdminDashboard() {
       c.status === "active" &&
       c.appStatus === "active"  // Only count approved affiliates
     )
-    const totalKickback = (businesses.length + coupons.length) * 1 // $1 per affiliate (10% of $10)
-    return { businesses, coupons, totalKickback }
+    // Filter nonprofits: must have mosque affiliation, active payment status, AND approved by admin
+    const nonprofits = allNonprofits.filter((n) => 
+      ((n as any).affiliatedMosqueCode === mosqueCode || (n as any).affiliated_mosque_code === mosqueCode) && 
+      n.status === "active" &&
+      n.appStatus === "active"  // Only count approved affiliates
+    )
+    
+    // Calculate 10% kickback for each affiliate type
+    const businessKickback = businesses.reduce((sum, b) => sum + (b.price * 0.10), 0)
+    const couponKickback = coupons.reduce((sum, c) => sum + ((c as any).subscriptionPrice || (c as any).price || 10) * 0.10, 0)
+    const nonprofitKickback = nonprofits.reduce((sum, n) => sum + ((n as any).subscriptionPrice || 50) * 0.10, 0)
+    const totalKickback = businessKickback + couponKickback + nonprofitKickback
+    
+    return { businesses, coupons, nonprofits, totalKickback }
   }
 
   // Generate real financial records from actual subscriptions
@@ -1218,7 +1235,7 @@ export default function AdminDashboard() {
 
     toast({
       title: "Downloading Photos",
-      description: `Starting download of ${photos.length} photo(s)...`,
+      description: `Starting download of ${photos.length} photo(s) as PNG...`,
     })
 
     let successCount = 0
@@ -1226,28 +1243,45 @@ export default function AdminDashboard() {
 
     for (let i = 0; i < photos.length; i++) {
       try {
-        // Fetch the photo as a blob
-        const response = await fetch(photos[i])
+        // Create an image element to load the photo
+        const img = new Image()
+        img.crossOrigin = 'anonymous' // Enable CORS
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch photo ${i + 1}`)
+        // Wait for image to load
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = photos[i]
+        })
+        
+        // Create canvas and draw image
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        const ctx = canvas.getContext('2d')
+        
+        if (!ctx) {
+          throw new Error('Failed to get canvas context')
         }
-
-        const blob = await response.blob()
         
-        // Get file extension from blob type or URL
-        const contentType = blob.type
-        let extension = 'jpg'
-        if (contentType.includes('png')) extension = 'png'
-        else if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = 'jpg'
-        else if (contentType.includes('gif')) extension = 'gif'
-        else if (contentType.includes('webp')) extension = 'webp'
+        ctx.drawImage(img, 0, 0)
         
-        // Create blob URL and download
+        // Convert canvas to PNG blob
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob)
+            } else {
+              reject(new Error('Failed to convert image to PNG'))
+            }
+          }, 'image/png')
+        })
+        
+        // Create blob URL and download as PNG
         const blobUrl = URL.createObjectURL(blob)
         const link = document.createElement("a")
         link.href = blobUrl
-        link.download = `${name.replace(/\s+/g, "_")}_photo_${i + 1}.${extension}`
+        link.download = `${name.replace(/\s+/g, "_")}_photo_${i + 1}.png`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -1272,7 +1306,7 @@ export default function AdminDashboard() {
     if (successCount > 0) {
       toast({
         title: "Download Complete",
-        description: `Successfully downloaded ${successCount} photo(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}.`,
+        description: `Successfully downloaded ${successCount} PNG photo(s)${failCount > 0 ? `. Failed: ${failCount}` : ''}.`,
       })
     } else {
       toast({
@@ -1357,16 +1391,17 @@ export default function AdminDashboard() {
 
   // Export mosque payouts to CSV
   const exportMosquePayoutsToCSV = () => {
-    const headers = ["Mosque Code", "Mosque Name", "Businesses", "Coupons", "Total Affiliates", "Monthly Payout"]
+    const headers = ["Mosque Code", "Mosque Name", "Businesses", "Coupons", "Nonprofits", "Total Affiliates", "Monthly Payout"]
     const rows = allMosques.map((mosque) => {
-      const { businesses, coupons, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+      const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
       return [
         mosque.mosqueCode,
         mosque.name,
         businesses.length,
         coupons.length,
-        businesses.length + coupons.length,
-        `$${totalKickback}`,
+        nonprofits.length,
+        businesses.length + coupons.length + nonprofits.length,
+        `$${totalKickback.toFixed(2)}`,
       ]
     })
 
@@ -1438,6 +1473,46 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to cancel subscription",
+        variant: "destructive",
+      })
+    } finally {
+      setCancellingLoading(false)
+    }
+  }
+
+  const handleResumeSubscription = async (subscriptionId: string, type?: string) => {
+    try {
+      setCancellingLoading(true)
+      
+      // Call API to resume the subscription
+      const response: any = await authenticatedPatch(`/api/admin/subscriptions/${subscriptionId}/status`, {
+        app_status: 'active',
+        entity_status: 'active'
+      })
+
+      if (response.success) {
+        // Update local state instead of refetching
+        updateSubscriptionStatusOptimistically(subscriptionId, 'active', 'active')
+        
+        // Close dialog
+        setCancellingId(null)
+        
+        toast({
+          title: "Subscription Resumed",
+          description: `${type || "Subscription"} has been reactivated successfully.`,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to resume subscription",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      console.error('Error resuming subscription:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resume subscription",
         variant: "destructive",
       })
     } finally {
@@ -1620,7 +1695,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {allMosques.map((mosque) => {
-                  const { businesses, coupons, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+                  const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
                   return (
                     <Collapsible
                       key={mosque.id}
@@ -1662,7 +1737,7 @@ export default function AdminDashboard() {
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-foreground">${mosque.price}/mo</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {businesses.length + coupons.length} affiliates | ${totalKickback} payout
+                                  {businesses.length + coupons.length + nonprofits.length} affiliates | ${totalKickback.toFixed(2)} payout
                                 </p>
                               </div>
                               {expandedItems[mosque.id] ? (
@@ -1678,9 +1753,9 @@ export default function AdminDashboard() {
                             <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
                               <h4 className="font-semibold flex items-center gap-2 mb-3">
                                 <Users className="h-4 w-4" />
-                                Affiliated Businesses & Coupons
+                                Affiliated Businesses, Coupons & Nonprofits
                               </h4>
-                              <div className="grid md:grid-cols-3 gap-4">
+                              <div className="grid md:grid-cols-4 gap-4">
                                 <div>
                                   <p className="text-sm text-muted-foreground">Businesses</p>
                                   <p className="text-xl font-bold">{businesses.length}</p>
@@ -1690,11 +1765,15 @@ export default function AdminDashboard() {
                                   <p className="text-xl font-bold">{coupons.length}</p>
                                 </div>
                                 <div>
+                                  <p className="text-sm text-muted-foreground">Nonprofits</p>
+                                  <p className="text-xl font-bold">{nonprofits.length}</p>
+                                </div>
+                                <div>
                                   <p className="text-sm text-muted-foreground">Monthly Payout</p>
-                                  <p className="text-xl font-bold text-primary">${totalKickback}</p>
+                                  <p className="text-xl font-bold text-primary">${totalKickback.toFixed(2)}</p>
                                 </div>
                               </div>
-                              {(businesses.length > 0 || coupons.length > 0) && (
+                              {(businesses.length > 0 || coupons.length > 0 || nonprofits.length > 0) && (
                                 <div className="mt-3 space-y-2">
                                   {businesses.map((b) => (
                                     <div key={b.id} className="flex items-center justify-between text-sm">
@@ -1702,7 +1781,7 @@ export default function AdminDashboard() {
                                         <Store className="h-3 w-3" />
                                         {b.title}
                                       </span>
-                                      <span className="text-primary">$1/mo</span>
+                                      <span className="text-primary">${(b.price * 0.10).toFixed(2)}/mo</span>
                                     </div>
                                   ))}
                                   {coupons.map((c) => (
@@ -1711,7 +1790,16 @@ export default function AdminDashboard() {
                                         <Ticket className="h-3 w-3" />
                                         {c.title}
                                       </span>
-                                      <span className="text-primary">$1/mo</span>
+                                      <span className="text-primary">${(((c as any).subscriptionPrice || (c as any).price || 10) * 0.10).toFixed(2)}/mo</span>
+                                    </div>
+                                  ))}
+                                  {nonprofits.map((n) => (
+                                    <div key={n.id} className="flex items-center justify-between text-sm">
+                                      <span className="flex items-center gap-2">
+                                        <Heart className="h-3 w-3" />
+                                        {n.name}
+                                      </span>
+                                      <span className="text-primary">${(((n as any).subscriptionPrice || (n as any).price || 50) * 0.10).toFixed(2)}/mo</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1796,24 +1884,215 @@ export default function AdminDashboard() {
                               </div>
                             </div>
 
-                            {/* 3rd Party Logins */}
-                            {mosque.thirdPartyLogins && mosque.thirdPartyLogins.length > 0 && (
-                              <div>
-                                <h4 className="font-semibold flex items-center gap-2 mb-3">
-                                  <Key className="h-4 w-4" />
-                                  Third Party Logins
-                                </h4>
-                                <div className="space-y-2">
-                                  {mosque.thirdPartyLogins.map((login, idx) => (
-                                    <div key={idx} className="flex items-center gap-4 p-3 rounded-lg bg-secondary">
-                                      <span className="font-medium">{login.platform}</span>
-                                      <span className="text-muted-foreground">User: {login.username}</span>
-                                      <span className="text-muted-foreground">Pass: {login.password}</span>
+                            {/* Third Party Integrations */}
+                            <div>
+                              <h4 className="font-semibold flex items-center gap-2 mb-3">
+                                <Key className="h-4 w-4" />
+                                Third Party Integrations
+                              </h4>
+                              <div className="space-y-3">
+                                {/* Amanah App - Coming soon */}
+                                <div className="p-3 rounded-lg bg-secondary/50 border border-dashed">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium text-muted-foreground">Amanah App</p>
+                                    <Badge variant="outline" className="text-muted-foreground">Coming Soon</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Mosque login credentials will be available in the next version
+                                  </p>
+                                </div>
+                                
+                                {/* Stripe Connected Account */}
+                                <div className="p-3 rounded-lg bg-secondary/50 border">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium">Stripe Connected Account</p>
+                                    {(mosque as any).stripe_onboarding_complete ? (
+                                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                                        <Check className="h-3 w-3 mr-1" />
+                                        Connected
+                                      </Badge>
+                                    ) : (mosque as any).stripe_account_id ? (
+                                      <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                                        Onboarding Incomplete
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-muted-foreground">
+                                        Not Connected
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  
+                                  {(mosque as any).stripe_account_id ? (
+                                    <div className="space-y-2">
+                                      <div className="text-sm space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-muted-foreground">Account ID:</span>
+                                          <span className="font-mono text-xs">{(mosque as any).stripe_account_id}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-muted-foreground">Charges:</span>
+                                          <Badge variant="outline" className={
+                                            (mosque as any).stripe_charges_enabled 
+                                              ? "bg-green-500/10 text-green-600 border-green-500/20 text-xs"
+                                              : "text-xs"
+                                          }>
+                                            {(mosque as any).stripe_charges_enabled ? 'Enabled' : 'Disabled'}
+                                          </Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-muted-foreground">Payouts:</span>
+                                          <Badge variant="outline" className={
+                                            (mosque as any).stripe_payouts_enabled 
+                                              ? "bg-green-500/10 text-green-600 border-green-500/20 text-xs"
+                                              : "text-xs"
+                                          }>
+                                            {(mosque as any).stripe_payouts_enabled ? 'Enabled' : 'Disabled'}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 pt-2 flex-wrap">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          disabled={refreshingStripeId === (mosque as any).entityId}
+                                          onClick={async () => {
+                                            const entityId = (mosque as any).entityId
+                                            try {
+                                              setRefreshingStripeId(entityId)
+                                              console.log('[Admin] Refreshing Stripe status for mosque:', entityId)
+                                              const response: any = await authenticatedGet(
+                                                `/api/admin/mosques/${entityId}/stripe-connect`
+                                              )
+                                              console.log('[Admin] Stripe status response:', response)
+                                              
+                                              if (response.success) {
+                                                toast({
+                                                  title: "Status Updated",
+                                                  description: "Stripe account status has been refreshed from Stripe"
+                                                })
+                                                // Refresh the members data to show updated status
+                                                await fetchMembers()
+                                              } else {
+                                                toast({
+                                                  title: "Error",
+                                                  description: response.error || "Failed to refresh status",
+                                                  variant: "destructive"
+                                                })
+                                              }
+                                            } catch (error: any) {
+                                              console.error('[Admin] Refresh status error:', error)
+                                              toast({
+                                                title: "Error",
+                                                description: error.message || "Failed to refresh status",
+                                                variant: "destructive"
+                                              })
+                                            } finally {
+                                              setRefreshingStripeId(null)
+                                            }
+                                          }}
+                                        >
+                                          {refreshingStripeId === (mosque as any).entityId ? (
+                                            <>
+                                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                              Refreshing...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <svg className="h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                                              </svg>
+                                              Refresh Status
+                                            </>
+                                          )}
+                                        </Button>
+                                        {!(mosque as any).stripe_onboarding_complete && (
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            onClick={async () => {
+                                              try {
+                                                const response: any = await authenticatedPost(
+                                                  `/api/admin/mosques/${(mosque as any).entityId}/stripe-connect`,
+                                                  { refresh: true }
+                                                )
+                                                if (response.success && response.data.url) {
+                                                  window.open(response.data.url, '_blank')
+                                                }
+                                              } catch (error: any) {
+                                                toast({
+                                                  title: "Error",
+                                                  description: error.message || "Failed to create onboarding link",
+                                                  variant: "destructive"
+                                                })
+                                              }
+                                            }}
+                                          >
+                                            Complete Onboarding
+                                          </Button>
+                                        )}
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => {
+                                            window.open(`https://dashboard.stripe.com/connect/accounts/${(mosque as any).stripe_account_id}`, '_blank')
+                                          }}
+                                        >
+                                          <ExternalLink className="h-3 w-3 mr-1" />
+                                          View in Stripe
+                                        </Button>
+                                      </div>
                                     </div>
-                                  ))}
+                                  ) : (
+                                    <div className="space-y-2">
+                                      <p className="text-xs text-muted-foreground">
+                                        Connect a Stripe account to receive affiliate earnings and process donations
+                                      </p>
+                                      <Button 
+                                        variant="default" 
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={async () => {
+                                          console.log('[Admin] Connect Stripe button clicked for mosque:', mosque.id, 'entity:', (mosque as any).entityId)
+                                          try {
+                                            console.log('[Admin] Calling API to create Stripe account link...')
+                                            const response: any = await authenticatedPost(
+                                              `/api/admin/mosques/${(mosque as any).entityId}/stripe-connect`,
+                                              {}
+                                            )
+                                            console.log('[Admin] API response:', response)
+                                            
+                                            if (response.success && response.data?.url) {
+                                              console.log('[Admin] Opening Stripe onboarding URL:', response.data.url)
+                                              window.open(response.data.url, '_blank')
+                                              toast({
+                                                title: "Stripe Onboarding",
+                                                description: "A new tab has been opened. Complete the onboarding process there."
+                                              })
+                                            } else {
+                                              console.error('[Admin] Invalid response:', response)
+                                              toast({
+                                                title: "Error",
+                                                description: response.error || "Invalid response from server",
+                                                variant: "destructive"
+                                              })
+                                            }
+                                          } catch (error: any) {
+                                            console.error('[Admin] Stripe connect error:', error)
+                                            toast({
+                                              title: "Error",
+                                              description: error.message || "Failed to initiate Stripe connection",
+                                              variant: "destructive"
+                                            })
+                                          }
+                                        }}
+                                      >
+                                        Connect Stripe Account
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            )}
+                            </div>
 
                             {/* Documents */}
                             {mosque.documents && mosque.documents.length > 0 && (
@@ -2059,20 +2338,22 @@ export default function AdminDashboard() {
                 <CardDescription>View and manage all coupon listings with full details</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {allCoupons.map((coupon) => (
+                {allCoupons.map((coupon) => {
+                  const subscriptionId = (coupon as any).subscriptionId || coupon.id
+                  return (
                   <Collapsible
-                    key={coupon.id}
-                    open={expandedItems[coupon.id]}
-                    onOpenChange={() => toggleExpanded(coupon.id)}
+                    key={subscriptionId}
+                    open={expandedItems[subscriptionId]}
+                    onOpenChange={() => toggleExpanded(subscriptionId)}
                   >
                     <div className={`border rounded-lg overflow-hidden ${getCardStyle(coupon)}`}>
                       <CollapsibleTrigger asChild>
                         <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
                           <div className="flex items-center gap-4">
                             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 overflow-hidden">
-                              {coupon.photo ? (
+                              {(coupon as any).photos?.[0] ? (
                                 <img
-                                  src={coupon.photo || "/placeholder.svg"}
+                                  src={(coupon as any).photos[0] || "/placeholder.svg"}
                                   alt={coupon.title}
                                   className="h-full w-full object-cover"
                                 />
@@ -2084,34 +2365,28 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-2">
                                 <p className="font-semibold text-foreground">{coupon.title}</p>
                                 {getStatusBadge(coupon.status)}
-                                {coupon.affiliatedMosqueCode && (
+                                {(coupon as any).affiliated_mosque_code && (
                                   <Badge
                                     variant="outline"
                                     className="bg-green-500/10 text-green-500 border-green-500/20"
                                   >
-                                    Mosque #{coupon.affiliatedMosqueCode}
+                                    Mosque #{(coupon as any).affiliated_mosque_code}
                                   </Badge>
                                 )}
                                 {getAppStatusBadge(coupon)}
                               </div>
-                              <p className="text-sm text-muted-foreground">{coupon.merchant}</p>
+                              <p className="text-sm text-muted-foreground">{(coupon as any).merchant || coupon.memberName}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
                             {getActionButton(coupon)}
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-foreground">${coupon.price}/mo</p>
-                              {coupon.createdAt && (
-                                <p className="text-xs text-muted-foreground">
-                                  Started: {new Date(coupon.createdAt).toLocaleDateString("en-US", {
-                                    year: "numeric",
-                                    month: "short",
-                                    day: "numeric",
-                                  })}
-                                </p>
-                              )}
+                              <p className="text-sm font-semibold text-foreground">${(coupon as any).subscriptionPrice || (coupon as any).price || 10}/mo</p>
+                              <p className="text-xs text-muted-foreground">
+                                Started: {new Date((coupon as any).startDate || (coupon as any).paymentStartDate || (coupon as any).created_at).toLocaleDateString()}
+                              </p>
                             </div>
-                            {expandedItems[coupon.id] ? (
+                            {expandedItems[subscriptionId] ? (
                               <ChevronUp className="h-5 w-5" />
                             ) : (
                               <ChevronDown className="h-5 w-5" />
@@ -2122,24 +2397,24 @@ export default function AdminDashboard() {
                       <CollapsibleContent>
                         <div className="border-t border-border p-6 bg-secondary/20 space-y-6">
                           {/* Photos Gallery */}
-                          {coupon.photos && coupon.photos.length > 0 && (
+                          {(coupon as any).photos && (coupon as any).photos.length > 0 && (
                             <div>
                               <div className="flex items-center justify-between mb-3">
                                 <h4 className="font-semibold flex items-center gap-2">
                                   <ImageIcon className="h-4 w-4" />
-                                  Photos ({coupon.photos.length})
+                                  Photos ({(coupon as any).photos.length})
                                 </h4>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => downloadAllPhotos(coupon.photos!, coupon.title)}
+                                  onClick={() => downloadAllPhotos((coupon as any).photos!, coupon.title)}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   Download All Photos
                                 </Button>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                {coupon.photos.map((photo, idx) => (
+                                {(coupon as any).photos.map((photo: string, idx: number) => (
                                   <img
                                     key={idx}
                                     src={photo || "/placeholder.svg"}
@@ -2151,167 +2426,66 @@ export default function AdminDashboard() {
                             </div>
                           )}
 
-                          {/* Description & Details */}
-                          <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-semibold mb-2">Description</h4>
-                                <p className="text-sm text-muted-foreground">{coupon.description}</p>
-                              </div>
-                              {coupon.popUpText && (
-                                <div>
-                                  <h4 className="font-semibold mb-2">Pop Up Text</h4>
-                                  <p className="text-sm text-muted-foreground">{coupon.popUpText}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-semibold mb-2">Discount Details</h4>
-                                <div className="space-y-2 text-sm">
-                                  {coupon.discountAmount && (
-                                    <p>
-                                      <span className="font-medium">Amount:</span> {coupon.discountAmount}
-                                    </p>
-                                  )}
-                                  {coupon.discountPercentage && (
-                                    <p>
-                                      <span className="font-medium">Percentage:</span> {coupon.discountPercentage}
-                                    </p>
-                                  )}
-                                  {coupon.couponCode && (
-                                    <p className="flex items-center gap-2">
-                                      <span className="font-medium">Coupon Code:</span>
-                                      <span className="font-mono bg-secondary px-2 py-1 rounded">
-                                        {coupon.couponCode}
-                                      </span>
-                                      <CopyButton text={coupon.couponCode} fieldId={`${coupon.id}-coupon-code`} />
-                                    </p>
-                                  )}
-                                  {coupon.redeemCode && (
-                                    <p className="flex items-center gap-2">
-                                      <span className="font-medium">Redeem Code:</span>
-                                      <span className="font-mono bg-secondary px-2 py-1 rounded">
-                                        {coupon.redeemCode}
-                                      </span>
-                                      <CopyButton text={coupon.redeemCode} fieldId={`${coupon.id}-redeem-code`} />
-                                    </p>
-                                  )}
-                                  {(coupon.prefix || coupon.nextNo) && (
-                                    <p>
-                                      <span className="font-medium">Code Format:</span> {coupon.prefix || ""}
-                                      {coupon.nextNo || ""}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-2">Redemption Limits</h4>
-                                <div className="space-y-1 text-sm">
-                                  {coupon.redeemLimit && (
-                                    <p>
-                                      <span className="font-medium">Total Limit:</span> {coupon.redeemLimit} redemptions
-                                    </p>
-                                  )}
-                                  {coupon.userRedeemLimit && (
-                                    <p>
-                                      <span className="font-medium">Per User:</span> {coupon.userRedeemLimit} time
-                                      {coupon.userRedeemLimit !== 1 ? "s" : ""}
-                                    </p>
-                                  )}
-                                  {coupon.userMonthlyRedeemLimit && (
-                                    <p>
-                                      <span className="font-medium">Monthly Limit:</span> {coupon.userMonthlyRedeemLimit}{" "}
-                                      per user
-                                    </p>
-                                  )}
-                                  {coupon.userWeeklyRedeemLimit && (
-                                    <p>
-                                      <span className="font-medium">Weekly Limit:</span> {coupon.userWeeklyRedeemLimit}{" "}
-                                      per user
-                                    </p>
-                                  )}
-                                  {!coupon.redeemLimit &&
-                                    !coupon.userRedeemLimit &&
-                                    !coupon.userMonthlyRedeemLimit &&
-                                    !coupon.userWeeklyRedeemLimit && (
-                                      <p className="text-muted-foreground italic">No limits set</p>
-                                    )}
-                                </div>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-2">Validity Period</h4>
-                                <div className="text-sm space-y-1">
-                                  {coupon.startDate ? (
-                                    <p>
-                                      <span className="font-medium">Start:</span>{" "}
-                                      {new Date(coupon.startDate).toLocaleDateString("en-US", {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                      })}
-                                    </p>
-                                  ) : (
-                                    <p className="text-muted-foreground italic">No start date</p>
-                                  )}
-                                  {coupon.endDate ? (
-                                    <p>
-                                      <span className="font-medium">End:</span>{" "}
-                                      {new Date(coupon.endDate).toLocaleDateString("en-US", {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                      })}
-                                    </p>
-                                  ) : (
-                                    <p className="text-muted-foreground italic">No end date (ongoing)</p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
+                          {/* Description */}
+                          <div>
+                            <h4 className="font-semibold mb-2">Description</h4>
+                            <p className="text-sm text-muted-foreground">{(coupon as any).description || 'No description provided'}</p>
                           </div>
 
-                          {/* Thumbnail Description */}
-                          {coupon.thumbnailDescription && (
-                            <div>
-                              <h4 className="font-semibold mb-2">Thumbnail Description</h4>
-                              <p className="text-sm text-muted-foreground">{coupon.thumbnailDescription}</p>
-                            </div>
-                          )}
-
-                          {/* Contact Information */}
-                          <div className="space-y-3">
-                            <h4 className="font-semibold">Contact Information</h4>
-                            <div className="grid md:grid-cols-2 gap-4 text-sm">
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-muted-foreground" />
-                                <span>{coupon.email}</span>
-                                <CopyButton text={coupon.email} fieldId={`${coupon.id}-email`} />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Phone className="h-4 w-4 text-muted-foreground" />
-                                <span>{coupon.phone}</span>
-                                <CopyButton text={coupon.phone} fieldId={`${coupon.id}-phone`} />
-                              </div>
-                              {coupon.website && (
+                          {/* Coupon Details */}
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold">Coupon Information</h4>
+                              <div className="space-y-2 text-sm">
                                 <div className="flex items-center gap-2">
-                                  <Globe className="h-4 w-4 text-muted-foreground" />
-                                  <a
-                                    href={coupon.website}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-primary hover:underline"
-                                  >
-                                    {coupon.website}
-                                  </a>
-                                  <CopyButton text={coupon.website} fieldId={`${coupon.id}-website`} />
+                                  <Ticket className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">Merchant:</span>
+                                  <span>{(coupon as any).merchant || coupon.memberName}</span>
                                 </div>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-muted-foreground" />
-                                <span className="flex-1">{coupon.address}</span>
-                                <CopyButton text={coupon.address} fieldId={`${coupon.id}-address`} />
+                                {(coupon as any).discount && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">Discount:</span>
+                                    <span>{(coupon as any).discount}</span>
+                                  </div>
+                                )}
+                                {(coupon as any).startDate && (
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">Valid From:</span>
+                                    <span>{new Date((coupon as any).startDate).toLocaleDateString()}</span>
+                                  </div>
+                                )}
+                                {(coupon as any).endDate && (
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">Valid Until:</span>
+                                    <span>{new Date((coupon as any).endDate).toLocaleDateString()}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <h4 className="font-semibold">Subscription Details</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">Monthly Fee:</span>
+                                  <span>${(coupon as any).subscriptionPrice || (coupon as any).price || 10}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">Started:</span>
+                                  <span>{new Date((coupon as any).startDate || (coupon as any).created_at).toLocaleDateString()}</span>
+                                </div>
+                                {(coupon as any).affiliated_mosque_code && (
+                                  <div className="flex items-center gap-2">
+                                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">Affiliated Mosque:</span>
+                                    <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
+                                      #{(coupon as any).affiliated_mosque_code}
+                                    </Badge>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2319,433 +2493,224 @@ export default function AdminDashboard() {
                       </CollapsibleContent>
                     </div>
                   </Collapsible>
-                ))}
+                )})}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="nonprofits" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">Non-Profit Organizations</h2>
-                <p className="text-muted-foreground">Manage non-profit listings and verification</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input placeholder="Search non-profits..." className="pl-10 w-[300px]" />
-                </div>
-              </div>
-            </div>
-            {allNonprofits.map((nonprofit) => {
-              const subscriptionId = (nonprofit as any).subscriptionId || nonprofit.id
-              return (
-              <Card
-                key={subscriptionId}
-                className={`${
-                  nonprofit.appLifecycle === "pending"
-                    ? "border-green-500/50"
-                    : nonprofit.appLifecycle === "cancelled"
-                      ? "border-red-500/50"
-                      : nonprofit.appLifecycle === "removed"
-                        ? "border-gray-500/50"
-                        : nonprofit.appLifecycle === "update_pending"
-                          ? "border-yellow-500/50"
-                          : ""
-                }`}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                        <Users className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          {nonprofit.name}
-                          {getAppLifecycleBadge(nonprofit.appLifecycle)}
-                          {getStatusBadge(nonprofit.status)}
-                        </CardTitle>
-                        <CardDescription>{nonprofit.memberName}</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {nonprofit.appLifecycle === "update_pending" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            console.log("[v0] Marking nonprofit as updated:", nonprofit.id)
-                            alert("Nonprofit marked as updated!")
-                          }}
-                        >
-                          Mark as Updated
-                        </Button>
-                      )}
-                      {(nonprofit.appLifecycle === "pending_verification" || nonprofit.appLifecycle === "pending") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-green-500/10 border-green-500/20 text-green-500 hover:bg-green-500/20"
-                          disabled={updatingSubscriptionId === subscriptionId}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            updateAppStatus(subscriptionId, "active", "active")
-                          }}
-                        >
-                          {updatingSubscriptionId === subscriptionId ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              Updating...
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-4 w-4 mr-1" />
-                              Mark as Added
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      {(nonprofit.appLifecycle === "active" || nonprofit.appLifecycle === "update_pending") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={updatingSubscriptionId === subscriptionId}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            updateAppStatus(subscriptionId, "removed")
-                          }}
-                        >
-                          {updatingSubscriptionId === ((nonprofit as any).subscriptionId || nonprofit.id) ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              Updating...
-                            </>
-                          ) : (
-                            <>
-                              <X className="h-4 w-4 mr-1" />
-                              Mark as Removed
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      {(nonprofit.appLifecycle === "removed" || nonprofit.appLifecycle === "cancelled") && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-green-500/10 border-green-500/20 text-green-500 hover:bg-green-500/20"
-                          disabled={updatingSubscriptionId === subscriptionId}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            updateAppStatus(subscriptionId, "active", "active")
-                          }}
-                        >
-                          {updatingSubscriptionId === subscriptionId ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              Updating...
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-4 w-4 mr-1" />
-                              Mark as Added
-                            </>
-                          )}
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" onClick={() => toggleExpanded(`nonprofit-${subscriptionId}`)}>
-                        {expandedItems[`nonprofit-${subscriptionId}`] ? <ChevronUp /> : <ChevronDown />}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                {expandedItems[`nonprofit-${subscriptionId}`] && (
-                  <CardContent className="space-y-4">
-                    {/* Display all nonprofit fields */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <Label className="text-muted-foreground">Organization Name</Label>
-                        <p className="font-medium">{nonprofit.name}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Contact Person</Label>
-                        <p>{(nonprofit as any).contact_name || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Email</Label>
-                        <div className="flex items-center gap-2">
-                          <p>{(nonprofit as any).email}</p>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigator.clipboard.writeText((nonprofit as any).email)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Phone</Label>
-                        <div className="flex items-center gap-2">
-                          <p>{(nonprofit as any).phone}</p>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigator.clipboard.writeText((nonprofit as any).phone)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label className="text-muted-foreground">Website</Label>
-                        <p>
-                          {(nonprofit as any).website ? (
-                            <a
-                              href={(nonprofit as any).website}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              {(nonprofit as any).website}
-                            </a>
-                          ) : (
-                            'N/A'
-                          )}
-                        </p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label className="text-muted-foreground">Address</Label>
-                        <div className="flex items-center gap-2">
-                          <p>
-                            {(nonprofit as any).address}
-                            {(nonprofit as any).city && `, ${(nonprofit as any).city}`}
-                            {(nonprofit as any).state && `, ${(nonprofit as any).state}`}
-                            {(nonprofit as any).zip && ` ${(nonprofit as any).zip}`}
-                            {(nonprofit as any).country && `, ${(nonprofit as any).country}`}
-                          </p>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigator.clipboard.writeText(`${(nonprofit as any).address}, ${(nonprofit as any).city}, ${(nonprofit as any).state} ${(nonprofit as any).zip}`)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label className="text-muted-foreground">About Organization</Label>
-                        <p className="whitespace-pre-wrap">{(nonprofit as any).description || (nonprofit as any).about || 'N/A'}</p>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Links & Programs */}
-                    <div>
-                      <h4 className="font-semibold mb-3">Links & Programs</h4>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <Label className="text-muted-foreground">Donate Link</Label>
-                          <p>
-                            {(nonprofit as any).donate_link ? (
-                              <a
-                                href={(nonprofit as any).donate_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                {(nonprofit as any).donate_link}
-                              </a>
-                            ) : (
-                              'N/A'
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="text-muted-foreground">Programs/Events Page</Label>
-                          <p>
-                            {(nonprofit as any).programs_link ? (
-                              <a
-                                href={(nonprofit as any).programs_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                {(nonprofit as any).programs_link}
-                              </a>
-                            ) : (
-                              'N/A'
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Services/Programs List */}
-                    {(nonprofit as any).services && (() => {
-                      try {
-                        const services = typeof (nonprofit as any).services === 'string' 
-                          ? JSON.parse((nonprofit as any).services) 
-                          : (nonprofit as any).services
-                        if (Array.isArray(services) && services.length > 0) {
-                          return (
-                            <div>
-                              <Label className="text-muted-foreground mb-2 block">Services / Programs</Label>
-                              <div className="space-y-2">
-                                {services.map((service: any, idx: number) => (
-                                  <div key={idx} className="p-3 bg-secondary/30 rounded-lg">
-                                    <p className="font-medium text-sm mb-1">{service.name}</p>
-                                    {service.link && (
-                                      <a
-                                        href={service.link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-primary hover:underline break-all"
-                                      >
-                                        <Globe className="h-3 w-3 inline mr-1" />
-                                        {service.link}
-                                      </a>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
+          <TabsContent value="nonprofits">
+            <Card>
+              <CardHeader>
+                <CardTitle>All Non-Profit Organizations</CardTitle>
+                <CardDescription>View and manage all non-profit listings with full details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {allNonprofits.map((nonprofit) => {
+                  const subscriptionId = (nonprofit as any).subscriptionId || nonprofit.id
+                  return (
+                  <Collapsible
+                    key={subscriptionId}
+                    open={expandedItems[subscriptionId]}
+                    onOpenChange={() => toggleExpanded(subscriptionId)}
+                  >
+                    <div className={`border rounded-lg overflow-hidden ${getCardStyle(nonprofit)}`}>
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-secondary/50 transition-colors">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-foreground">{nonprofit.name}</p>
+                              {getStatusBadge(nonprofit.status)}
+                              {getAppStatusBadge(nonprofit)}
+                              {(nonprofit as any).affiliated_mosque_code && (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-green-500/10 text-green-500 border-green-500/20"
+                                >
+                                  Mosque #{(nonprofit as any).affiliated_mosque_code}
+                                </Badge>
+                              )}
                             </div>
-                          )
-                        }
-                      } catch (e) {
-                        return null
-                      }
-                      return null
-                    })()}
-
-                    {/* Board Members / Leadership Team */}
-                    {(nonprofit as any).committee_members && (() => {
-                      try {
-                        const committee = typeof (nonprofit as any).committee_members === 'string' 
-                          ? JSON.parse((nonprofit as any).committee_members) 
-                          : (nonprofit as any).committee_members
-                        if (Array.isArray(committee) && committee.length > 0) {
-                          return (
-                            <div>
-                              <Label className="text-muted-foreground mb-2 block">Board Members / Leadership Team</Label>
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {committee.map((member: any, idx: number) => (
-                                  <div key={idx} className="flex flex-col items-center text-center p-3 bg-secondary/30 rounded-lg">
-                                    {member.photo && (
-                                      <img
-                                        src={member.photo}
-                                        alt={member.name}
-                                        className="h-20 w-20 rounded-full object-cover mb-2"
-                                      />
-                                    )}
-                                    <p className="font-medium text-sm">{member.name}</p>
-                                    <p className="text-xs text-muted-foreground">{member.title}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        }
-                      } catch (e) {
-                        return null
-                      }
-                      return null
-                    })()}
-
-                    {/* Social Media */}
-                    <div>
-                      <Label className="text-muted-foreground mb-2 block">Social Media</Label>
-                      {(() => {
-                        const socialMedia = (nonprofit as any).social_media
-                        if (!socialMedia) return <p className="text-muted-foreground text-sm">N/A</p>
-                        if (typeof socialMedia === 'string') return <p className="whitespace-pre-wrap text-sm">{socialMedia}</p>
-                        // If it's an object, display individual links
-                        return (
-                          <div className="space-y-1">
-                            {socialMedia.facebook && (
-                              <p className="text-sm">
-                                <span className="font-medium">Facebook:</span>{' '}
-                                <a href={socialMedia.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  {socialMedia.facebook}
-                                </a>
-                              </p>
-                            )}
-                            {socialMedia.instagram && (
-                              <p className="text-sm">
-                                <span className="font-medium">Instagram:</span>{' '}
-                                <a href={socialMedia.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  {socialMedia.instagram}
-                                </a>
-                              </p>
-                            )}
-                            {socialMedia.twitter && (
-                              <p className="text-sm">
-                                <span className="font-medium">X (Twitter):</span>{' '}
-                                <a href={socialMedia.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  {socialMedia.twitter}
-                                </a>
-                              </p>
-                            )}
-                            {socialMedia.other_social && (
-                              <p className="text-sm">
-                                <span className="font-medium">Other:</span>{' '}
-                                <a href={socialMedia.other_social} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  {socialMedia.other_social}
-                                </a>
-                              </p>
-                            )}
-                            {!socialMedia.facebook && !socialMedia.instagram && !socialMedia.twitter && !socialMedia.other_social && (
-                              <p className="text-muted-foreground text-sm">N/A</p>
+                            <p className="text-sm text-muted-foreground">{nonprofit.name}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getActionButton(nonprofit)}
+                            <Button variant="outline" size="sm">
+                              Cancel Subscription
+                            </Button>
+                            {expandedItems[subscriptionId] ? (
+                              <ChevronUp className="h-5 w-5" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5" />
                             )}
                           </div>
-                        )
-                      })()}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="border-t border-border p-6 bg-secondary/20 space-y-6">
+                          {/* Organization Name */}
+                          <div>
+                            <h4 className="text-muted-foreground text-sm mb-1">Organization Name</h4>
+                            <p className="font-medium">{nonprofit.name}</p>
+                          </div>
+
+                          {/* Contact Details in 2 columns */}
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Email */}
+                            <div>
+                              <h4 className="text-muted-foreground text-sm mb-1">Email</h4>
+                              <div className="flex items-center gap-2">
+                                <p>{(nonprofit as any).email}</p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => navigator.clipboard.writeText((nonprofit as any).email)}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Website */}
+                            <div>
+                              <h4 className="text-muted-foreground text-sm mb-1">Website</h4>
+                              <a 
+                                href={(nonprofit as any).website} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-primary hover:underline"
+                              >
+                                {(nonprofit as any).website}
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Phone and Address in 2 columns */}
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Phone */}
+                            <div>
+                              <h4 className="text-muted-foreground text-sm mb-1">Phone</h4>
+                              <div className="flex items-center gap-2">
+                                <p>{(nonprofit as any).phone}</p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => navigator.clipboard.writeText((nonprofit as any).phone)}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Empty div for spacing */}
+                            <div></div>
+                          </div>
+
+                          {/* Address */}
+                          <div>
+                            <h4 className="text-muted-foreground text-sm mb-1">Address</h4>
+                            <div className="flex items-center gap-2">
+                              <p>
+                                {(nonprofit as any).address}, {(nonprofit as any).city}, {(nonprofit as any).state} {(nonprofit as any).zip}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => navigator.clipboard.writeText(`${(nonprofit as any).address}, ${(nonprofit as any).city}, ${(nonprofit as any).state} ${(nonprofit as any).zip}`)}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* About */}
+                          <div>
+                            <h4 className="text-muted-foreground text-sm mb-1">About</h4>
+                            <p className="text-sm">{(nonprofit as any).description || (nonprofit as any).about || 'No description provided'}</p>
+                          </div>
+
+                          {/* Donate Link and Social Media in 2 columns */}
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Donate Link */}
+                            <div>
+                              <h4 className="text-muted-foreground text-sm mb-1">Donate Link</h4>
+                              <a 
+                                href={(nonprofit as any).donate_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-primary hover:underline"
+                              >
+                                {(nonprofit as any).donate_link || 'N/A'}
+                              </a>
+                            </div>
+
+                            {/* Social Media */}
+                            <div>
+                              <h4 className="text-muted-foreground text-sm mb-2">Social Media</h4>
+                              <div className="space-y-1 text-sm">
+                                {(() => {
+                                  const socialMedia = (nonprofit as any).social_media
+                                  if (!socialMedia) return <p className="text-muted-foreground">N/A</p>
+                                  if (typeof socialMedia === 'string') return <p>{socialMedia}</p>
+                                  return (
+                                    <>
+                                      {socialMedia.facebook && (
+                                        <p>Facebook: {socialMedia.facebook}</p>
+                                      )}
+                                      {socialMedia.instagram && (
+                                        <p>Instagram: {socialMedia.instagram}</p>
+                                      )}
+                                      {socialMedia.twitter && (
+                                        <p>Twitter: {socialMedia.twitter}</p>
+                                      )}
+                                      {socialMedia.other_social && (
+                                        <p>Other: {socialMedia.other_social}</p>
+                                      )}
+                                      {!socialMedia.facebook && !socialMedia.instagram && !socialMedia.twitter && !socialMedia.other_social && (
+                                        <p className="text-muted-foreground">N/A</p>
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Photos */}
+                          {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-muted-foreground text-sm">Photos</h4>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => downloadAllPhotos((nonprofit as any).photos!, nonprofit.name)}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download All Photos
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                {(nonprofit as any).photos.map((photo: string, idx: number) => (
+                                  <img
+                                    key={idx}
+                                    src={photo || "/placeholder.svg"}
+                                    alt={`${nonprofit.name} ${idx + 1}`}
+                                    className="w-full h-48 object-cover rounded-lg"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
                     </div>
-
-                    {/* Logo */}
-                    {(nonprofit as any).logo && (
-                      <div>
-                        <Label className="text-muted-foreground mb-2 block">Logo</Label>
-                        <img
-                          src={(nonprofit as any).logo}
-                          alt="Organization Logo"
-                          className="h-24 w-24 object-contain rounded-lg border"
-                        />
-                      </div>
-                    )}
-
-                    {/* Photos */}
-                    {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-muted-foreground">Photos</Label>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => downloadAllPhotos((nonprofit as any).photos!, (nonprofit as any).name)}
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Download All Photos
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(nonprofit as any).photos.map((photo: any, index: number) => (
-                            <img
-                              key={index}
-                              src={photo || "/placeholder.svg"}
-                              alt={`Photo ${index + 1}`}
-                              className="rounded-lg w-full h-32 object-cover"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-              )
-            })}
+                  </Collapsible>
+                )})}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="payouts" className="space-y-6">
@@ -2753,10 +2718,10 @@ export default function AdminDashboard() {
               <div>
                 <h2 className="text-2xl font-bold">Mosque Affiliate Payouts</h2>
                 <p className="text-muted-foreground">
-                  Track 10% kickbacks to mosques from affiliated businesses and coupons, plus manual donations
+                  Track and process 10% kickbacks to mosques from affiliated businesses, coupons, and nonprofits
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
@@ -2784,6 +2749,74 @@ export default function AdminDashboard() {
                   disabled={payoutsMonth.getMonth() === new Date().getMonth()}
                 >
                   Next Month
+                </Button>
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  disabled={refreshingStripeId === 'processing-payouts'}
+                  onClick={async () => {
+                    try {
+                      setRefreshingStripeId('processing-payouts')
+                      
+                      // Calculate period start and end
+                      const periodEnd = new Date(payoutsMonth)
+                      periodEnd.setMonth(periodEnd.getMonth() + 1)
+                      periodEnd.setDate(0) // Last day of the month
+                      
+                      const periodStart = new Date(payoutsMonth)
+                      periodStart.setDate(1) // First day of the month
+                      
+                      console.log('[Admin] Processing payouts for period:', {
+                        start: periodStart.toISOString().split('T')[0],
+                        end: periodEnd.toISOString().split('T')[0]
+                      })
+                      
+                      const response: any = await authenticatedPost(
+                        '/api/admin/mosques/payouts',
+                        {
+                          period_start: periodStart.toISOString().split('T')[0],
+                          period_end: periodEnd.toISOString().split('T')[0]
+                        }
+                      )
+                      
+                      if (response.success) {
+                        const { successful, failed, skipped } = response.data
+                        toast({
+                          title: "Payouts Processed",
+                          description: `✅ ${successful} successful, ❌ ${failed} failed, ⏭️ ${skipped} skipped`
+                        })
+                        // Refresh members data
+                        fetchMembers()
+                      } else {
+                        toast({
+                          title: "Error",
+                          description: response.error || "Failed to process payouts",
+                          variant: "destructive"
+                        })
+                      }
+                    } catch (error: any) {
+                      console.error('[Admin] Process payouts error:', error)
+                      toast({
+                        title: "Error",
+                        description: error.message || "Failed to process payouts",
+                        variant: "destructive"
+                      })
+                    } finally {
+                      setRefreshingStripeId(null)
+                    }
+                  }}
+                >
+                  {refreshingStripeId === 'processing-payouts' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Process Payouts
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -2821,7 +2854,7 @@ export default function AdminDashboard() {
                     </TableHeader>
                     <TableBody>
                       {allMosques.map((mosque) => {
-                        const { businesses, coupons, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+                        const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
                         const manualDonations = (mosque as any).manualDonations || (mosque as any).manual_donations || 0
                         const totalPayout = totalKickback + manualDonations
                         const isExpanded = expandedItems[`payout-${mosque.id}`]
@@ -2839,9 +2872,9 @@ export default function AdminDashboard() {
                               <TableCell className="text-center">{businesses.length}</TableCell>
                               <TableCell className="text-center">{coupons.length}</TableCell>
                               <TableCell className="text-center font-semibold">
-                                {businesses.length + coupons.length}
+                                {businesses.length + coupons.length + nonprofits.length}
                               </TableCell>
-                              <TableCell className="text-right font-bold text-primary">${totalKickback}</TableCell>
+                              <TableCell className="text-right font-bold text-primary">${totalKickback.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
                                 <Input
                                   type="number"
@@ -2854,7 +2887,7 @@ export default function AdminDashboard() {
                                   }}
                                 />
                               </TableCell>
-                              <TableCell className="text-right font-bold text-green-500">${totalPayout}</TableCell>
+                              <TableCell className="text-right font-bold text-green-500">${totalPayout.toFixed(2)}</TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="sm" onClick={() => toggleExpanded(`payout-${mosque.id}`)}>
                                   {isExpanded ? (
@@ -2883,11 +2916,11 @@ export default function AdminDashboard() {
                             Affiliate Details for {mosque.name}
                           </h4>
                           <p className="text-sm text-muted-foreground">
-                            Code #{mosque.mosqueCode} • {businesses.length + coupons.length} Active Affiliates • ${totalKickback}/month
+                            Code #{mosque.mosqueCode} • {businesses.length + coupons.length + nonprofits.length} Active Affiliates • ${totalKickback.toFixed(2)}/month
                           </p>
                         </div>
                         <Badge variant="outline" className="bg-primary/10 text-primary">
-                          Total Payout: ${totalKickback}
+                          Total Payout: ${totalKickback.toFixed(2)}
                         </Badge>
                       </div>
 
@@ -2936,12 +2969,12 @@ export default function AdminDashboard() {
                                           </div>
                                           <div className="flex items-center gap-2 text-muted-foreground">
                                             <Calendar className="h-3 w-3" />
-                                            <span>Since: {new Date(b.createdAt).toLocaleDateString()}</span>
+                                            <span>Since: {new Date((b as any).createdAt || Date.now()).toLocaleDateString()}</span>
                                           </div>
                                         </div>
                                       </div>
                                       <div className="text-right ml-4">
-                                        <p className="font-bold text-primary text-lg">$1<span className="text-sm text-muted-foreground">/mo</span></p>
+                                        <p className="font-bold text-primary text-lg">${(b.price * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                           {b.status === "active" && b.appStatus === "active" ? "Earning" : "Not Earning"}
                                         </p>
@@ -2993,9 +3026,61 @@ export default function AdminDashboard() {
                                         </div>
                                       </div>
                                       <div className="text-right ml-4">
-                                        <p className="font-bold text-primary text-lg">$1<span className="text-sm text-muted-foreground">/mo</span></p>
+                                        <p className="font-bold text-primary text-lg">${(((c as any).subscriptionPrice || (c as any).price || 10) * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                           {c.status === "active" && c.appStatus === "active" ? "Earning" : "Not Earning"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Nonprofits Section */}
+                          {nonprofits.length > 0 && (
+                            <div>
+                              <h5 className="font-semibold flex items-center gap-2 mb-3">
+                                <Heart className="h-4 w-4" />
+                                Affiliated Nonprofits ({nonprofits.length})
+                              </h5>
+                              <div className="space-y-3">
+                                {nonprofits.map((n) => (
+                                  <div key={n.id} className="p-4 rounded-lg bg-background border hover:border-primary/50 transition-colors">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <p className="font-medium text-base">{n.name}</p>
+                                          {n.appStatus === "active" ? (
+                                            <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+                                          ) : (
+                                            <Badge variant="secondary">Inactive</Badge>
+                                          )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                          <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Users className="h-3 w-3" />
+                                            <span>Contact: {(n as any).contact_name || n.memberName}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Mail className="h-3 w-3" />
+                                            <span>{(n as any).email || 'N/A'}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-muted-foreground">
+                                            <MapPin className="h-3 w-3" />
+                                            <span>{(n as any).city || 'N/A'}, {(n as any).state || 'N/A'}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Calendar className="h-3 w-3" />
+                                            <span>Since: {new Date((n as any).created_at || (n as any).createdAt).toLocaleDateString()}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right ml-4">
+                                        <p className="font-bold text-primary text-lg">${(((n as any).subscriptionPrice || 50) * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          {n.status === "active" && n.appStatus === "active" ? "Earning" : "Not Earning"}
                                         </p>
                                       </div>
                                     </div>
@@ -3011,11 +3096,11 @@ export default function AdminDashboard() {
                               <div>
                                 <p className="text-sm font-medium text-muted-foreground">Monthly Kickback Summary</p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                  10% from {businesses.length} business{businesses.length !== 1 ? 'es' : ''} and {coupons.length} coupon{coupons.length !== 1 ? 's' : ''}
+                                  10% from {businesses.length} business{businesses.length !== 1 ? 'es' : ''}, {coupons.length} coupon{coupons.length !== 1 ? 's' : ''}, and {nonprofits.length} nonprofit{nonprofits.length !== 1 ? 's' : ''}
                                 </p>
                               </div>
                               <div className="text-right">
-                                <p className="text-2xl font-bold text-primary">${totalKickback}</p>
+                                <p className="text-2xl font-bold text-primary">${totalKickback.toFixed(2)}</p>
                                 <p className="text-xs text-muted-foreground">per month</p>
                               </div>
                             </div>
@@ -3521,9 +3606,59 @@ export default function AdminDashboard() {
                                                 </div>
                                                 <div className="ml-4">
                                                   {isCancelled ? (
-                                                    <Button variant="ghost" size="sm" disabled title="Subscription already cancelled">
-                                                      <Ban className="h-4 w-4 text-muted-foreground" />
-                                                    </Button>
+                                                    <Dialog
+                                                      open={cancellingId === sub.id}
+                                                      onOpenChange={(open) => !open && setCancellingId(null)}
+                                                    >
+                                                      <DialogTrigger asChild>
+                                                        <Button 
+                                                          variant="ghost" 
+                                                          size="sm" 
+                                                          className="text-green-500 hover:text-green-600"
+                                                          onClick={() => setCancellingId(sub.id)}
+                                                          title="Resume subscription"
+                                                        >
+                                                          <Check className="h-4 w-4" />
+                                                        </Button>
+                                                      </DialogTrigger>
+                                                      <DialogContent>
+                                                        <DialogHeader>
+                                                          <DialogTitle>Resume Subscription</DialogTitle>
+                                                        </DialogHeader>
+                                                        <div className="space-y-4">
+                                                          <p>Are you sure you want to reactivate this subscription?</p>
+                                                          <div className="rounded-lg bg-muted p-4">
+                                                            <div className="font-medium">{sub.entity?.name || sub.entity?.title || sub.name || sub.title || "Unnamed"}</div>
+                                                            <div className="text-sm text-muted-foreground">
+                                                              {sub.type} - ${sub.price}/mo
+                                                            </div>
+                                                          </div>
+                                                          <div className="flex gap-2">
+                                                            <Button 
+                                                              variant="outline" 
+                                                              onClick={() => setCancellingId(null)}
+                                                              disabled={cancellingLoading}
+                                                            >
+                                                              Cancel
+                                                            </Button>
+                                                            <Button
+                                                              className="bg-green-500 hover:bg-green-600"
+                                                              onClick={() => handleResumeSubscription(sub.id, sub.type)}
+                                                              disabled={cancellingLoading}
+                                                            >
+                                                              {cancellingLoading ? (
+                                                                <>
+                                                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                                  Resuming...
+                                                                </>
+                                                              ) : (
+                                                                "Resume Subscription"
+                                                              )}
+                                                            </Button>
+                                                          </div>
+                                                        </div>
+                                                      </DialogContent>
+                                                    </Dialog>
                                                   ) : (
                                                     <Dialog
                                                       open={cancellingId === sub.id}

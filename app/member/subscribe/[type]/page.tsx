@@ -408,8 +408,8 @@ export default function SubscribePage() {
       }
     }
 
-    // Only fetch if type is business or coupon (they need mosque affiliation)
-    if (type === 'business' || type === 'coupon') {
+    // Only fetch if type is business, coupon, or nonprofit (they need mosque affiliation)
+    if (type === 'business' || type === 'coupon' || type === 'nonprofit') {
       fetchMosques()
     } else {
       setAvailableMosques([])
@@ -1542,7 +1542,7 @@ export default function SubscribePage() {
               <h3 className="font-semibold text-primary">Mosque Affiliation (Optional)</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Enter a mosque code to support your local mosque. 10% of your monthly fee ($1) will go to the mosque as a
+              Enter a mosque code to support your local mosque. 10% of your monthly fee (${loadingPricing ? '...' : (getCurrentPrice() * 0.10).toFixed(2)}) will go to the mosque as a
               kickback.
             </p>
             <div className="space-y-2">
@@ -1864,7 +1864,7 @@ export default function SubscribePage() {
               <h3 className="font-semibold text-primary">Mosque Affiliation (Optional)</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Enter a mosque code to support your local mosque. 10% of your monthly fee ($1) will go to the mosque as a
+              Enter a mosque code to support your local mosque. 10% of your monthly fee (${loadingPricing ? '...' : (getCurrentPrice() * 0.10).toFixed(2)}) will go to the mosque as a
               kickback.
             </p>
             <div className="space-y-2">
@@ -2261,6 +2261,35 @@ export default function SubscribePage() {
     if (type === "nonprofit") {
       return (
         <>
+          <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-primary">Mosque Affiliation (Optional)</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Enter a mosque code to support your local mosque. 10% of your monthly fee (${loadingPricing ? '...' : (getCurrentPrice() * 0.10).toFixed(2)}) will go to the mosque as a
+              kickback.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="mosqueCode">Mosque Code</Label>
+              <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a mosque or enter code" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Affiliation</SelectItem>
+                  {availableMosques.map((mosque) => (
+                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                      #{mosque.mosque_code} - {mosque.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <Separator />
+
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Basic Information</h3>
             <div className="grid md:grid-cols-2 gap-4">
@@ -2914,12 +2943,14 @@ export default function SubscribePage() {
                     {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
                   </span>
                 </div>
-                {(type === "business" || type === "coupon") &&
+                {(type === "business" || type === "coupon" || type === "nonprofit") &&
                   affiliatedMosqueCode &&
                   affiliatedMosqueCode !== "none" && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Mosque Kickback (10%)</span>
-                      <span className="text-primary">$1 to Mosque #{affiliatedMosqueCode}</span>
+                      <span className="text-primary">
+                        ${loadingPricing ? '...' : (getCurrentPrice() * 0.10).toFixed(2)} to Mosque #{affiliatedMosqueCode}
+                      </span>
                     </div>
                   )}
                 <Separator className="my-2" />

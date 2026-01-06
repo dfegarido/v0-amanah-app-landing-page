@@ -1,333 +1,288 @@
 import { NextRequest } from 'next/server'
 import { headers } from 'next/headers'
-import Stripe from 'stripe'
-import { getStripe } from '@/lib/stripe'
-import { createClient } from '@supabase/supabase-js'
-import { onDonationConfirmed, onDonationFailed } from '@/lib/notifications/hooks'
+import { getSupabaseAdmin } from '@/lib/admin-helpers'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-// Create Supabase client with service role for webhook processing
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
-
-// Stripe webhook secret from environment
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
-
-// Disable body parsing - we need raw body for Stripe signature verification
-export const runtime = 'nodejs'
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 /**
- * GET /api/webhooks/stripe
- * Test endpoint to verify webhook is accessible
- */
-export async function GET(request: NextRequest) {
-  return Response.json({ 
-    message: 'Stripe webhook endpoint is active',
-    webhookSecretConfigured: !!webhookSecret,
-    timestamp: new Date().toISOString()
-  })
-}
-
-/**
- * POST /api/webhooks/stripe
- * 
- * Handles Stripe webhook events for donation payments
- * Supports: payment_intent.succeeded, payment_intent.payment_failed, etc.
+ * Stripe Webhook Handler
+ * Automatically processes mosque kickbacks when subscription payments succeed
  */
 export async function POST(request: NextRequest) {
+  console.log('[Stripe Webhook] Received webhook')
+  
+  const body = await request.text()
+  const headersList = await headers()
+  const sig = headersList.get('stripe-signature')
+
+  if (!sig) {
+    console.error('[Stripe Webhook] No signature found')
+    return new Response('No signature', { status: 400 })
+  }
+
+  let event: any
+
   try {
-    const body = await request.text()
-    const headersList = await headers()
-    const signature = headersList.get('stripe-signature')
+    // Verify webhook signature
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    )
+    console.log('[Stripe Webhook] Event verified:', event.type)
+  } catch (err: any) {
+    console.error('[Stripe Webhook] Signature verification failed:', err.message)
+    return new Response(`Webhook Error: ${err.message}`, { status: 400 })
+  }
 
-    if (!signature) {
-      console.error('Missing stripe-signature header')
-      return Response.json({ error: 'Missing signature' }, { status: 400 })
-    }
+  // Handle the event
+  if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid') {
+    await handleInvoicePaymentSucceeded(event.data.object)
+  } else if (event.type === 'account.updated') {
+    await handleAccountUpdated(event.data.object)
+  } else {
+    console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
+  }
 
-    if (!webhookSecret) {
-      console.error('STRIPE_WEBHOOK_SECRET not configured')
-      return Response.json({ error: 'Webhook secret not configured' }, { status: 500 })
-    }
+  return new Response(JSON.stringify({ received: true }), { status: 200 })
+}
 
-    let event: Stripe.Event
+/**
+ * Handle successful subscription payment
+ * Automatically transfer 10% kickback to affiliated mosque
+ */
+async function handleInvoicePaymentSucceeded(invoice: any) {
+  console.log('[Stripe Webhook] Processing invoice payment:', invoice.id)
+  console.log('[Stripe Webhook] Invoice subscription field:', invoice.subscription)
+  console.log('[Stripe Webhook] Invoice lines:', invoice.lines?.data?.[0]?.subscription)
 
-    try {
-      // Get Stripe instance and verify webhook signature
-      const stripe = getStripe()
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
-    } catch (err: any) {
-      console.error('Webhook signature verification failed:', err.message)
-      return Response.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
-    }
+  const supabaseAdmin = getSupabaseAdmin()
 
-    console.log('✅ Stripe webhook received:', event.type)
-    console.log('📧 Event ID:', event.id)
+  try {
+    // Get subscription ID from invoice
+    let stripeSubscriptionId = invoice.subscription || invoice.lines?.data?.[0]?.subscription
 
-    try {
-      // Handle different event types
-      switch (event.type) {
-        case 'payment_intent.succeeded':
-          console.log('📧 Processing payment_intent.succeeded event...')
-          await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent)
-          break
-
-        case 'payment_intent.payment_failed':
-          await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent)
-          break
-
-        case 'payment_intent.canceled':
-          await handlePaymentIntentCanceled(event.data.object as Stripe.PaymentIntent)
-          break
-
-        case 'charge.refunded':
-          await handleChargeRefunded(event.data.object as Stripe.Charge)
-          break
-
-        default:
-          console.log(`Unhandled event type: ${event.type}`)
+    // If not found in webhook event, fetch full invoice from Stripe
+    if (!stripeSubscriptionId) {
+      console.log('[Stripe Webhook] Fetching full invoice from Stripe...')
+      try {
+        const fullInvoice = await stripe.invoices.retrieve(invoice.id, {
+          expand: ['subscription', 'lines.data.subscription']
+        })
+        stripeSubscriptionId = fullInvoice.subscription?.id || fullInvoice.subscription
+        console.log('[Stripe Webhook] Full invoice subscription:', stripeSubscriptionId)
+      } catch (error: any) {
+        console.error('[Stripe Webhook] Failed to fetch full invoice:', error.message)
       }
-
-      return Response.json({ received: true })
-    } catch (error: any) {
-      console.error('Error processing webhook:', error)
-      return Response.json({ error: 'Webhook processing failed' }, { status: 500 })
     }
+
+    if (!stripeSubscriptionId) {
+      console.log('[Stripe Webhook] No subscription ID found in invoice (tried webhook + API)')
+      return
+    }
+
+    console.log('[Stripe Webhook] Looking for subscription:', stripeSubscriptionId)
+
+    // Get the subscription from our database
+    const { data: subscription, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, type, price_amount, stripe_subscription_id')
+      .eq('stripe_subscription_id', stripeSubscriptionId)
+      .single()
+
+    if (subError || !subscription) {
+      console.log('[Stripe Webhook] Subscription not found in database:', stripeSubscriptionId, subError)
+      return
+    }
+
+    console.log('[Stripe Webhook] Found subscription:', subscription.type, subscription.id)
+
+    // Get the affiliated mosque code based on subscription type
+    let mosqueCode: number | null = null
+    let entityName = ''
+
+    if (subscription.type === 'business') {
+      const { data: business } = await supabaseAdmin
+        .from('businesses')
+        .select('name, affiliated_mosque_code')
+        .eq('subscription_id', subscription.id)
+        .single()
+
+      mosqueCode = business?.affiliated_mosque_code
+      entityName = business?.name || 'Unknown Business'
+    } else if (subscription.type === 'coupon') {
+      const { data: coupon } = await supabaseAdmin
+        .from('coupons')
+        .select('title, affiliated_mosque_code')
+        .eq('subscription_id', subscription.id)
+        .single()
+
+      mosqueCode = coupon?.affiliated_mosque_code
+      entityName = coupon?.title || 'Unknown Coupon'
+    } else if (subscription.type === 'nonprofit') {
+      const { data: nonprofit } = await supabaseAdmin
+        .from('nonprofits')
+        .select('name, affiliated_mosque_code')
+        .eq('subscription_id', subscription.id)
+        .single()
+
+      mosqueCode = nonprofit?.affiliated_mosque_code
+      entityName = nonprofit?.name || 'Unknown Nonprofit'
+    }
+
+    if (!mosqueCode) {
+      console.log('[Stripe Webhook] No mosque affiliation found for subscription:', subscription.id)
+      return
+    }
+
+    console.log('[Stripe Webhook] Affiliated with mosque code:', mosqueCode)
+
+    // Get mosque's Stripe connected account
+    const { data: mosque, error: mosqueError } = await supabaseAdmin
+      .from('mosques')
+      .select('id, name, mosque_code, stripe_account_id, stripe_payouts_enabled')
+      .eq('mosque_code', mosqueCode)
+      .single()
+
+    if (mosqueError || !mosque) {
+      console.error('[Stripe Webhook] Mosque not found:', mosqueCode)
+      return
+    }
+
+    if (!mosque.stripe_account_id || !mosque.stripe_payouts_enabled) {
+      console.log('[Stripe Webhook] Mosque does not have payouts enabled:', mosque.name)
+      return
+    }
+
+    console.log('[Stripe Webhook] Processing kickback for mosque:', mosque.name)
+
+    // Calculate 10% kickback
+    const kickbackAmount = subscription.price_amount * 0.10
+    console.log('[Stripe Webhook] Kickback amount: $', kickbackAmount.toFixed(2))
+
+    if (kickbackAmount <= 0) {
+      console.log('[Stripe Webhook] Kickback amount is zero, skipping')
+      return
+    }
+
+    // Create Stripe transfer to mosque's connected account
+    try {
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(kickbackAmount * 100), // Convert to cents
+        currency: 'usd',
+        destination: mosque.stripe_account_id,
+        description: `10% kickback from ${entityName} (${subscription.type})`,
+        metadata: {
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code.toString(),
+          subscription_id: subscription.id,
+          entity_name: entityName,
+          entity_type: subscription.type,
+          invoice_id: invoice.id
+        }
+      })
+
+      console.log('[Stripe Webhook] Transfer created:', transfer.id, 'for $', kickbackAmount.toFixed(2))
+
+      // Record payout in database
+      const periodStart = new Date(invoice.period_start * 1000)
+      const periodEnd = new Date(invoice.period_end * 1000)
+
+      await supabaseAdmin
+        .from('mosque_payouts')
+        .insert({
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code,
+          stripe_account_id: mosque.stripe_account_id,
+          stripe_transfer_id: transfer.id,
+          amount: kickbackAmount,
+          period_start: periodStart.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          status: 'completed',
+          affiliate_breakdown: {
+            [subscription.type + 's']: [{
+              id: subscription.id,
+              name: entityName,
+              amount: kickbackAmount
+            }]
+          },
+          processed_at: new Date().toISOString()
+        })
+
+      console.log('[Stripe Webhook] Payout recorded in database')
+
+    } catch (transferError: any) {
+      console.error('[Stripe Webhook] Transfer failed:', transferError.message)
+      
+      // Record failed payout
+      const periodStart = new Date(invoice.period_start * 1000)
+      const periodEnd = new Date(invoice.period_end * 1000)
+
+      await supabaseAdmin
+        .from('mosque_payouts')
+        .insert({
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code,
+          stripe_account_id: mosque.stripe_account_id,
+          amount: kickbackAmount,
+          period_start: periodStart.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          status: 'failed',
+          error_message: transferError.message,
+          affiliate_breakdown: {
+            [subscription.type + 's']: [{
+              id: subscription.id,
+              name: entityName,
+              amount: kickbackAmount
+            }]
+          }
+        })
+    }
+
   } catch (error: any) {
-    console.error('Error in webhook handler:', error)
-    return Response.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    console.error('[Stripe Webhook] Error processing invoice:', error.message)
   }
 }
 
 /**
- * Handle successful payment intent
+ * Handle Stripe Connected Account updates
+ * Update mosque account status in database
  */
-async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  const paymentIntentId = paymentIntent.id
+async function handleAccountUpdated(account: any) {
+  console.log('[Stripe Webhook] Account updated:', account.id)
 
-  // Check if we've already processed this webhook (idempotency)
-  const { data: existingDonation } = await supabaseAdmin
-    .from('donations')
-    .select('id, status, webhook_event_id')
-    .eq('provider_payment_id', paymentIntentId)
-    .single()
+  const supabaseAdmin = getSupabaseAdmin()
 
-  // If already processed and succeeded, skip
-  if (existingDonation?.status === 'succeeded' && existingDonation?.webhook_event_id) {
-    console.log(`⚠️ Donation ${existingDonation.id} already processed`)
-    return
-  }
-
-  // Find donation by payment intent ID
-  const { data: donation, error: donationError } = await supabaseAdmin
-    .from('donations')
-    .select('*')
-    .eq('provider_payment_id', paymentIntentId)
-    .single()
-
-  if (donationError || !donation) {
-    console.error('❌ Donation not found for payment intent:', paymentIntentId)
-    console.error('   Error:', donationError)
-    return
-  }
-
-  console.log('📧 Found donation:', {
-    id: donation.id,
-    userId: donation.user_id,
-    donorEmail: donation.donor_email,
-    amount: donation.amount,
-    status: donation.status,
-  })
-
-  // Update donation status
-  const { data: updatedDonation, error: updateError } = await supabaseAdmin
-    .from('donations')
-    .update({
-      status: 'succeeded',
-      paid_at: new Date(paymentIntent.created * 1000).toISOString(),
-      webhook_processed_at: new Date().toISOString(),
-      webhook_event_id: paymentIntent.id, // Using payment intent ID as event ID
-      metadata: {
-        ...donation.metadata,
-        stripe_charge_id: paymentIntent.latest_charge,
-        payment_method: paymentIntent.payment_method,
-      },
-    })
-    .eq('id', donation.id)
-    .select()
-    .single()
-
-  if (updateError) {
-    console.error('Error updating donation:', updateError)
-    return
-  }
-
-  console.log('✅ Donation confirmed:', updatedDonation.id)
-  console.log('📧 Donation details:', {
-    id: updatedDonation.id,
-    userId: updatedDonation.user_id,
-    donorEmail: updatedDonation.donor_email,
-    amount: updatedDonation.amount,
-    currency: updatedDonation.currency,
-  })
-
-  // Trigger notification hook - don't fail webhook if notification fails
   try {
-    console.log('📧 Calling onDonationConfirmed hook...')
-    console.log('📧 Hook parameters:', {
-      donationId: updatedDonation.id,
-      userId: updatedDonation.user_id,
-      donorEmail: updatedDonation.donor_email,
-      amount: updatedDonation.amount,
-    })
-    
-    await onDonationConfirmed({
-      donationId: updatedDonation.id,
-      userId: updatedDonation.user_id || undefined,
-      donorName: updatedDonation.donor_name || undefined,
-      donorEmail: updatedDonation.donor_email || undefined,
-      amount: Number(updatedDonation.amount),
-      currency: updatedDonation.currency,
-      mosqueId: updatedDonation.mosque_id || undefined,
-      mosqueCode: updatedDonation.mosque_code || undefined,
-    })
-    
-    console.log('✅ onDonationConfirmed hook completed successfully')
-  } catch (hookError: any) {
-    // Log error but don't fail webhook - donation is already confirmed
-    console.error('❌ Error triggering donation notification hook:', hookError)
-    console.error('   Error message:', hookError?.message)
-    console.error('   Error stack:', hookError?.stack || 'No stack trace')
-    // Don't throw - we don't want to fail the webhook if notification fails
-  }
-}
+    // Find mosque with this Stripe account
+    const { data: mosque } = await supabaseAdmin
+      .from('mosques')
+      .select('id, name')
+      .eq('stripe_account_id', account.id)
+      .single()
 
-/**
- * Handle failed payment intent
- */
-async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
-  const paymentIntentId = paymentIntent.id
+    if (!mosque) {
+      console.log('[Stripe Webhook] No mosque found with account:', account.id)
+      return
+    }
 
-  // Find donation
-  const { data: donation, error: donationError } = await supabaseAdmin
-    .from('donations')
-    .select('*')
-    .eq('provider_payment_id', paymentIntentId)
-    .single()
+    console.log('[Stripe Webhook] Updating mosque:', mosque.name)
 
-  if (donationError || !donation) {
-    console.error('Donation not found for payment intent:', paymentIntentId)
-    return
-  }
+    // Update mosque status
+    await supabaseAdmin
+      .from('mosques')
+      .update({
+        stripe_onboarding_complete: account.details_submitted,
+        stripe_charges_enabled: account.charges_enabled,
+        stripe_payouts_enabled: account.payouts_enabled,
+        stripe_details_submitted: account.details_submitted,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', mosque.id)
 
-  // Update donation status
-  const { error: updateError } = await supabaseAdmin
-    .from('donations')
-    .update({
-      status: 'failed',
-      failed_at: new Date(paymentIntent.created * 1000).toISOString(),
-      webhook_processed_at: new Date().toISOString(),
-      webhook_event_id: paymentIntent.id,
-      metadata: {
-        ...donation.metadata,
-        failure_reason: paymentIntent.last_payment_error?.message,
-      },
-    })
-    .eq('id', donation.id)
+    console.log('[Stripe Webhook] Mosque status updated')
 
-  if (updateError) {
-    console.error('Error updating donation:', updateError)
-    return
-  }
-
-  console.log('❌ Donation failed:', donation.id)
-
-  // Trigger notification hook
-  try {
-    await onDonationFailed({
-      donationId: donation.id,
-      userId: donation.user_id || undefined,
-      donorEmail: donation.donor_email || undefined,
-      amount: Number(donation.amount),
-      currency: donation.currency,
-      reason: paymentIntent.last_payment_error?.message,
-    })
-  } catch (hookError) {
-    console.error('Error triggering donation failed notification hook:', hookError)
-  }
-}
-
-/**
- * Handle canceled payment intent
- */
-async function handlePaymentIntentCanceled(paymentIntent: Stripe.PaymentIntent) {
-  const paymentIntentId = paymentIntent.id
-
-  const { error: updateError } = await supabaseAdmin
-    .from('donations')
-    .update({
-      status: 'canceled',
-      webhook_processed_at: new Date().toISOString(),
-      webhook_event_id: paymentIntent.id,
-    })
-    .eq('provider_payment_id', paymentIntentId)
-
-  if (updateError) {
-    console.error('Error updating canceled donation:', updateError)
-  } else {
-    console.log('⚠️ Donation canceled:', paymentIntentId)
-  }
-}
-
-/**
- * Handle charge refunded
- */
-async function handleChargeRefunded(charge: Stripe.Charge) {
-  const paymentIntentId = charge.payment_intent as string
-
-  if (!paymentIntentId) {
-    return
-  }
-
-  // Find donation
-  const { data: donation, error: donationError } = await supabaseAdmin
-    .from('donations')
-    .select('*')
-    .eq('provider_payment_id', paymentIntentId)
-    .single()
-
-  if (donationError || !donation) {
-    return
-  }
-
-  // Determine if partial or full refund
-  const refundAmount = charge.amount_refunded
-  const originalAmount = charge.amount
-  const isPartial = refundAmount < originalAmount
-
-  const { error: updateError } = await supabaseAdmin
-    .from('donations')
-    .update({
-      status: isPartial ? 'partially_refunded' : 'refunded',
-      refunded_at: new Date().toISOString(),
-      webhook_processed_at: new Date().toISOString(),
-      metadata: {
-        ...donation.metadata,
-        refund_amount: refundAmount / 100, // Convert cents to dollars
-        refund_reason: charge.refunds?.data[0]?.reason,
-      },
-    })
-    .eq('id', donation.id)
-
-  if (updateError) {
-    console.error('Error updating refunded donation:', updateError)
-  } else {
-    console.log(`💰 Donation ${isPartial ? 'partially ' : ''}refunded:`, donation.id)
+  } catch (error: any) {
+    console.error('[Stripe Webhook] Error updating account:', error.message)
   }
 }
