@@ -23,6 +23,7 @@ import {
   Plus,
   Loader2,
   Check,
+  Calendar,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -57,8 +58,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
-import { authenticatedGet } from "@/lib/api-client"
+import { authenticatedGet, authenticatedPost } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
 
 // Define interfaces for clarity
@@ -162,13 +166,39 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   // Refs
   const documentInputRef = useRef<HTMLInputElement>(null)
 
-  const [pushNotificationDate, setPushNotificationDate] = useState(getMinScheduleDate())
+  const [pushNotificationDate, setPushNotificationDate] = useState<Date | undefined>(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date
+  })
   const [pushNotificationTime, setPushNotificationTime] = useState("09:00")
   const [pushNotificationTimezone, setPushNotificationTimezone] = useState("America/New_York")
   const [showPushNotificationDialog, setShowPushNotificationDialog] = useState(false)
   const [pushNotificationTitle, setPushNotificationTitle] = useState("")
   const [pushNotificationMessage, setPushNotificationMessage] = useState("")
   const [lastPushRequestDate, setLastPushRequestDate] = useState<string | null>(null)
+  const [submittingPushNotification, setSubmittingPushNotification] = useState(false)
+  
+  // Time picker state
+  const [timePickerOpen, setTimePickerOpen] = useState(false)
+  const [selectedHour, setSelectedHour] = useState('9')
+  const [selectedMinute, setSelectedMinute] = useState('00')
+  const [selectedPeriod, setSelectedPeriod] = useState('AM')
+
+  // Helper function to update scheduled time from time picker
+  const updateScheduledTime = (hour: string, minute: string, period: string) => {
+    let hour24 = parseInt(hour)
+    if (period === 'PM' && hour24 !== 12) {
+      hour24 += 12
+    } else if (period === 'AM' && hour24 === 12) {
+      hour24 = 0
+    }
+    const timeString = `${hour24.toString().padStart(2, '0')}:${minute}`
+    setPushNotificationTime(timeString)
+    setSelectedHour(hour)
+    setSelectedMinute(minute)
+    setSelectedPeriod(period)
+  }
 
   const [formData, setFormData] = useState({
     name: "",
@@ -948,43 +978,66 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
-  const handlePushNotificationRequest = () => {
-    // Check if mosque has requested in the last 30 days
-    // Removed the 30 day check as it's now scheduled and reviewed by admin.
-    // In a real app, this would be handled by the backend.
-
-    // Create new notification request with scheduled date/time
-    const newRequest: PushNotificationRequest = {
-      id: `push-${Date.now()}`,
-      mosqueId: subscription.id,
-      mosqueName: subscription.entity?.name || formData.name,
-      mosqueCode: subscription.entity?.mosque_code?.toString() || "",
-      title: pushNotificationTitle,
-      message: pushNotificationMessage,
-      scheduledDate: pushNotificationDate,
-      scheduledTime: pushNotificationTime,
-      timezone: pushNotificationTimezone,
-      requestedAt: new Date().toISOString(),
-      requestedBy: subscription.entity?.email || formData.email,
-      status: "pending",
-      lastRequestDate: new Date().toISOString().split("T")[0],
+  const handlePushNotificationRequest = async () => {
+    if (!pushNotificationTitle || !pushNotificationMessage || !pushNotificationDate) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
     }
 
-    // In production, this would be sent to backend
-    console.log("[v0] Push notification request:", newRequest)
+    try {
+      setSubmittingPushNotification(true)
 
-    setPushNotificationTitle("")
-    setPushNotificationMessage("")
-    setPushNotificationDate(getMinScheduleDate())
-    setPushNotificationTime("09:00")
-    setPushNotificationTimezone("America/New_York")
-    setShowPushNotificationDialog(false)
+      // Format date as YYYY-MM-DD
+      const formattedDate = format(pushNotificationDate, 'yyyy-MM-dd')
 
-    // Show toast
-    toast({
-      title: "Push Notification Requested",
-      description: `Your push notification has been scheduled for ${pushNotificationDate} at ${pushNotificationTime} ${pushNotificationTimezone}`,
-    })
+      // Call the API to create push notification request
+      const response: any = await authenticatedPost('/api/push-notifications', {
+        mosque_subscription_id: subscription.id,
+        mosque_code: subscription.entity?.mosque_code || subscription.mosqueCode,
+        mosque_name: subscription.entity?.name || subscription.name,
+        title: pushNotificationTitle,
+        message: pushNotificationMessage,
+        scheduled_date: formattedDate,
+        scheduled_time: pushNotificationTime,
+        timezone: pushNotificationTimezone,
+      })
+
+      if (response.success) {
+        // Show success toast
+        toast({
+          title: "Request Submitted",
+          description: `Your push notification has been requested for ${format(pushNotificationDate, 'PPP')} at ${pushNotificationTime}. It will be reviewed by admin.`,
+        })
+
+        // Reset form
+        setPushNotificationTitle("")
+        setPushNotificationMessage("")
+        const newDate = new Date()
+        newDate.setDate(newDate.getDate() + 7)
+        setPushNotificationDate(newDate)
+        setPushNotificationTime("09:00")
+        setSelectedHour('9')
+        setSelectedMinute('00')
+        setSelectedPeriod('AM')
+        setPushNotificationTimezone("America/New_York")
+        setShowPushNotificationDialog(false)
+      } else {
+        throw new Error(response.error || "Failed to submit request")
+      }
+    } catch (error: any) {
+      console.error('Error submitting push notification:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit push notification request. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmittingPushNotification(false)
+    }
   }
 
   // Loading state
@@ -2505,25 +2558,118 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="push-date">Scheduled Date</Label>
-                  <Input
-                    id="push-date"
-                    type="date"
-                    min={getMinScheduleDate()}
-                    value={pushNotificationDate}
-                    onChange={(e) => setPushNotificationDate(e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Minimum 7 days from today</p>
+                  <Label>Scheduled Date *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`w-full justify-start text-left font-normal ${
+                          !pushNotificationDate && "text-muted-foreground"
+                        }`}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {pushNotificationDate ? format(pushNotificationDate, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={pushNotificationDate}
+                        onSelect={(date) => setPushNotificationDate(date)}
+                        disabled={(date) => {
+                          const sevenDaysFromNow = new Date()
+                          sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+                          return date < sevenDaysFromNow
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground mt-1">Must be 7+ days in advance</p>
                 </div>
 
                 <div>
-                  <Label htmlFor="push-time">Time</Label>
-                  <Input
-                    id="push-time"
-                    type="time"
-                    value={pushNotificationTime}
-                    onChange={(e) => setPushNotificationTime(e.target.value)}
-                  />
+                  <Label>Scheduled Time *</Label>
+                  <Popover open={timePickerOpen} onOpenChange={setTimePickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`w-full justify-start text-left font-normal ${
+                          !pushNotificationTime && "text-muted-foreground"
+                        }`}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {pushNotificationTime || "Select time"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-4" align="start">
+                      <div className="space-y-3">
+                        <div className="text-sm font-medium">Select Time</div>
+                        <div className="flex items-center gap-2">
+                          {/* Hour selector */}
+                          <Select
+                            value={selectedHour}
+                            onValueChange={(value) => updateScheduledTime(value, selectedMinute, selectedPeriod)}
+                          >
+                            <SelectTrigger className="w-[70px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => {
+                                const hour = i + 1
+                                return (
+                                  <SelectItem key={hour} value={hour.toString()}>
+                                    {hour}
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
+                          
+                          <span className="text-xl font-semibold">:</span>
+                          
+                          {/* Minute selector */}
+                          <Select
+                            value={selectedMinute}
+                            onValueChange={(value) => updateScheduledTime(selectedHour, value, selectedPeriod)}
+                          >
+                            <SelectTrigger className="w-[70px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {['00', '15', '30', '45'].map((minute) => (
+                                <SelectItem key={minute} value={minute}>
+                                  {minute}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
+                          {/* AM/PM selector */}
+                          <Select
+                            value={selectedPeriod}
+                            onValueChange={(value) => updateScheduledTime(selectedHour, selectedMinute, value)}
+                          >
+                            <SelectTrigger className="w-[70px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AM">AM</SelectItem>
+                              <SelectItem value="PM">PM</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setTimePickerOpen(false)}
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground mt-1">Local time in selected timezone</p>
                 </div>
               </div>
 
@@ -2545,14 +2691,25 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowPushNotificationDialog(false)}>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowPushNotificationDialog(false)}
+                disabled={submittingPushNotification}
+              >
                 Cancel
               </Button>
               <Button
                 onClick={handlePushNotificationRequest}
-                disabled={!pushNotificationTitle || !pushNotificationMessage || !pushNotificationDate}
+                disabled={!pushNotificationTitle || !pushNotificationMessage || !pushNotificationDate || submittingPushNotification}
               >
-                Send Request
+                {submittingPushNotification ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Send Request"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

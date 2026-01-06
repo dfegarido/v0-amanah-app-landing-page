@@ -101,6 +101,11 @@ export default function AdminDashboard() {
   const [membersLoading, setMembersLoading] = useState(true)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [subscriptionToReject, setSubscriptionToReject] = useState<{ id: string; name?: string; title?: string } | null>(null)
+  const [transactionsPage, setTransactionsPage] = useState(1)
+  const [transactionsPerPage] = useState(20)
+  const [membersSearchQuery, setMembersSearchQuery] = useState('')
+  const [membersPage, setMembersPage] = useState(1)
+  const [membersPerPage] = useState(10)
   const [updatingSubscriptionId, setUpdatingSubscriptionId] = useState<string | null>(null)
 
   // Push notification requests state (using real API)
@@ -744,10 +749,11 @@ export default function AdminDashboard() {
     }
   >
 
-  const totalMosques = allMosques.length
-  const totalBusinesses = allBusinesses.length
-  const totalCoupons = allCoupons.length
-  const totalNonprofits = allNonprofits.length // Added totalNonprofits
+  // Count only ACTIVE and APPROVED subscriptions
+  const totalMosques = allMosques.filter((m) => m.status === "active" && m.appStatus === "active").length
+  const totalBusinesses = allBusinesses.filter((b) => b.status === "active" && b.appStatus === "active").length
+  const totalCoupons = allCoupons.filter((c) => c.status === "active" && c.appStatus === "active").length
+  const totalNonprofits = allNonprofits.filter((n) => n.status === "active" && n.appStatus === "active").length
   const unresolvedAlerts = alerts.filter((a) => !a.resolved).length
 
   const getMosqueAffiliates = (mosqueCode: number) => {
@@ -773,7 +779,7 @@ export default function AdminDashboard() {
     // Calculate 10% kickback for each affiliate type
     const businessKickback = businesses.reduce((sum, b) => sum + (b.price * 0.10), 0)
     const couponKickback = coupons.reduce((sum, c) => sum + ((c as any).subscriptionPrice || (c as any).price || 10) * 0.10, 0)
-    const nonprofitKickback = nonprofits.reduce((sum, n) => sum + ((n as any).subscriptionPrice || 50) * 0.10, 0)
+    const nonprofitKickback = nonprofits.reduce((sum, n) => sum + ((n as any).subscriptionPrice || (n as any).price || n.price || 50) * 0.10, 0)
     const totalKickback = businessKickback + couponKickback + nonprofitKickback
     
     return { businesses, coupons, nonprofits, totalKickback }
@@ -800,48 +806,50 @@ export default function AdminDashboard() {
         }
 
         const subscriptionDate = sub.created_at || sub.next_billing_date || new Date().toISOString()
-        let amount = 0
+        
+        // Use actual subscription price from database (API maps price_amount to price)
+        let amount = sub.price || sub.price_amount || 0
         let mosqueKickback = 0
         let amanahOrgDonation = 0
         let netRevenue = 0
         let subscriptionName = ''
 
-        // Determine pricing and name based on type
+        // Determine name and calculations based on type
         switch (sub.type) {
           case 'mosque':
-            amount = 100
             subscriptionName = sub.entity?.name || 'Unnamed Mosque'
             amanahOrgDonation = amount * 0.15 // 15% to Amanah education fund
             netRevenue = amount - amanahOrgDonation // 85% to Amanah
             break
 
           case 'business':
-            amount = 10
             subscriptionName = sub.entity?.name || 'Unnamed Business'
             // If affiliated with mosque, 10% goes to mosque
             if (sub.entity?.affiliated_mosque_code) {
-              mosqueKickback = amount * 0.10 // $1 to mosque
+              mosqueKickback = amount * 0.10
             }
-            amanahOrgDonation = amount * 0.15 // $1.50 to Amanah education fund
-            netRevenue = amount - mosqueKickback - amanahOrgDonation // $7.50 or $8.50 to Amanah
+            amanahOrgDonation = amount * 0.15 // 15% to Amanah education fund
+            netRevenue = amount - mosqueKickback - amanahOrgDonation
             break
 
           case 'coupon':
-            amount = 10
             subscriptionName = sub.entity?.title || 'Unnamed Coupon'
             // If affiliated with mosque, 10% goes to mosque
             if (sub.entity?.affiliated_mosque_code) {
-              mosqueKickback = amount * 0.10 // $1 to mosque
+              mosqueKickback = amount * 0.10
             }
-            amanahOrgDonation = amount * 0.15 // $1.50 to Amanah education fund
-            netRevenue = amount - mosqueKickback - amanahOrgDonation // $7.50 or $8.50 to Amanah
+            amanahOrgDonation = amount * 0.15 // 15% to Amanah education fund
+            netRevenue = amount - mosqueKickback - amanahOrgDonation
             break
 
           case 'nonprofit':
-            amount = 50
             subscriptionName = sub.entity?.name || 'Unnamed Nonprofit'
-            amanahOrgDonation = amount * 0.15 // $7.50 to Amanah education fund
-            netRevenue = amount - amanahOrgDonation // $42.50 to Amanah
+            // If affiliated with mosque, 10% goes to mosque
+            if (sub.entity?.affiliated_mosque_code) {
+              mosqueKickback = amount * 0.10
+            }
+            amanahOrgDonation = amount * 0.15 // 15% to Amanah education fund
+            netRevenue = amount - mosqueKickback - amanahOrgDonation
             break
         }
 
@@ -865,7 +873,7 @@ export default function AdminDashboard() {
 
   const filterFinancialsByDate = () => {
     const allRecords = generateFinancialRecords()
-    return allRecords.filter((r) => {
+    const filteredRecords = allRecords.filter((r) => {
       const recordDate = new Date(r.date)
       // Set time to start of day for accurate comparison
       const start = new Date(startDate)
@@ -873,6 +881,13 @@ export default function AdminDashboard() {
       const end = new Date(endDate)
       end.setHours(23, 59, 59, 999)
       return recordDate >= start && recordDate <= end
+    })
+    
+    // Sort by date descending (latest first)
+    return filteredRecords.sort((a, b) => {
+      const dateA = new Date(a.date).getTime()
+      const dateB = new Date(b.date).getTime()
+      return dateB - dateA // Latest first
     })
   }
 
@@ -1610,7 +1625,7 @@ export default function AdminDashboard() {
                 <DollarSign className="h-4 w-4" /> Monthly Revenue
               </CardDescription>
               <CardTitle className="text-3xl text-primary">
-                {membersLoading ? "..." : `$${totalMosques * 100 + (totalBusinesses + totalCoupons) * 10}`}
+                {membersLoading ? "..." : `$${financialSummary.totalRevenue.toFixed(0)}`}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -2750,74 +2765,6 @@ export default function AdminDashboard() {
                 >
                   Next Month
                 </Button>
-                <Button 
-                  variant="default" 
-                  size="sm"
-                  disabled={refreshingStripeId === 'processing-payouts'}
-                  onClick={async () => {
-                    try {
-                      setRefreshingStripeId('processing-payouts')
-                      
-                      // Calculate period start and end
-                      const periodEnd = new Date(payoutsMonth)
-                      periodEnd.setMonth(periodEnd.getMonth() + 1)
-                      periodEnd.setDate(0) // Last day of the month
-                      
-                      const periodStart = new Date(payoutsMonth)
-                      periodStart.setDate(1) // First day of the month
-                      
-                      console.log('[Admin] Processing payouts for period:', {
-                        start: periodStart.toISOString().split('T')[0],
-                        end: periodEnd.toISOString().split('T')[0]
-                      })
-                      
-                      const response: any = await authenticatedPost(
-                        '/api/admin/mosques/payouts',
-                        {
-                          period_start: periodStart.toISOString().split('T')[0],
-                          period_end: periodEnd.toISOString().split('T')[0]
-                        }
-                      )
-                      
-                      if (response.success) {
-                        const { successful, failed, skipped } = response.data
-                        toast({
-                          title: "Payouts Processed",
-                          description: `✅ ${successful} successful, ❌ ${failed} failed, ⏭️ ${skipped} skipped`
-                        })
-                        // Refresh members data
-                        fetchMembers()
-                      } else {
-                        toast({
-                          title: "Error",
-                          description: response.error || "Failed to process payouts",
-                          variant: "destructive"
-                        })
-                      }
-                    } catch (error: any) {
-                      console.error('[Admin] Process payouts error:', error)
-                      toast({
-                        title: "Error",
-                        description: error.message || "Failed to process payouts",
-                        variant: "destructive"
-                      })
-                    } finally {
-                      setRefreshingStripeId(null)
-                    }
-                  }}
-                >
-                  {refreshingStripeId === 'processing-payouts' ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      Process Payouts
-                    </>
-                  )}
-                </Button>
               </div>
             </div>
             <Card>
@@ -3078,7 +3025,7 @@ export default function AdminDashboard() {
                                         </div>
                                       </div>
                                       <div className="text-right ml-4">
-                                        <p className="font-bold text-primary text-lg">${(((n as any).subscriptionPrice || 50) * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
+                                        <p className="font-bold text-primary text-lg">${(((n as any).subscriptionPrice || (n as any).price || n.price || 50) * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                           {n.status === "active" && n.appStatus === "active" ? "Earning" : "Not Earning"}
                                         </p>
@@ -3274,9 +3221,18 @@ export default function AdminDashboard() {
                         <Building2 className="h-5 w-5 text-primary" />
                         <h4 className="font-semibold">Mosques</h4>
                       </div>
-                      <p className="text-2xl font-bold">${financialSummary.mosqueRevenue}</p>
+                      <p className="text-2xl font-bold">${financialSummary.mosqueRevenue.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {allMosques.filter((m) => m.status === "active" && m.appStatus === "active").length} active @ $100/mo
+                        {(() => {
+                          const active = allMosques.filter((m) => m.status === "active" && m.appStatus === "active")
+                          if (active.length === 0) return '0 active'
+                          const priceGroups: { [key: string]: number } = {}
+                          active.forEach((m: any) => {
+                            const price = (m.price || m.price_amount || 0).toFixed(2)
+                            priceGroups[price] = (priceGroups[price] || 0) + 1
+                          })
+                          return Object.entries(priceGroups).map(([price, count]) => `${count} active @ $${price}/mo`).join(', ')
+                        })()}
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-secondary/50">
@@ -3284,9 +3240,18 @@ export default function AdminDashboard() {
                         <Store className="h-5 w-5 text-primary" />
                         <h4 className="font-semibold">Businesses</h4>
                       </div>
-                      <p className="text-2xl font-bold">${financialSummary.businessRevenue}</p>
+                      <p className="text-2xl font-bold">${financialSummary.businessRevenue.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {allBusinesses.filter((b) => b.status === "active" && b.appStatus === "active").length} active @ $10/mo
+                        {(() => {
+                          const active = allBusinesses.filter((b) => b.status === "active" && b.appStatus === "active")
+                          if (active.length === 0) return '0 active'
+                          const priceGroups: { [key: string]: number } = {}
+                          active.forEach((b: any) => {
+                            const price = (b.price || b.price_amount || 0).toFixed(2)
+                            priceGroups[price] = (priceGroups[price] || 0) + 1
+                          })
+                          return Object.entries(priceGroups).map(([price, count]) => `${count} active @ $${price}/mo`).join(', ')
+                        })()}
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-secondary/50">
@@ -3294,9 +3259,18 @@ export default function AdminDashboard() {
                         <Ticket className="h-5 w-5 text-primary" />
                         <h4 className="font-semibold">Coupons</h4>
                       </div>
-                      <p className="text-2xl font-bold">${financialSummary.couponRevenue}</p>
+                      <p className="text-2xl font-bold">${financialSummary.couponRevenue.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {allCoupons.filter((c) => c.status === "active" && c.appStatus === "active").length} active @ $10/mo
+                        {(() => {
+                          const active = allCoupons.filter((c) => c.status === "active" && c.appStatus === "active")
+                          if (active.length === 0) return '0 active'
+                          const priceGroups: { [key: string]: number } = {}
+                          active.forEach((c: any) => {
+                            const price = (c.price || c.price_amount || 0).toFixed(2)
+                            priceGroups[price] = (priceGroups[price] || 0) + 1
+                          })
+                          return Object.entries(priceGroups).map(([price, count]) => `${count} active @ $${price}/mo`).join(', ')
+                        })()}
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-secondary/50">
@@ -3304,9 +3278,18 @@ export default function AdminDashboard() {
                         <Users className="h-5 w-5 text-primary" />
                         <h4 className="font-semibold">Nonprofits</h4>
                       </div>
-                      <p className="text-2xl font-bold">${financialSummary.nonprofitRevenue}</p>
+                      <p className="text-2xl font-bold">${financialSummary.nonprofitRevenue.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {allNonprofits.filter((n) => n.status === "active" && n.appStatus === "active").length} active @ $50/mo
+                        {(() => {
+                          const active = allNonprofits.filter((n) => n.status === "active" && n.appStatus === "active")
+                          if (active.length === 0) return '0 active'
+                          const priceGroups: { [key: string]: number } = {}
+                          active.forEach((n: any) => {
+                            const price = (n.price || n.price_amount || 0).toFixed(2)
+                            priceGroups[price] = (priceGroups[price] || 0) + 1
+                          })
+                          return Object.entries(priceGroups).map(([price, count]) => `${count} active @ $${price}/mo`).join(', ')
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -3324,36 +3307,43 @@ export default function AdminDashboard() {
                     <div className="p-4 rounded-lg border">
                       <h4 className="font-semibold mb-2">Projected Monthly (Current)</h4>
                       <p className="text-3xl font-bold text-primary">
-                        ${totalMosques * 100 + (totalBusinesses + totalCoupons) * 10}
+                        ${financialSummary.totalRevenue.toFixed(2)}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Based on {totalMosques} mosques, {totalBusinesses} businesses, {totalCoupons} coupons
+                        Based on {allMosques.filter((m) => m.status === "active" && m.appStatus === "active").length} mosques, {allBusinesses.filter((b) => b.status === "active" && b.appStatus === "active").length} businesses, {allCoupons.filter((c) => c.status === "active" && c.appStatus === "active").length} coupons
                       </p>
                     </div>
                     <div className="p-4 rounded-lg border">
                       <h4 className="font-semibold mb-2">Average Revenue per Mosque</h4>
                       <p className="text-3xl font-bold">
                         $
-                        {totalMosques > 0
-                          ? (100 + (allBusinesses.length + allCoupons.length) / totalMosques).toFixed(0)
-                          : 0}
+                        {(() => {
+                          const activeMosquesCount = allMosques.filter((m) => m.status === "active" && m.appStatus === "active").length
+                          if (activeMosquesCount === 0) return 0
+                          const avgMosqueSubscription = financialSummary.mosqueRevenue / activeMosquesCount
+                          const avgKickbackPerMosque = financialSummary.totalMosqueKickbacks / activeMosquesCount
+                          return (avgMosqueSubscription + avgKickbackPerMosque).toFixed(2)
+                        })()}
                       </p>
-                      <p className="text-sm text-muted-foreground mt-1">Including affiliate contributions</p>
+                      <p className="text-sm text-muted-foreground mt-1">Subscription + avg kickbacks received</p>
                     </div>
                     <div className="p-4 rounded-lg border">
                       <h4 className="font-semibold mb-2">Affiliate Conversion Rate</h4>
                       <p className="text-3xl font-bold">
-                        {totalMosques > 0
-                          ? (
-                              ((allBusinesses.filter((b) => b.affiliatedMosqueCode).length +
-                                allCoupons.filter((c) => c.affiliatedMosqueCode).length) /
-                                (allBusinesses.length + allCoupons.length)) *
-                              100
-                            ).toFixed(0)
-                          : 0}
+                        {(() => {
+                          const activeBusinesses = allBusinesses.filter((b) => b.status === "active" && b.appStatus === "active")
+                          const activeCoupons = allCoupons.filter((c) => c.status === "active" && c.appStatus === "active")
+                          const activeNonprofits = allNonprofits.filter((n) => n.status === "active" && n.appStatus === "active")
+                          const totalActive = activeBusinesses.length + activeCoupons.length + activeNonprofits.length
+                          if (totalActive === 0) return 0
+                          const affiliated = activeBusinesses.filter((b: any) => b.affiliatedMosqueCode).length +
+                                             activeCoupons.filter((c: any) => c.affiliatedMosqueCode).length +
+                                             activeNonprofits.filter((n: any) => n.affiliatedMosqueCode).length
+                          return ((affiliated / totalActive) * 100).toFixed(0)
+                        })()}
                         %
                       </p>
-                      <p className="text-sm text-muted-foreground mt-1">Businesses/coupons with mosque affiliation</p>
+                      <p className="text-sm text-muted-foreground mt-1">Entities with mosque affiliation</p>
                     </div>
                   </div>
                 </CardContent>
@@ -3366,40 +3356,114 @@ export default function AdminDashboard() {
                   <CardDescription>Detailed breakdown of all financial transactions</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Name</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="text-right">Mosque Kickback</TableHead>
-                          <TableHead className="text-right">Amanah Donation</TableHead>
-                          <TableHead className="text-right">Net</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {financialSummary.records.map((record) => (
-                          <TableRow key={record.id}>
-                            <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="capitalize">
-                                {record.type}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">{record.subscriptionName}</TableCell>
-                            <TableCell className="text-right">${record.amount}</TableCell>
-                            <TableCell className="text-right text-yellow-500">${record.mosqueKickback || 0}</TableCell>
-                            <TableCell className="text-right text-blue-500">${record.amanahOrgDonation || 0}</TableCell>
-                            <TableCell className="text-right font-semibold text-green-500">
-                              ${record.netRevenue}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  {(() => {
+                    // Calculate pagination
+                    const totalRecords = financialSummary.records.length
+                    const totalPages = Math.ceil(totalRecords / transactionsPerPage)
+                    const startIndex = (transactionsPage - 1) * transactionsPerPage
+                    const endIndex = startIndex + transactionsPerPage
+                    const paginatedRecords = financialSummary.records.slice(startIndex, endIndex)
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-4">
+                          <p className="text-sm text-muted-foreground">
+                            Showing {startIndex + 1} to {Math.min(endIndex, totalRecords)} of {totalRecords} transactions
+                          </p>
+                        </div>
+                        
+                        <div className="rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Name</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead className="text-right">Mosque Kickback</TableHead>
+                                <TableHead className="text-right">Amanah Donation</TableHead>
+                                <TableHead className="text-right">Net</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {paginatedRecords.length > 0 ? (
+                                paginatedRecords.map((record) => (
+                                  <TableRow key={record.id}>
+                                    <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className="capitalize">
+                                        {record.type}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="font-medium">{record.subscriptionName}</TableCell>
+                                    <TableCell className="text-right">${(record.amount || 0).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right text-yellow-500">${(record.mosqueKickback || 0).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right text-blue-500">${(record.amanahOrgDonation || 0).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right font-semibold text-green-500">
+                                      ${(record.netRevenue || 0).toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              ) : (
+                                <TableRow>
+                                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                    No transactions found
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTransactionsPage(Math.max(1, transactionsPage - 1))}
+                              disabled={transactionsPage === 1}
+                            >
+                              Previous
+                            </Button>
+                            <div className="flex items-center gap-2">
+                              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                                // Show first page, last page, current page, and pages around current
+                                if (
+                                  page === 1 ||
+                                  page === totalPages ||
+                                  (page >= transactionsPage - 1 && page <= transactionsPage + 1)
+                                ) {
+                                  return (
+                                    <Button
+                                      key={page}
+                                      variant={page === transactionsPage ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => setTransactionsPage(page)}
+                                      className="w-10"
+                                    >
+                                      {page}
+                                    </Button>
+                                  )
+                                } else if (page === transactionsPage - 2 || page === transactionsPage + 2) {
+                                  return <span key={page} className="px-2">...</span>
+                                }
+                                return null
+                              })}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTransactionsPage(Math.min(totalPages, transactionsPage + 1))}
+                              disabled={transactionsPage === totalPages}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                 </CardContent>
               </Card>
             </div>
@@ -3416,7 +3480,15 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-2">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder="Search members..." className="pl-10 w-[300px]" />
+                      <Input 
+                        placeholder="Search members..." 
+                        className="pl-10 w-[300px]"
+                        value={membersSearchQuery}
+                        onChange={(e) => {
+                          setMembersSearchQuery(e.target.value)
+                          setMembersPage(1) // Reset to first page on search
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -3426,21 +3498,55 @@ export default function AdminDashboard() {
                   <div className="p-6 text-center text-muted-foreground">Loading members...</div>
                 ) : !Array.isArray(members) || members.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground">No members found</div>
-                ) : (
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Member Name</TableHead>
-                          <TableHead>Contact</TableHead>
-                          <TableHead className="text-center">Subscriptions</TableHead>
-                          <TableHead className="text-right">Monthly Total</TableHead>
-                          <TableHead>Member Since</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(Array.isArray(members) ? members : []).map((member) => {
+                ) : (() => {
+                  // Sort members by created date (latest first)
+                  const sortedMembers = [...members].sort((a, b) => {
+                    const dateA = new Date(a.createdAt || 0).getTime()
+                    const dateB = new Date(b.createdAt || 0).getTime()
+                    return dateB - dateA // Latest first
+                  })
+                  
+                  // Filter members by search query
+                  const filteredMembers = sortedMembers.filter((member) => {
+                    if (!membersSearchQuery) return true
+                    const query = membersSearchQuery.toLowerCase()
+                    return (
+                      member.name?.toLowerCase().includes(query) ||
+                      member.email?.toLowerCase().includes(query) ||
+                      member.phone?.toLowerCase().includes(query) ||
+                      member.id?.toLowerCase().includes(query)
+                    )
+                  })
+                  
+                  // Calculate pagination
+                  const totalMembers = filteredMembers.length
+                  const totalPages = Math.ceil(totalMembers / membersPerPage)
+                  const startIndex = (membersPage - 1) * membersPerPage
+                  const endIndex = startIndex + membersPerPage
+                  const paginatedMembers = filteredMembers.slice(startIndex, endIndex)
+                  
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-muted-foreground">
+                          Showing {totalMembers > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, totalMembers)} of {totalMembers} members
+                        </p>
+                      </div>
+                      
+                      <div className="rounded-lg border overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Member Name</TableHead>
+                              <TableHead>Contact</TableHead>
+                              <TableHead className="text-center">Subscriptions</TableHead>
+                              <TableHead className="text-right">Monthly Total</TableHead>
+                              <TableHead>Member Since</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedMembers.length > 0 ? paginatedMembers.map((member) => {
                           const isExpanded = expandedItems[`member-${member.id}`]
                           const monthlyTotal = (Array.isArray(member.subscriptions) ? member.subscriptions : []).reduce((sum: number, sub: any) => sum + (sub.price || 0), 0)
                           
@@ -3721,11 +3827,66 @@ export default function AdminDashboard() {
                               )}
                             </React.Fragment>
                           )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                        }) : (
+                              <TableRow>
+                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                  {membersSearchQuery ? `No members found matching "${membersSearchQuery}"` : 'No members found'}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMembersPage(Math.max(1, membersPage - 1))}
+                            disabled={membersPage === 1}
+                          >
+                            Previous
+                          </Button>
+                          <div className="flex items-center gap-2">
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                              // Show first page, last page, current page, and pages around current
+                              if (
+                                page === 1 ||
+                                page === totalPages ||
+                                (page >= membersPage - 1 && page <= membersPage + 1)
+                              ) {
+                                return (
+                                  <Button
+                                    key={page}
+                                    variant={page === membersPage ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setMembersPage(page)}
+                                    className="w-10"
+                                  >
+                                    {page}
+                                  </Button>
+                                )
+                              } else if (page === membersPage - 2 || page === membersPage + 2) {
+                                return <span key={page} className="px-2">...</span>
+                              }
+                              return null
+                            })}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMembersPage(Math.min(totalPages, membersPage + 1))}
+                            disabled={membersPage === totalPages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
