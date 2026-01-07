@@ -160,6 +160,8 @@ async function createMosqueRecord(supabase: any, subscriptionId: string, userId:
   if (data.country) mosqueRecord.country = data.country
   if (data.website) mosqueRecord.website = data.website
   if (data.contactName) mosqueRecord.contact_name = data.contactName
+  if (data.emergencyContactName) mosqueRecord.emergency_contact_name = data.emergencyContactName
+  if (data.emergencyContactPhone) mosqueRecord.emergency_contact_phone = data.emergencyContactPhone
   if (data.logo) mosqueRecord.logo = data.logo
   if (data.photos && data.photos.length > 0) mosqueRecord.photos = data.photos
   if (data.donateLink) mosqueRecord.donate_link = data.donateLink
@@ -170,14 +172,26 @@ async function createMosqueRecord(supabase: any, subscriptionId: string, userId:
   if (data.description) mosqueRecord.description = data.description
 
   // Handle social media if any is provided
-  if (data.facebook || data.instagram || data.twitter || data.otherSocial) {
+  if (data.facebook || data.instagram || data.twitter || data.youtube || data.google || data.tiktok || data.otherSocial) {
     mosqueRecord.social_media = {
       facebook: data.facebook || null,
       instagram: data.instagram || null,
       twitter: data.twitter || null,
+      youtube: data.youtube || null,
+      google: data.google || null,
+      tiktok: data.tiktok || null,
       other: data.otherSocial || null
     }
   }
+  
+  // Add individual social media fields if provided
+  if (data.facebook) mosqueRecord.facebook = data.facebook
+  if (data.instagram) mosqueRecord.instagram = data.instagram
+  if (data.twitter) mosqueRecord.twitter = data.twitter
+  if (data.youtube) mosqueRecord.youtube = data.youtube
+  if (data.google) mosqueRecord.google = data.google
+  if (data.tiktok) mosqueRecord.tiktok = data.tiktok
+  if (data.otherSocial) mosqueRecord.other_social = data.otherSocial
 
   return await supabase
     .from('mosques')
@@ -207,21 +221,52 @@ async function createBusinessRecord(supabase: any, subscriptionId: string, userI
   if (data.phone) businessRecord.phone = data.phone
   if (data.email) businessRecord.email = data.email
   if (data.website) businessRecord.website = data.website
+  if (data.contactName) businessRecord.contact_name = data.contactName
+  if (data.contactPhone) businessRecord.contact_phone = data.contactPhone
+  if (data.contactEmail) businessRecord.contact_email = data.contactEmail
+  if (data.comments) businessRecord.comments = data.comments
   if (data.photos && data.photos.length > 0) businessRecord.photos = data.photos
   
   // Handle social media if any is provided
-  if (data.facebook || data.instagram || data.twitter || data.otherSocial) {
+  if (data.facebook || data.instagram || data.twitter || data.youtube || data.linkedin || data.google || data.tiktok || data.otherSocial) {
     businessRecord.social_media = {
       facebook: data.facebook || null,
       instagram: data.instagram || null,
       twitter: data.twitter || null,
+      youtube: data.youtube || null,
+      linkedin: data.linkedin || null,
+      google: data.google || null,
+      tiktok: data.tiktok || null,
       other: data.otherSocial || null
     }
   }
+  
+  // Add individual social media fields if provided
+  if (data.facebook) businessRecord.facebook = data.facebook
+  if (data.instagram) businessRecord.instagram = data.instagram
+  if (data.twitter) businessRecord.twitter = data.twitter
+  if (data.youtube) businessRecord.youtube = data.youtube
+  if (data.linkedin) businessRecord.linkedin = data.linkedin
+  if (data.google) businessRecord.google = data.google
+  if (data.tiktok) businessRecord.tiktok = data.tiktok
+  if (data.otherSocial) businessRecord.other_social = data.otherSocial
 
   // Handle affiliated mosque code
   if (data.affiliatedMosqueCode && data.affiliatedMosqueCode !== 'none') {
     businessRecord.affiliated_mosque_code = parseInt(data.affiliatedMosqueCode)
+  }
+
+  // Handle donation fields
+  if (data.donateToSameOrganization !== undefined) {
+    businessRecord.donate_to_same_organization = data.donateToSameOrganization === true
+  }
+  if (data.donationAmount) {
+    businessRecord.donation_amount = parseFloat(data.donationAmount)
+  }
+  if (data.donateToSameOrganization === true && 
+      data.affiliatedMosqueCode && 
+      data.affiliatedMosqueCode !== 'none') {
+    businessRecord.donation_mosque_code = parseInt(data.affiliatedMosqueCode)
   }
 
   return await supabase
@@ -294,10 +339,27 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
   if (data.logo) nonprofitRecord.logo = data.logo
   if (data.photos && data.photos.length > 0) nonprofitRecord.photos = data.photos
   
-  // Handle social media if provided
-  if (data.socialMedia) {
-    nonprofitRecord.social_media = { raw: data.socialMedia }
+  // Handle social media if any is provided
+  if (data.facebook || data.instagram || data.twitter || data.youtube || data.google || data.tiktok || data.otherSocial) {
+    nonprofitRecord.social_media = {
+      facebook: data.facebook || null,
+      instagram: data.instagram || null,
+      twitter: data.twitter || null,
+      youtube: data.youtube || null,
+      google: data.google || null,
+      tiktok: data.tiktok || null,
+      other: data.otherSocial || null
+    }
   }
+  
+  // Add individual social media fields if provided
+  if (data.facebook) nonprofitRecord.facebook = data.facebook
+  if (data.instagram) nonprofitRecord.instagram = data.instagram
+  if (data.twitter) nonprofitRecord.twitter = data.twitter
+  if (data.youtube) nonprofitRecord.youtube = data.youtube
+  if (data.google) nonprofitRecord.google = data.google
+  if (data.tiktok) nonprofitRecord.tiktok = data.tiktok
+  if (data.otherSocial) nonprofitRecord.other_social = data.otherSocial
 
   return await supabase
     .from('nonprofits')

@@ -146,6 +146,17 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // For business subscriptions, add donation amount to the total if applicable
+    if (type === 'business' && data.donateToSameOrganization === true && data.donationAmount) {
+      const donationAmount = parseFloat(data.donationAmount)
+      if (!isNaN(donationAmount) && donationAmount > 0) {
+        const donationInCents = Math.round(donationAmount * 100)
+        pricing.amount = pricing.amount + donationInCents
+        console.log(`[Pricing] Adding donation amount: $${donationAmount} (${donationInCents} cents)`)
+        console.log(`[Pricing] Total with donation: $${pricing.amount / 100}`)
+      }
+    }
+    
     console.log(`[Pricing] Using ${type} pricing: $${pricing.amount / 100}`)
 
     // Create a new Stripe price for this subscription
@@ -344,15 +355,23 @@ async function createMosqueRecord(supabase: any, subscriptionId: string, userId:
       email: data.email,
       website: data.website,
       contact_name: data.contactName,
+      emergency_contact_name: data.emergencyContactName,
+      emergency_contact_phone: data.emergencyContactPhone,
       social_media: {
         facebook: data.facebook,
         instagram: data.instagram,
         twitter: data.twitter,
+        youtube: data.youtube,
+        google: data.google,
+        tiktok: data.tiktok,
         other: data.otherSocial
       },
       facebook: data.facebook,
       instagram: data.instagram,
       twitter: data.twitter,
+      youtube: data.youtube,
+      google: data.google,
+      tiktok: data.tiktok,
       other_social: data.otherSocial,
       logo: data.logo,
       photos: data.photos || [],
@@ -388,15 +407,30 @@ async function createBusinessRecord(supabase: any, subscriptionId: string, userI
       phone: data.phone,
       email: data.email,
       website: data.website,
+      contact_name: data.contactName,
+      contact_phone: data.contactPhone,
+      contact_email: data.contactEmail,
       social_media: {
         facebook: data.facebook,
         instagram: data.instagram,
         twitter: data.twitter,
+        youtube: data.youtube,
+        linkedin: data.linkedin,
+        tiktok: data.tiktok,
+        google: data.google,
         other: data.otherSocial
       },
+      comments: data.comments,
       photos: data.photos || [],
       affiliated_mosque_code: data.affiliatedMosqueCode && data.affiliatedMosqueCode !== 'none' 
         ? parseInt(data.affiliatedMosqueCode) 
+        : null,
+      donate_to_same_organization: data.donateToSameOrganization === true,
+      donation_amount: data.donationAmount ? parseFloat(data.donationAmount) : null,
+      donation_mosque_code: data.donateToSameOrganization === true && 
+                           data.affiliatedMosqueCode && 
+                           data.affiliatedMosqueCode !== 'none'
+        ? parseInt(data.affiliatedMosqueCode)
         : null,
       status: 'pending'
     })
@@ -558,11 +592,17 @@ async function createNonprofitRecord(supabase: any, subscriptionId: string, user
         facebook: data.facebook,
         instagram: data.instagram,
         twitter: data.twitter,
+        youtube: data.youtube,
+        google: data.google,
+        tiktok: data.tiktok,
         other: data.otherSocial
       },
       facebook: data.facebook,
       instagram: data.instagram,
       twitter: data.twitter,
+      youtube: data.youtube,
+      google: data.google,
+      tiktok: data.tiktok,
       other_social: data.otherSocial,
       services: data.services,
       committee_members: data.committee,

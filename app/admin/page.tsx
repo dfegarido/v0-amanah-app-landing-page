@@ -610,6 +610,7 @@ export default function AdminDashboard() {
             interval: s.interval,
             nextBillingDate: s.next_billing_date,
             createdAt: s.created_at,
+            paymentStartDate: s.current_period_start || s.created_at, // Use current_period_start if available, otherwise created_at
             affiliatedMosqueCode: s.entity?.affiliated_mosque_code,
           }
         }),
@@ -782,7 +783,17 @@ export default function AdminDashboard() {
     const nonprofitKickback = nonprofits.reduce((sum, n) => sum + ((n as any).subscriptionPrice || (n as any).price || n.price || 50) * 0.10, 0)
     const totalKickback = businessKickback + couponKickback + nonprofitKickback
     
-    return { businesses, coupons, nonprofits, totalKickback }
+    // Calculate total donations from businesses
+    const totalDonations = businesses.reduce((sum, b) => {
+      const donationAmount = (b as any).donation_amount || (b as any).donationAmount || 0
+      const donateToSame = (b as any).donate_to_same_organization || (b as any).donateToSameOrganization
+      if (donateToSame && donationAmount > 0) {
+        return sum + donationAmount
+      }
+      return sum
+    }, 0)
+    
+    return { businesses, coupons, nonprofits, totalKickback, totalDonations }
   }
 
   // Generate real financial records from actual subscriptions
@@ -824,12 +835,17 @@ export default function AdminDashboard() {
 
           case 'business':
             subscriptionName = sub.entity?.name || 'Unnamed Business'
-            // If affiliated with mosque, 10% goes to mosque
+            // Exclude donation amount from revenue calculation (donations go directly to mosque)
+            const donationAmount = sub.entity?.donation_amount || 0
+            const baseAmount = amount - donationAmount // Remove donation from base amount
+            
+            // If affiliated with mosque, 10% goes to mosque (calculated on base subscription only)
             if (sub.entity?.affiliated_mosque_code) {
-              mosqueKickback = amount * 0.10
+              mosqueKickback = baseAmount * 0.10
             }
-            amanahOrgDonation = amount * 0.15 // 15% to Amanah education fund
-            netRevenue = amount - mosqueKickback - amanahOrgDonation
+            amanahOrgDonation = baseAmount * 0.15 // 15% to Amanah education fund (on base subscription only)
+            netRevenue = baseAmount - mosqueKickback - amanahOrgDonation
+            // Note: donationAmount goes directly to mosque and is not part of Amanah revenue
             break
 
           case 'coupon':
@@ -853,17 +869,23 @@ export default function AdminDashboard() {
             break
         }
 
+        // For business subscriptions, use base amount (excluding donation)
+        const recordAmount = sub.type === 'business' && sub.entity?.donation_amount 
+          ? amount - (sub.entity.donation_amount || 0) 
+          : amount
+        
         records.push({
           id: sub.id,
           date: subscriptionDate,
           type: sub.type,
           subscriptionId: sub.id,
           subscriptionName,
-          amount,
+          amount: recordAmount, // Exclude donation from displayed amount
           mosqueKickback,
           amanahOrgDonation,
           netRevenue,
           affiliatedMosqueCode: sub.entity?.affiliated_mosque_code || null,
+          donationAmount: sub.type === 'business' ? (sub.entity?.donation_amount || 0) : 0, // Track donation separately
         })
       })
     })
@@ -1406,9 +1428,11 @@ export default function AdminDashboard() {
 
   // Export mosque payouts to CSV
   const exportMosquePayoutsToCSV = () => {
-    const headers = ["Mosque Code", "Mosque Name", "Businesses", "Coupons", "Nonprofits", "Total Affiliates", "Monthly Payout"]
+    const headers = ["Mosque Code", "Mosque Name", "Businesses", "Coupons", "Nonprofits", "Total Affiliates", "Monthly Payout", "Donations", "Total Payout"]
     const rows = allMosques.map((mosque) => {
-      const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+      const { businesses, coupons, nonprofits, totalKickback, totalDonations } = getMosqueAffiliates(mosque.mosqueCode)
+      const manualDonations = (mosque as any).manualDonations || (mosque as any).manual_donations || 0
+      const totalPayout = totalKickback + totalDonations + manualDonations
       return [
         mosque.mosqueCode,
         mosque.name,
@@ -1417,6 +1441,8 @@ export default function AdminDashboard() {
         nonprofits.length,
         businesses.length + coupons.length + nonprofits.length,
         `$${totalKickback.toFixed(2)}`,
+        `$${totalDonations.toFixed(2)}`,
+        `$${totalPayout.toFixed(2)}`,
       ]
     })
 
@@ -1710,7 +1736,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {allMosques.map((mosque) => {
-                  const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+                  const { businesses, coupons, nonprofits, totalKickback, totalDonations } = getMosqueAffiliates(mosque.mosqueCode)
                   return (
                     <Collapsible
                       key={mosque.id}
@@ -1752,7 +1778,7 @@ export default function AdminDashboard() {
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-foreground">${mosque.price}/mo</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {businesses.length + coupons.length + nonprofits.length} affiliates | ${totalKickback.toFixed(2)} payout
+                                  {businesses.length + coupons.length + nonprofits.length} affiliates | ${totalKickback.toFixed(2)} kickback {totalDonations > 0 && `+ $${totalDonations.toFixed(2)} donations`}
                                 </p>
                               </div>
                               {expandedItems[mosque.id] ? (
@@ -1786,6 +1812,12 @@ export default function AdminDashboard() {
                                 <div>
                                   <p className="text-sm text-muted-foreground">Monthly Payout</p>
                                   <p className="text-xl font-bold text-primary">${totalKickback.toFixed(2)}</p>
+                                  {totalDonations > 0 && (
+                                    <>
+                                      <p className="text-xs text-muted-foreground mt-1">Donations</p>
+                                      <p className="text-lg font-bold text-orange-500">+${totalDonations.toFixed(2)}</p>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               {(businesses.length > 0 || coupons.length > 0 || nonprofits.length > 0) && (
@@ -1892,8 +1924,8 @@ export default function AdminDashboard() {
                               <div className="space-y-3">
                                 <h4 className="font-semibold">Payment Details</h4>
                                 <div className="space-y-2 text-sm">
-                                  <p>Started: {new Date(mosque.paymentStartDate).toLocaleDateString()}</p>
-                                  <p>Next Billing: {new Date(mosque.nextBillingDate).toLocaleDateString()}</p>
+                                  <p>Started: {mosque.paymentStartDate ? new Date(mosque.paymentStartDate).toLocaleDateString() : 'N/A'}</p>
+                                  <p>Next Billing: {mosque.nextBillingDate ? new Date(mosque.nextBillingDate).toLocaleDateString() : 'N/A'}</p>
                                   <p className="text-primary font-semibold">${mosque.price}/month</p>
                                 </div>
                               </div>
@@ -2197,7 +2229,7 @@ export default function AdminDashboard() {
                             <div className="text-right">
                               <p className="text-sm font-semibold text-foreground">${business.price}/mo</p>
                               <p className="text-xs text-muted-foreground">
-                                Started: {new Date(business.paymentStartDate).toLocaleDateString()}
+                                Started: {business.paymentStartDate ? new Date(business.paymentStartDate).toLocaleDateString() : 'N/A'}
                               </p>
                             </div>
                             {expandedItems[business.id] ? (
@@ -2794,6 +2826,7 @@ export default function AdminDashboard() {
                         <TableHead className="text-center">Coupons</TableHead>
                         <TableHead className="text-center">Total Affiliates</TableHead>
                         <TableHead className="text-right">Monthly Payout</TableHead>
+                        <TableHead className="text-right">Donations</TableHead>
                         <TableHead className="text-right">Manual Donations</TableHead>
                         <TableHead className="text-right">Total Payout</TableHead>
                         <TableHead></TableHead>
@@ -2801,9 +2834,9 @@ export default function AdminDashboard() {
                     </TableHeader>
                     <TableBody>
                       {allMosques.map((mosque) => {
-                        const { businesses, coupons, nonprofits, totalKickback } = getMosqueAffiliates(mosque.mosqueCode)
+                        const { businesses, coupons, nonprofits, totalKickback, totalDonations } = getMosqueAffiliates(mosque.mosqueCode)
                         const manualDonations = (mosque as any).manualDonations || (mosque as any).manual_donations || 0
-                        const totalPayout = totalKickback + manualDonations
+                        const totalPayout = totalKickback + totalDonations + manualDonations
                         const isExpanded = expandedItems[`payout-${mosque.id}`]
                         
                         return (
@@ -2822,6 +2855,7 @@ export default function AdminDashboard() {
                                 {businesses.length + coupons.length + nonprofits.length}
                               </TableCell>
                               <TableCell className="text-right font-bold text-primary">${totalKickback.toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-bold text-orange-500">${totalDonations.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
                                 <Input
                                   type="number"
@@ -2855,7 +2889,7 @@ export default function AdminDashboard() {
                             {/* Expanded Details Row */}
                             {isExpanded && (
                               <TableRow key={`detail-${mosque.id}`}>
-                                <TableCell colSpan={10} className="p-0 bg-secondary/30">
+                                <TableCell colSpan={11} className="p-0 bg-secondary/30">
                                   <div className="p-6">
                       <div className="flex items-center justify-between mb-6">
                         <div>
@@ -2922,6 +2956,11 @@ export default function AdminDashboard() {
                                       </div>
                                       <div className="text-right ml-4">
                                         <p className="font-bold text-primary text-lg">${(b.price * 0.10).toFixed(2)}<span className="text-sm text-muted-foreground">/mo</span></p>
+                                        {((b as any).donate_to_same_organization || (b as any).donateToSameOrganization) && ((b as any).donation_amount || (b as any).donationAmount) > 0 && (
+                                          <p className="font-bold text-orange-500 text-sm mt-1">
+                                            +${((b as any).donation_amount || (b as any).donationAmount || 0).toFixed(2)} donation
+                                          </p>
+                                        )}
                                         <p className="text-xs text-muted-foreground mt-1">
                                           {b.status === "active" && b.appStatus === "active" ? "Earning" : "Not Earning"}
                                         </p>

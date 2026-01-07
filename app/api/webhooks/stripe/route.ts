@@ -104,12 +104,29 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
     if (subscription.type === 'business') {
       const { data: business } = await supabaseAdmin
         .from('businesses')
-        .select('name, affiliated_mosque_code')
+        .select('name, affiliated_mosque_code, donate_to_same_organization, donation_amount, donation_mosque_code')
         .eq('subscription_id', subscription.id)
         .single()
 
       mosqueCode = business?.affiliated_mosque_code
       entityName = business?.name || 'Unknown Business'
+      
+      // Check for additional donation to same mosque
+      if (business?.donate_to_same_organization && business?.donation_amount && business.donation_amount > 0) {
+        // Use donation_mosque_code if available, otherwise use affiliated_mosque_code
+        const donationMosqueCode = business.donation_mosque_code || business.affiliated_mosque_code
+        
+        if (donationMosqueCode) {
+          await processAdditionalDonation(
+            supabaseAdmin,
+            subscription,
+            entityName,
+            donationMosqueCode,
+            business.donation_amount,
+            invoice
+          )
+        }
+      }
     } else if (subscription.type === 'coupon') {
       const { data: coupon } = await supabaseAdmin
         .from('coupons')
@@ -244,6 +261,128 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   } catch (error: any) {
     console.error('[Stripe Webhook] Error processing invoice:', error.message)
+  }
+}
+
+/**
+ * Process additional donation to mosque
+ * Transfers donation amount to mosque's Stripe connected account
+ */
+async function processAdditionalDonation(
+  supabaseAdmin: any,
+  subscription: any,
+  entityName: string,
+  mosqueCode: number,
+  donationAmount: number,
+  invoice: any
+) {
+  console.log('[Stripe Webhook] Processing additional donation:', donationAmount, 'to mosque code:', mosqueCode)
+
+  try {
+    // Get mosque's Stripe connected account
+    const { data: mosque, error: mosqueError } = await supabaseAdmin
+      .from('mosques')
+      .select('id, name, mosque_code, stripe_account_id, stripe_payouts_enabled')
+      .eq('mosque_code', mosqueCode)
+      .single()
+
+    if (mosqueError || !mosque) {
+      console.error('[Stripe Webhook] Mosque not found for donation:', mosqueCode)
+      return
+    }
+
+    if (!mosque.stripe_account_id || !mosque.stripe_payouts_enabled) {
+      console.log('[Stripe Webhook] Mosque does not have payouts enabled for donation:', mosque.name)
+      return
+    }
+
+    if (donationAmount <= 0) {
+      console.log('[Stripe Webhook] Donation amount is zero or negative, skipping')
+      return
+    }
+
+    // Create Stripe transfer for donation
+    try {
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(donationAmount * 100), // Convert to cents
+        currency: 'usd',
+        destination: mosque.stripe_account_id,
+        description: `Additional donation from ${entityName} (${subscription.type})`,
+        metadata: {
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code.toString(),
+          subscription_id: subscription.id,
+          entity_name: entityName,
+          entity_type: subscription.type,
+          invoice_id: invoice.id,
+          transfer_type: 'donation'
+        }
+      })
+
+      console.log('[Stripe Webhook] Donation transfer created:', transfer.id, 'for $', donationAmount.toFixed(2))
+
+      // Record donation payout in database
+      const periodStart = new Date(invoice.period_start * 1000)
+      const periodEnd = new Date(invoice.period_end * 1000)
+
+      await supabaseAdmin
+        .from('mosque_payouts')
+        .insert({
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code,
+          subscription_id: subscription.id,
+          stripe_account_id: mosque.stripe_account_id,
+          stripe_transfer_id: transfer.id,
+          amount: donationAmount,
+          period_start: periodStart.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          status: 'paid',
+          payout_date: new Date().toISOString().split('T')[0],
+          affiliate_breakdown: {
+            donations: [{
+              id: subscription.id,
+              name: entityName,
+              amount: donationAmount,
+              type: 'additional_donation'
+            }]
+          },
+          processed_at: new Date().toISOString()
+        })
+
+      console.log('[Stripe Webhook] Donation payout recorded in database')
+
+    } catch (transferError: any) {
+      console.error('[Stripe Webhook] Donation transfer failed:', transferError.message)
+      
+      // Record failed donation payout
+      const periodStart = new Date(invoice.period_start * 1000)
+      const periodEnd = new Date(invoice.period_end * 1000)
+
+      await supabaseAdmin
+        .from('mosque_payouts')
+        .insert({
+          mosque_id: mosque.id,
+          mosque_code: mosque.mosque_code,
+          subscription_id: subscription.id,
+          stripe_account_id: mosque.stripe_account_id,
+          amount: donationAmount,
+          period_start: periodStart.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          status: 'failed',
+          error_message: transferError.message,
+          affiliate_breakdown: {
+            donations: [{
+              id: subscription.id,
+              name: entityName,
+              amount: donationAmount,
+              type: 'additional_donation'
+            }]
+          }
+        })
+    }
+
+  } catch (error: any) {
+    console.error('[Stripe Webhook] Error processing donation:', error.message)
   }
 }
 

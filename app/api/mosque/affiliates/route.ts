@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
         name,
         affiliated_mosque_code,
         subscription_id,
+        donate_to_same_organization,
+        donation_amount,
+        donation_mosque_code,
         subscriptions!inner (
           id,
           status,
@@ -103,7 +106,7 @@ export async function GET(request: NextRequest) {
     // Fetch all mosque payouts to determine payment status
     const { data: payouts, error: payoutError } = await supabase
       .from('mosque_payouts')
-      .select('subscription_id, status, payout_date')
+      .select('subscription_id, status, payout_date, affiliate_breakdown')
       .eq('mosque_code', parseInt(mosqueCode))
 
     console.log('[Mosque Affiliates API] Fetched payouts:', JSON.stringify(payouts, null, 2))
@@ -164,6 +167,43 @@ export async function GET(request: NextRequest) {
             periodEnd: subscription.current_period_end,
             cancelledAt: subscription.cancelled_at
           })
+          
+          // Add donation row if business has additional donation
+          if (business.donate_to_same_organization && business.donation_amount && business.donation_amount > 0) {
+            // Check if there's a donation payout for this subscription
+            // Look for payouts with donation type in affiliate_breakdown
+            const donationPayouts = payouts?.filter(p => {
+              if (p.subscription_id !== subscription.id) return false
+              const breakdown = p.affiliate_breakdown
+              if (!breakdown || typeof breakdown !== 'object') return false
+              // Check if it has donations array
+              return breakdown.donations && Array.isArray(breakdown.donations)
+            }) || []
+            
+            // Find the donation payout that matches this business
+            const donationPayout = donationPayouts.find(p => {
+              const donations = p.affiliate_breakdown?.donations || []
+              return donations.some((d: any) => d.id === subscription.id && d.name === business.name)
+            })
+            
+            const donationStatus = donationPayout?.status === 'paid' ? 'Paid' : 'Pending'
+            
+            affiliates.push({
+              id: `${business.id}-donation`,
+              name: business.name,
+              type: 'donation',
+              subscriptionId: subscription.id,
+              subscriptionStatus: subscription.status,
+              fee: business.donation_amount,
+              kickback: business.donation_amount, // Full donation amount
+              status: donationStatus,
+              paidDate: donationPayout?.payout_date,
+              createdAt: subscription.created_at,
+              periodStart: subscription.current_period_start,
+              periodEnd: subscription.current_period_end,
+              cancelledAt: subscription.cancelled_at
+            })
+          }
         }
       })
     }
@@ -246,43 +286,32 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Calculate earnings summary based on date range
-    let filterStartDate: Date | null = null
-    let filterEndDate: Date | null = null
-    
-    if (startDate) {
-      filterStartDate = new Date(startDate)
-      filterStartDate.setHours(0, 0, 0, 0)
-    }
-    if (endDate) {
-      filterEndDate = new Date(endDate)
-      filterEndDate.setHours(23, 59, 59, 999)
-    }
+    // Calculate earnings summary
+    const now = new Date()
+    const currentMonth = now.getMonth()
+    const currentYear = now.getFullYear()
 
-    // Filter affiliates within the date range
-    const filteredAffiliates = affiliates.filter(a => {
+    const currentMonthAffiliates = affiliates.filter(a => {
       if (a.subscriptionStatus !== 'active') return false
-      
       const periodStart = new Date(a.periodStart)
-      periodStart.setHours(0, 0, 0, 0)
-      
-      if (filterStartDate && periodStart < filterStartDate) return false
-      if (filterEndDate && periodStart > filterEndDate) return false
-      
-      return true
+      return periodStart.getMonth() === currentMonth && periodStart.getFullYear() === currentYear
     })
 
-    // Calculate pending and paid earnings within the date range
-    const pendingEarnings = filteredAffiliates
-      .filter(a => a.status === 'Pending')
-      .reduce((sum, a) => sum + a.kickback, 0)
-    
-    const paidEarnings = filteredAffiliates
-      .filter(a => a.status === 'Paid')
-      .reduce((sum, a) => sum + a.kickback, 0)
-    
+    const previousMonthsAffiliates = affiliates.filter(a => {
+      if (a.cancelledAt) {
+        const cancelledDate = new Date(a.cancelledAt)
+        return cancelledDate < now
+      }
+      if (a.subscriptionStatus !== 'active') return false
+      const periodStart = new Date(a.periodStart)
+      return periodStart < new Date(currentYear, currentMonth, 1)
+    })
+
+    // Calculate earnings including donations
+    const pendingEarnings = currentMonthAffiliates.reduce((sum, a) => sum + a.kickback, 0)
+    const paidEarnings = previousMonthsAffiliates.reduce((sum, a) => sum + a.kickback, 0)
     const totalEarnings = pendingEarnings + paidEarnings
-    const activeAffiliatesCount = filteredAffiliates.length
+    const activeAffiliatesCount = affiliates.filter(a => a.subscriptionStatus === 'active').length
 
     console.log(`[Mosque Affiliates API] Found ${affiliates.length} total affiliates, ${activeAffiliatesCount} active`)
     console.log(`[Mosque Affiliates API] Pending: $${pendingEarnings}, Paid: $${paidEarnings}, Total: $${totalEarnings}`)

@@ -152,7 +152,9 @@ export default function SubscribePage() {
   const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
   const [formData, setFormData] = useState<any>({ redemptionType: 'unlimited', country: 'USA' }) // Store all form data, defaults
   const [availableMosques, setAvailableMosques] = useState<any[]>([])
+  const [availableNonprofits, setAvailableNonprofits] = useState<any[]>([])
   const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
+  const [isMounted, setIsMounted] = useState(false)
   const [serviceCount, setServiceCount] = useState<number>(1) // Start with 1 service field
   const [committeeCount, setCommitteeCount] = useState<number>(1) // Start with 1 committee member field
   const [committeeMembers, setCommitteeMembers] = useState<{ name: string; title: string; photo: string; uploading?: boolean }[]>([{ name: '', title: '', photo: '' }])
@@ -384,6 +386,11 @@ export default function SubscribePage() {
     return allFieldsFilled && hasLogo && hasImages && hasNoErrors
   }
 
+  // Set mounted state to prevent hydration mismatch
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   // Fetch active mosques on mount
   useEffect(() => {
     const fetchMosques = async () => {
@@ -414,6 +421,31 @@ export default function SubscribePage() {
     } else {
       setAvailableMosques([])
     }
+
+    // Fetch nonprofits for donation dropdown
+    const fetchNonprofits = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('nonprofits')
+          .select('id, name, subscription_id')
+          .eq('status', 'active')
+          .order('name', { ascending: true })
+        
+        if (!error && data) {
+          setAvailableNonprofits(data)
+        } else {
+          if (error) {
+            console.error('Error fetching nonprofits:', error)
+          }
+          setAvailableNonprofits([])
+        }
+      } catch (error) {
+        console.error('Error fetching nonprofits:', error)
+        setAvailableNonprofits([])
+      }
+    }
+
+    fetchNonprofits()
   }, [type])
 
   // Get next mosque code (for display only)
@@ -1179,7 +1211,7 @@ export default function SubscribePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">
-                  Phone Number <span className="text-destructive">*</span>
+                  Mosque Phone Number <span className="text-destructive">*</span>
                 </Label>
                 <Input 
                   id="phone" 
@@ -1191,6 +1223,38 @@ export default function SubscribePage() {
                 />
                 {touched.phone && errors.phone && (
                   <p className="text-sm text-destructive">{errors.phone}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="emergencyContactName">
+                  Emergency Contact Name (Point of Contact)
+                </Label>
+                <Input 
+                  id="emergencyContactName" 
+                  value={formData.emergencyContactName || ''}
+                  placeholder="Contact person name" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('emergencyContactName')}
+                  className={touched.emergencyContactName && errors.emergencyContactName ? 'border-destructive' : ''}
+                />
+                {touched.emergencyContactName && errors.emergencyContactName && (
+                  <p className="text-sm text-destructive">{errors.emergencyContactName}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="emergencyContactPhone">
+                  Emergency Contact Phone Number
+                </Label>
+                <Input 
+                  id="emergencyContactPhone" 
+                  value={formData.emergencyContactPhone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                  onBlur={() => handleFieldBlur('emergencyContactPhone')}
+                  className={touched.emergencyContactPhone && errors.emergencyContactPhone ? 'border-destructive' : ''}
+                />
+                {touched.emergencyContactPhone && errors.emergencyContactPhone && (
+                  <p className="text-sm text-destructive">{errors.emergencyContactPhone}</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -1231,19 +1295,66 @@ export default function SubscribePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="facebook">Facebook</Label>
-                <Input id="facebook" placeholder="https://facebook.com/yourmasjid" onChange={handleInputChange} />
+                <Input 
+                  id="facebook" 
+                  value={formData.facebook || ''}
+                  placeholder="https://facebook.com/yourmasjid" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="instagram">Instagram</Label>
-                <Input id="instagram" placeholder="https://instagram.com/yourmasjid" onChange={handleInputChange} />
+                <Input 
+                  id="instagram" 
+                  value={formData.instagram || ''}
+                  placeholder="https://instagram.com/yourmasjid" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="twitter">X (Twitter)</Label>
-                <Input id="twitter" placeholder="https://twitter.com/yourmasjid" onChange={handleInputChange} />
+                <Input 
+                  id="twitter" 
+                  value={formData.twitter || ''}
+                  placeholder="https://twitter.com/yourmasjid" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="youtube">YouTube</Label>
+                <Input 
+                  id="youtube" 
+                  value={formData.youtube || ''}
+                  placeholder="https://youtube.com/@yourmasjid" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="google">Google Business</Label>
+                <Input 
+                  id="google" 
+                  value={formData.google || ''}
+                  placeholder="https://maps.google.com/yourmasjid" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tiktok">TikTok</Label>
+                <Input 
+                  id="tiktok" 
+                  value={formData.tiktok || ''}
+                  placeholder="https://tiktok.com/@yourmasjid" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="otherSocial">Other Social Media</Label>
-                <Input id="otherSocial" placeholder="Any other social links" onChange={handleInputChange} />
+                <Input 
+                  id="otherSocial" 
+                  value={formData.otherSocial || ''}
+                  placeholder="Any other social links" 
+                  onChange={handleInputChange} 
+                />
               </div>
             </div>
           </div>
@@ -1547,19 +1658,25 @@ export default function SubscribePage() {
             </p>
             <div className="space-y-2">
               <Label htmlFor="mosqueCode">Mosque Code</Label>
-              <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a mosque or enter code" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Affiliation</SelectItem>
-                  {availableMosques.map((mosque) => (
-                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
-                      #{mosque.mosque_code} - {mosque.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isMounted ? (
+                <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a mosque or enter code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Affiliation</SelectItem>
+                    {availableMosques.map((mosque) => (
+                      <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                        #{mosque.mosque_code} - {mosque.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Select a mosque or enter code</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1769,7 +1886,7 @@ export default function SubscribePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="phone">
-                  Phone <span className="text-destructive">*</span>
+                  Business Phone Number <span className="text-destructive">*</span>
                 </Label>
                 <Input 
                   id="phone" 
@@ -1784,17 +1901,8 @@ export default function SubscribePage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="fax">Fax</Label>
-                <Input 
-                  id="fax" 
-                  value={formData.fax || ''}
-                  placeholder="+1 (555) 000-0000" 
-                  onChange={handleInputChange} 
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="email">
-                  Email <span className="text-destructive">*</span>
+                  Business Email <span className="text-destructive">*</span>
                 </Label>
                 <Input 
                   id="email" 
@@ -1811,7 +1919,7 @@ export default function SubscribePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="website">
-                  Website <span className="text-destructive">*</span>
+                  Business Website <span className="text-destructive">*</span>
                 </Label>
                 <Input 
                   id="website" 
@@ -1825,6 +1933,53 @@ export default function SubscribePage() {
                   <p className="text-sm text-destructive">{errors.website}</p>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="fax">Fax</Label>
+                <Input 
+                  id="fax" 
+                  value={formData.fax || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Internal Contact Information</h3>
+            <p className="text-sm text-muted-foreground">For internal use only, will not be displayed publicly</p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contactName">Contact Name</Label>
+                <Input 
+                  id="contactName" 
+                  value={formData.contactName || ''}
+                  placeholder="Contact person name" 
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone">Contact Cell Number</Label>
+                <Input 
+                  id="contactPhone" 
+                  type="tel"
+                  value={formData.contactPhone || ''}
+                  placeholder="+1 (555) 000-0000" 
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Contact Email</Label>
+                <Input 
+                  id="contactEmail" 
+                  type="email"
+                  value={formData.contactEmail || ''}
+                  placeholder="contact@example.com" 
+                  onChange={handleInputChange}
+                />
+              </div>
             </div>
           </div>
 
@@ -1834,21 +1989,158 @@ export default function SubscribePage() {
             <h3 className="font-semibold text-foreground">Social Media</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="facebook">Facebook</Label>
-                <Input id="facebook" placeholder="https://facebook.com/yourbusiness" onChange={handleInputChange} />
+                <Label htmlFor="facebook">Facebook URL</Label>
+                <Input 
+                  id="facebook" 
+                  value={formData.facebook || ''}
+                  placeholder="https://facebook.com/yourbusiness" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="instagram">Instagram</Label>
-                <Input id="instagram" placeholder="https://instagram.com/yourbusiness" onChange={handleInputChange} />
+                <Label htmlFor="instagram">Instagram URL</Label>
+                <Input 
+                  id="instagram" 
+                  value={formData.instagram || ''}
+                  placeholder="https://instagram.com/yourbusiness" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="twitter">X (Twitter)</Label>
-                <Input id="twitter" placeholder="https://twitter.com/yourbusiness" onChange={handleInputChange} />
+                <Label htmlFor="twitter">Twitter/X URL</Label>
+                <Input 
+                  id="twitter" 
+                  value={formData.twitter || ''}
+                  placeholder="https://twitter.com/yourbusiness" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="otherSocial">Other</Label>
-                <Input id="otherSocial" placeholder="Any other social links" onChange={handleInputChange} />
+                <Label htmlFor="youtube">YouTube URL</Label>
+                <Input 
+                  id="youtube" 
+                  value={formData.youtube || ''}
+                  placeholder="https://youtube.com/@yourbusiness" 
+                  onChange={handleInputChange} 
+                />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="linkedin">LinkedIn URL</Label>
+                <Input 
+                  id="linkedin" 
+                  value={formData.linkedin || ''}
+                  placeholder="https://linkedin.com/company/yourbusiness" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tiktok">TikTok URL</Label>
+                <Input 
+                  id="tiktok" 
+                  value={formData.tiktok || ''}
+                  placeholder="https://tiktok.com/@yourbusiness" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="google">Google URL</Label>
+                <Input 
+                  id="google" 
+                  value={formData.google || ''}
+                  placeholder="https://maps.google.com/yourbusiness" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otherSocial">Other Social Media</Label>
+                <Input 
+                  id="otherSocial" 
+                  value={formData.otherSocial || ''}
+                  placeholder="Any other social links" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Additional Information</h3>
+            <div className="space-y-2">
+              <Label htmlFor="comments">Do you have any comments or questions for us?</Label>
+              <Textarea
+                id="comments"
+                value={formData.comments || ''}
+                placeholder="Enter any comments or questions..."
+                rows={4}
+                onChange={handleInputChange}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground">Additional Donation (Optional)</h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Would you like to donate more to the same organization or a different one?</Label>
+                <div className="flex gap-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="donateSameOrgYes"
+                      name="donateToSameOrganization"
+                      checked={formData.donateToSameOrganization === true}
+                      onChange={() => handleFieldChange("donateToSameOrganization", true)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="donateSameOrgYes" className="font-normal cursor-pointer">Yes</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      id="donateSameOrgNo"
+                      name="donateToSameOrganization"
+                      checked={formData.donateToSameOrganization === false}
+                      onChange={() => handleFieldChange("donateToSameOrganization", false)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="donateSameOrgNo" className="font-normal cursor-pointer">No</Label>
+                  </div>
+                </div>
+              </div>
+
+              {formData.donateToSameOrganization === true && (
+                <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                  {affiliatedMosqueCode && affiliatedMosqueCode !== 'none' ? (
+                    <>
+                      <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                        <p className="text-sm text-foreground">
+                          Donation will go to: <span className="font-semibold">Mosque #{affiliatedMosqueCode}</span>
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="donationAmount">How much would you like to donate to each selected organization? ($)</Label>
+                        <Input
+                          id="donationAmount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.donationAmount || ''}
+                          placeholder="Enter your answer"
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Please select a mosque affiliation above to donate to the same organization.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -1869,19 +2161,25 @@ export default function SubscribePage() {
             </p>
             <div className="space-y-2">
               <Label htmlFor="mosqueCode">Mosque Code</Label>
-              <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a mosque or enter code" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Affiliation</SelectItem>
-                  {availableMosques.map((mosque) => (
-                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
-                      #{mosque.mosque_code} - {mosque.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isMounted ? (
+                <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a mosque or enter code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Affiliation</SelectItem>
+                    {availableMosques.map((mosque) => (
+                      <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                        #{mosque.mosque_code} - {mosque.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Select a mosque or enter code</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2024,20 +2322,26 @@ export default function SubscribePage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="redeemPeriod">Per Period</Label>
-                        <Select
-                          value={formData.redeemPeriod || ''}
-                          onValueChange={(value) => setFormData({ ...formData, redeemPeriod: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select period" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="daily">Daily</SelectItem>
+                        {isMounted ? (
+                          <Select
+                            value={formData.redeemPeriod || ''}
+                            onValueChange={(value) => setFormData({ ...formData, redeemPeriod: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select period" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="daily">Daily</SelectItem>
                             <SelectItem value="weekly">Weekly</SelectItem>
                             <SelectItem value="monthly">Monthly</SelectItem>
                             <SelectItem value="yearly">Yearly</SelectItem>
                           </SelectContent>
                         </Select>
+                        ) : (
+                          <div className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                            <span className="text-muted-foreground">Select period</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2272,19 +2576,25 @@ export default function SubscribePage() {
             </p>
             <div className="space-y-2">
               <Label htmlFor="mosqueCode">Mosque Code</Label>
-              <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a mosque or enter code" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Affiliation</SelectItem>
-                  {availableMosques.map((mosque) => (
-                    <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
-                      #{mosque.mosque_code} - {mosque.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isMounted ? (
+                <Select value={affiliatedMosqueCode} onValueChange={setAffiliatedMosqueCode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a mosque or enter code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Affiliation</SelectItem>
+                    {availableMosques.map((mosque) => (
+                      <SelectItem key={mosque.id} value={mosque.mosque_code.toString()}>
+                        #{mosque.mosque_code} - {mosque.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Select a mosque or enter code</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2464,19 +2774,66 @@ export default function SubscribePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="facebook">Facebook</Label>
-                <Input id="facebook" placeholder="https://facebook.com/yourorg" onChange={handleInputChange} />
+                <Input 
+                  id="facebook" 
+                  value={formData.facebook || ''}
+                  placeholder="https://facebook.com/yourorg" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="instagram">Instagram</Label>
-                <Input id="instagram" placeholder="https://instagram.com/yourorg" onChange={handleInputChange} />
+                <Input 
+                  id="instagram" 
+                  value={formData.instagram || ''}
+                  placeholder="https://instagram.com/yourorg" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="twitter">X (Twitter)</Label>
-                <Input id="twitter" placeholder="https://twitter.com/yourorg" onChange={handleInputChange} />
+                <Input 
+                  id="twitter" 
+                  value={formData.twitter || ''}
+                  placeholder="https://twitter.com/yourorg" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="youtube">YouTube</Label>
+                <Input 
+                  id="youtube" 
+                  value={formData.youtube || ''}
+                  placeholder="https://youtube.com/@yourorg" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="google">Google Business</Label>
+                <Input 
+                  id="google" 
+                  value={formData.google || ''}
+                  placeholder="https://maps.google.com/yourorg" 
+                  onChange={handleInputChange} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tiktok">TikTok</Label>
+                <Input 
+                  id="tiktok" 
+                  value={formData.tiktok || ''}
+                  placeholder="https://tiktok.com/@yourorg" 
+                  onChange={handleInputChange} 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="otherSocial">Other Social Media</Label>
-                <Input id="otherSocial" placeholder="https://..." onChange={handleInputChange} />
+                <Input 
+                  id="otherSocial" 
+                  value={formData.otherSocial || ''}
+                  placeholder="https://..." 
+                  onChange={handleInputChange} 
+                />
               </div>
             </div>
           </div>
@@ -2953,11 +3310,34 @@ export default function SubscribePage() {
                       </span>
                     </div>
                   )}
+                {type === "business" &&
+                  formData.donateToSameOrganization === true &&
+                  formData.donationAmount &&
+                  parseFloat(formData.donationAmount) > 0 &&
+                  affiliatedMosqueCode &&
+                  affiliatedMosqueCode !== "none" && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Additional Donation to Mosque</span>
+                      <span className="text-primary">
+                        ${parseFloat(formData.donationAmount || '0').toFixed(2)} to Mosque #{affiliatedMosqueCode}
+                      </span>
+                    </div>
+                  )}
                 <Separator className="my-2" />
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-lg">
-                    {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
+                    {loadingPricing ? 'Loading...' : (() => {
+                      const basePrice = getCurrentPrice()
+                      const donationAmount = type === "business" &&
+                        formData.donateToSameOrganization === true &&
+                        formData.donationAmount &&
+                        parseFloat(formData.donationAmount) > 0
+                        ? parseFloat(formData.donationAmount || '0')
+                        : 0
+                      const total = basePrice + donationAmount
+                      return `$${total.toFixed(2)}/month`
+                    })()}
                   </span>
                 </div>
               </div>

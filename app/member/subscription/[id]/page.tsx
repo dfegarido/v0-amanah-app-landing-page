@@ -205,6 +205,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     address: "",
     email: "",
     phone: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
     website: "",
     socialMedia: "",
     description: "",
@@ -234,7 +236,17 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     facebook: "",
     instagram: "",
     twitter: "",
+    youtube: "",
+    google: "",
+    tiktok: "",
     otherSocial: "",
+    comments: "",
+    contactName: "",
+    contactPhone: "",
+    contactEmail: "",
+    donateToSameOrganization: false,
+    donationAmount: "",
+    donationMosqueCode: "",
   })
 
   // Fetch subscription data
@@ -264,6 +276,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 address: entity.address || "",
                 email: entity.email || "",
                 phone: entity.phone || "",
+                emergencyContactName: entity.emergency_contact_name || "",
+                emergencyContactPhone: entity.emergency_contact_phone || "",
                 website: entity.website || "",
                 socialMedia: entity.social_media 
                   ? typeof entity.social_media === "object"
@@ -306,7 +320,17 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 facebook: entity.facebook || "",
                 instagram: entity.instagram || "",
                 twitter: entity.twitter || "",
+                youtube: entity.youtube || "",
+                google: entity.google || "",
+                tiktok: entity.tiktok || "",
                 otherSocial: entity.other_social || "",
+                comments: entity.comments || entity.comments_questions || "",
+                contactName: entity.contact_name || "",
+                contactPhone: entity.contact_phone || "",
+                contactEmail: entity.contact_email || "",
+                donateToSameOrganization: entity.donate_to_same_organization || false,
+                donationAmount: entity.donation_amount ? entity.donation_amount.toString() : "",
+                donationMosqueCode: entity.donation_mosque_code ? entity.donation_mosque_code.toString() : "",
               })
             }
           } else {
@@ -1382,6 +1406,42 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     )}
                   </div>
                   <div className="space-y-2">
+                    <Label>YouTube</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.youtube || ''} onChange={(e) => handleInputChange("youtube", e.target.value)} placeholder="https://youtube.com/@yourorg" />
+                    ) : formData.youtube ? (
+                      <a href={formData.youtube} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.youtube}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Google Business</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.google || ''} onChange={(e) => handleInputChange("google", e.target.value)} placeholder="https://maps.google.com/yourorg" />
+                    ) : formData.google ? (
+                      <a href={formData.google} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.google}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>TikTok</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.tiktok || ''} onChange={(e) => handleInputChange("tiktok", e.target.value)} placeholder="https://tiktok.com/@yourorg" />
+                    ) : formData.tiktok ? (
+                      <a href={formData.tiktok} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.tiktok}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
                     <Label>Other Social Media</Label>
                     {isEditing ? (
                       <Input type="url" value={formData.otherSocial || ''} onChange={(e) => handleInputChange("otherSocial", e.target.value)} placeholder="https://..." />
@@ -1811,6 +1871,100 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <p className="text-foreground whitespace-pre-wrap">{formData.socialMedia || "Not provided"}</p>
                   )}
                 </div>
+
+                <Separator />
+
+                <h3 className="font-semibold">Internal Contact Information</h3>
+                <p className="text-sm text-muted-foreground">For internal use only, will not be displayed publicly</p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Contact Name</Label>
+                    {isEditing ? (
+                      <Input
+                        value={formData.contactName || ''}
+                        onChange={(e) => handleInputChange("contactName", e.target.value)}
+                        placeholder="Contact person name"
+                      />
+                    ) : (
+                      <p className="text-foreground">{formData.contactName || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contact Phone</Label>
+                    {isEditing ? (
+                      <Input
+                        type="tel"
+                        value={formData.contactPhone || ''}
+                        onChange={(e) => handleInputChange("contactPhone", e.target.value)}
+                        placeholder="+1 (555) 000-0000"
+                      />
+                    ) : (
+                      <p className="text-foreground">{formData.contactPhone || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contact Email</Label>
+                    {isEditing ? (
+                      <Input
+                        type="email"
+                        value={formData.contactEmail || ''}
+                        onChange={(e) => handleInputChange("contactEmail", e.target.value)}
+                        placeholder="contact@example.com"
+                      />
+                    ) : (
+                      <p className="text-foreground">{formData.contactEmail || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <h3 className="font-semibold">Additional Information</h3>
+                <div className="space-y-2">
+                  <Label>Comments/Questions</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={formData.comments || ''}
+                      onChange={(e) => handleInputChange("comments", e.target.value)}
+                      placeholder="Enter any comments or questions..."
+                      rows={4}
+                    />
+                  ) : (
+                    <p className="text-foreground whitespace-pre-wrap">{formData.comments || <span className="text-muted-foreground">Not provided</span>}</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                <h3 className="font-semibold">Additional Donation</h3>
+                {formData.donateToSameOrganization ? (
+                  <div className="space-y-4">
+                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                      <p className="text-sm text-foreground">
+                        Donation will go to: <span className="font-semibold">Mosque #{formData.donationMosqueCode || 'N/A'}</span>
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Donation Amount ($)</Label>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.donationAmount || ''}
+                          onChange={(e) => handleInputChange("donationAmount", e.target.value)}
+                          placeholder="0.00"
+                        />
+                      ) : (
+                        <p className="text-foreground">
+                          ${formData.donationAmount ? parseFloat(formData.donationAmount).toFixed(2) : '0.00'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No additional donation requested</p>
+                )}
               </>
             )}
 
@@ -1882,7 +2036,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label>Phone Number</Label>
+                    <Label>Mosque Phone Number</Label>
                     {isEditing ? (
                       <Input type="tel" value={formData.phone} onChange={(e) => handleInputChange("phone", e.target.value)} />
                     ) : (
@@ -1895,6 +2049,22 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                       <Input type="url" value={formData.website || ''} onChange={(e) => handleInputChange("website", e.target.value)} />
                     ) : (
                       <p className="text-foreground">{formData.website || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Emergency Contact Name (Point of Contact)</Label>
+                    {isEditing ? (
+                      <Input type="text" value={formData.emergencyContactName || ''} onChange={(e) => handleInputChange("emergencyContactName", e.target.value)} placeholder="Contact person name" />
+                    ) : (
+                      <p className="text-foreground">{formData.emergencyContactName || <span className="text-muted-foreground">Not provided</span>}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Emergency Contact Phone Number</Label>
+                    {isEditing ? (
+                      <Input type="tel" value={formData.emergencyContactPhone || ''} onChange={(e) => handleInputChange("emergencyContactPhone", e.target.value)} placeholder="+1 (555) 000-0000" />
+                    ) : (
+                      <p className="text-foreground">{formData.emergencyContactPhone || <span className="text-muted-foreground">Not provided</span>}</p>
                     )}
                   </div>
                 </div>
@@ -1933,6 +2103,42 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     ) : formData.twitter ? (
                       <a href={formData.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
                         {formData.twitter}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>YouTube</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.youtube || ''} onChange={(e) => handleInputChange("youtube", e.target.value)} placeholder="https://youtube.com/@yourmasjid" />
+                    ) : formData.youtube ? (
+                      <a href={formData.youtube} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.youtube}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Google Business</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.google || ''} onChange={(e) => handleInputChange("google", e.target.value)} placeholder="https://maps.google.com/yourmasjid" />
+                    ) : formData.google ? (
+                      <a href={formData.google} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.google}
+                      </a>
+                    ) : (
+                      <p className="text-muted-foreground">Not provided</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>TikTok</Label>
+                    {isEditing ? (
+                      <Input type="url" value={formData.tiktok || ''} onChange={(e) => handleInputChange("tiktok", e.target.value)} placeholder="https://tiktok.com/@yourmasjid" />
+                    ) : formData.tiktok ? (
+                      <a href={formData.tiktok} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block truncate">
+                        {formData.tiktok}
                       </a>
                     ) : (
                       <p className="text-muted-foreground">Not provided</p>

@@ -1048,11 +1048,7 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-yellow-600">
                           ${affiliateData?.summary?.pendingEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {startDate && endDate 
-                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
-                            : "Date range"}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">Current month</p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1061,11 +1057,7 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-green-600">
                           ${affiliateData?.summary?.paidEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {startDate && endDate 
-                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
-                            : "Date range"}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">Previous months</p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1074,11 +1066,7 @@ export default function MemberDashboard() {
                         <CardTitle className="text-2xl text-primary">
                           ${affiliateData?.summary?.totalEarnings?.toFixed(2) || '0.00'}
                         </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {startDate && endDate 
-                            ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
-                            : "All time"}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">All time</p>
                       </CardHeader>
                     </Card>
                     <Card>
@@ -1125,74 +1113,86 @@ export default function MemberDashboard() {
                                   <TableHead>Type</TableHead>
                                   <TableHead>Name</TableHead>
                                   <TableHead className="text-right">Fee</TableHead>
-                                  <TableHead className="text-right">Kickback (10%)</TableHead>
+                                  <TableHead className="text-right">Kickback (10%) / Donation</TableHead>
                                   <TableHead className="text-center">Status</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {paginatedAffiliates.length > 0 ? (
                                   paginatedAffiliates.map((affiliate: any) => {
-                                    const periodStart = new Date(affiliate.periodStart)
-                                    const month = periodStart.toISOString().slice(0, 7) // YYYY-MM format
-                                    
-                                    // Use the status from the API (Paid/Pending) instead of calculating from date
-                                    const isPending = affiliate.status === 'Pending'
-                                    
-                                    return (
-                                      <TableRow key={`${affiliate.type}-${affiliate.id}-${month}`}>
-                                        <TableCell className="font-medium">{month}</TableCell>
-                                        <TableCell>
-                                          <Badge 
-                                            variant="outline" 
-                                            className={
-                                              affiliate.type === 'business'
-                                                ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                                                : affiliate.type === 'coupon'
-                                                ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
-                                                : "bg-green-500/10 text-green-600 border-green-500/20"
-                                            }
-                                          >
-                                            {affiliate.type === 'business' ? (
-                                              <>
-                                                <Store className="h-3 w-3 mr-1" />
-                                                Business
-                                              </>
-                                            ) : affiliate.type === 'coupon' ? (
-                                              <>
-                                                <Ticket className="h-3 w-3 mr-1" />
-                                                Coupon
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Heart className="h-3 w-3 mr-1" />
-                                                Nonprofit
-                                              </>
-                                            )}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>{affiliate.name}</TableCell>
-                                        <TableCell className="text-right">${affiliate.fee.toFixed(2)}</TableCell>
-                                        <TableCell 
-                                          className={`text-right font-semibold ${
-                                            isPending ? 'text-primary' : 'text-green-600'
-                                          }`}
-                                        >
-                                          ${affiliate.kickback.toFixed(2)}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                          <Badge 
-                                            className={
-                                              isPending
-                                                ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
-                                                : "bg-green-500/10 text-green-600 border-green-500/20"
-                                            }
-                                          >
-                                            {isPending ? 'Pending' : 'Paid'}
-                                          </Badge>
-                                        </TableCell>
-                                      </TableRow>
-                                    )
-                                  })
+                                const periodStart = new Date(affiliate.periodStart)
+                                const month = periodStart.toISOString().slice(0, 7) // YYYY-MM format
+                                
+                                // Use the status from the API (Paid/Pending) instead of calculating from date
+                                const isPending = affiliate.status === 'Pending'
+                                
+                                return (
+                                  <TableRow key={`${affiliate.type}-${affiliate.id}-${month}`}>
+                                  <TableCell className="font-medium">{month}</TableCell>
+                                  <TableCell>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={
+                                        affiliate.type === 'business'
+                                          ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                          : affiliate.type === 'coupon'
+                                          ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
+                                          : affiliate.type === 'donation'
+                                          ? "bg-orange-500/10 text-orange-600 border-orange-500/20"
+                                          : "bg-green-500/10 text-green-600 border-green-500/20"
+                                      }
+                                    >
+                                      {affiliate.type === 'business' ? (
+                                        <>
+                                          <Store className="h-3 w-3 mr-1" />
+                                          Business
+                                        </>
+                                      ) : affiliate.type === 'coupon' ? (
+                                        <>
+                                          <Ticket className="h-3 w-3 mr-1" />
+                                          Coupon
+                                        </>
+                                      ) : affiliate.type === 'donation' ? (
+                                        <>
+                                          <DollarSign className="h-3 w-3 mr-1" />
+                                          Donation
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Heart className="h-3 w-3 mr-1" />
+                                          Nonprofit
+                                        </>
+                                      )}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{affiliate.name}</TableCell>
+                                  <TableCell className="text-right">
+                                    {affiliate.type === 'donation' ? '—' : `$${affiliate.fee.toFixed(2)}`}
+                                  </TableCell>
+                                  <TableCell 
+                                    className={`text-right font-semibold ${
+                                      isPending ? 'text-primary' : 'text-green-600'
+                                    }`}
+                                  >
+                                    ${affiliate.kickback.toFixed(2)}
+                                    {affiliate.type === 'donation' && (
+                                      <span className="text-xs text-muted-foreground ml-1">(donation)</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge 
+                                      className={
+                                        isPending
+                                          ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                                          : "bg-green-500/10 text-green-600 border-green-500/20"
+                                      }
+                                    >
+                                      {isPending ? 'Pending' : 'Paid'}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                                })
                                 ) : (
                                   <TableRow>
                                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
