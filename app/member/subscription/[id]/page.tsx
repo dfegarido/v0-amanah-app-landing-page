@@ -24,6 +24,7 @@ import {
   Loader2,
   Check,
   Calendar,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -167,6 +168,10 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   // Services state for editing
   const [servicesList, setServicesList] = useState<Array<{name: string, link: string}>>([{name: '', link: ''}])
   const [serviceCount, setServiceCount] = useState(1)
+  
+  // Stripe Connect state
+  const [refreshingStripe, setRefreshingStripe] = useState(false)
+  const [connectingStripe, setConnectingStripe] = useState(false)
   
   // Committee members state for editing
   const [committeeList, setCommitteeList] = useState<Array<{name: string, title: string, photo: string, uploading?: boolean}>>([{name: '', title: '', photo: ''}])
@@ -2186,23 +2191,29 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   <div className="space-y-2">
                     <Label>Category</Label>
                     {isEditing ? (
-                      <Input
-                        value={formData.category}
-                        onChange={(e) => handleInputChange("category", e.target.value)}
-                      />
+                      <Select 
+                        value={formData.category} 
+                        onValueChange={(value) => handleInputChange("category", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Automotive">Automotive</SelectItem>
+                          <SelectItem value="Education and Training">Education and Training</SelectItem>
+                          <SelectItem value="Entertainment & Events">Entertainment & Events</SelectItem>
+                          <SelectItem value="Food & Dining">Food & Dining</SelectItem>
+                          <SelectItem value="For Sale">For Sale</SelectItem>
+                          <SelectItem value="Health & Wellness">Health & Wellness</SelectItem>
+                          <SelectItem value="Jobs">Jobs</SelectItem>
+                          <SelectItem value="Marriage & Family Services">Marriage & Family Services</SelectItem>
+                          <SelectItem value="Professional Services">Professional Services</SelectItem>
+                          <SelectItem value="Retail & Shopping">Retail & Shopping</SelectItem>
+                          <SelectItem value="Technology & Digital Services">Technology & Digital Services</SelectItem>
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <p className="text-foreground">{formData.category}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Sub Category</Label>
-                    {isEditing ? (
-                      <Input
-                        value={formData.subCategory}
-                        onChange={(e) => handleInputChange("subCategory", e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-foreground">{formData.subCategory}</p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -2838,6 +2849,26 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 <p className="text-foreground">{formatDate(subscription.created_at)}</p>
               </div>
             </div>
+            
+            {/* Manual Donations - Only for Mosque Subscriptions */}
+            {subscription.type === 'mosque' && subscription.entity?.manual_donations > 0 && (
+              <div className="mt-4 p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <Label className="text-sm font-semibold text-purple-600">Manual Donations</Label>
+                      <p className="text-xs text-muted-foreground">Additional donations tracked by admin</p>
+                    </div>
+                  </div>
+                  <p className="text-xl font-bold text-purple-600">
+                    ${(subscription.entity?.manual_donations || 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -3066,12 +3097,12 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 <Key className="h-5 w-5" />
                 Third Party Integrations
               </CardTitle>
-              <CardDescription>Connected services and integrations (managed by admin)</CardDescription>
+              <CardDescription>Connect and manage your third-party integrations</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Amanah App - Coming Soon */}
-                <div className="p-3 rounded-lg bg-secondary/50 border border-dashed">
+                {/* Amanah App - Coming Soon - HIDDEN FOR NOW */}
+                {/* <div className="p-3 rounded-lg bg-secondary/50 border border-dashed">
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-medium text-muted-foreground">Amanah App Login</p>
                     <Badge variant="outline" className="text-muted-foreground">Coming Soon</Badge>
@@ -3079,7 +3110,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                   <p className="text-xs text-muted-foreground">
                     Login credentials will be available in the next version
                   </p>
-                </div>
+                </div> */}
                 
                 {/* Stripe Connected Account */}
                 <div className="p-3 rounded-lg bg-secondary/50 border">
@@ -3105,38 +3136,206 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <div className="space-y-2">
                       <div className="text-sm space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">Status:</span>
-                          {subscription.entity?.stripe_charges_enabled && subscription.entity?.stripe_payouts_enabled ? (
-                            <span className="text-green-600 font-medium">Fully Enabled</span>
-                          ) : (
-                            <span className="text-yellow-600 font-medium">Setup Required</span>
-                          )}
+                          <span className="text-muted-foreground">Account ID:</span>
+                          <span className="font-mono text-xs">{subscription.entity?.stripe_account_id}</span>
                         </div>
-                        {subscription.entity?.stripe_charges_enabled && (
-                          <div className="flex items-center gap-2">
-                            <Check className="h-3 w-3 text-green-600" />
-                            <span className="text-sm">Can accept payments</span>
-                          </div>
-                        )}
-                        {subscription.entity?.stripe_payouts_enabled && (
-                          <div className="flex items-center gap-2">
-                            <Check className="h-3 w-3 text-green-600" />
-                            <span className="text-sm">Can receive payouts</span>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Charges:</span>
+                          <Badge variant="outline" className={
+                            subscription.entity?.stripe_charges_enabled 
+                              ? "bg-green-500/10 text-green-600 border-green-500/20 text-xs"
+                              : "text-xs"
+                          }>
+                            {subscription.entity?.stripe_charges_enabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Payouts:</span>
+                          <Badge variant="outline" className={
+                            subscription.entity?.stripe_payouts_enabled 
+                              ? "bg-green-500/10 text-green-600 border-green-500/20 text-xs"
+                              : "text-xs"
+                          }>
+                            {subscription.entity?.stripe_payouts_enabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                        </div>
                       </div>
-                      {!subscription.entity?.stripe_onboarding_complete && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Contact admin to complete Stripe onboarding
-                        </p>
-                      )}
+                      <div className="flex gap-2 pt-2 flex-wrap">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          disabled={refreshingStripe}
+                          onClick={async () => {
+                            try {
+                              setRefreshingStripe(true)
+                              const response: any = await authenticatedGet(
+                                `/api/member/mosque/${subscription.entity.id}/stripe-connect`
+                              )
+                              
+                              if (response.success) {
+                                toast({
+                                  title: "Status Updated",
+                                  description: "Stripe account status has been refreshed"
+                                })
+                                // Refresh the subscription data
+                                await fetchSubscription()
+                              } else {
+                                toast({
+                                  title: "Error",
+                                  description: response.error || "Failed to refresh status",
+                                  variant: "destructive"
+                                })
+                              }
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description: error.message || "Failed to refresh status",
+                                variant: "destructive"
+                              })
+                            } finally {
+                              setRefreshingStripe(false)
+                            }
+                          }}
+                        >
+                          {refreshingStripe ? (
+                            <>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              Refreshing...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                              </svg>
+                              Refresh Status
+                            </>
+                          )}
+                        </Button>
+                        {!subscription.entity?.stripe_onboarding_complete && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                setConnectingStripe(true)
+                                const response: any = await authenticatedPost(
+                                  `/api/member/mosque/${subscription.entity.id}/stripe-connect`,
+                                  { refresh: true }
+                                )
+                                if (response.success && response.data.url) {
+                                  window.open(response.data.url, '_blank')
+                                  toast({
+                                    title: "Opening Stripe Setup",
+                                    description: "A new tab has been opened. Complete the setup process there."
+                                  })
+                                  // Keep modal open for 3 seconds to allow popup to load
+                                  setTimeout(() => {
+                                    setConnectingStripe(false)
+                                  }, 3000)
+                                } else {
+                                  setConnectingStripe(false)
+                                }
+                              } catch (error: any) {
+                                setConnectingStripe(false)
+                                toast({
+                                  title: "Error",
+                                  description: error.message || "Failed to create onboarding link",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            Complete Setup
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            window.open(`https://dashboard.stripe.com/connect/accounts/${subscription.entity?.stripe_account_id}`, '_blank')
+                          }}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          View in Stripe
+                        </Button>
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Contact admin to connect your Stripe account and receive affiliate earnings
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Connect a Stripe account to receive affiliate earnings and process donations
+                      </p>
+                      <Button 
+                        variant="default" 
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            setConnectingStripe(true)
+                            const response: any = await authenticatedPost(
+                              `/api/member/mosque/${subscription.entity.id}/stripe-connect`,
+                              {}
+                            )
+                            
+                            if (response.success && response.data?.url) {
+                              window.open(response.data.url, '_blank')
+                              toast({
+                                title: "Opening Stripe Setup",
+                                description: "A new tab has been opened. Complete the setup process there."
+                              })
+                              // Keep modal open for 3 seconds to allow popup to load
+                              setTimeout(() => {
+                                setConnectingStripe(false)
+                              }, 3000)
+                            } else {
+                              setConnectingStripe(false)
+                              toast({
+                                title: "Error",
+                                description: response.error || "Invalid response from server",
+                                variant: "destructive"
+                              })
+                            }
+                          } catch (error: any) {
+                            setConnectingStripe(false)
+                            toast({
+                              title: "Error",
+                              description: error.message || "Failed to initiate Stripe connection",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                      >
+                        Set Up Bank Account for Payouts
+                      </Button>
+                    </div>
                   )}
                 </div>
+                
+                {/* Stripe Connection Loading Modal */}
+                <Dialog open={connectingStripe} onOpenChange={setConnectingStripe}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        Connecting to Stripe
+                      </DialogTitle>
+                      <DialogDescription>
+                        Please wait while we set up your secure connection...
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                      <div className="relative">
+                        <div className="h-20 w-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin"></div>
+                      </div>
+                      <div className="text-center space-y-2">
+                        <p className="text-sm font-medium">Setting up your Stripe account...</p>
+                        <p className="text-xs text-muted-foreground">
+                          A new tab will open shortly. Please complete the setup process there.
+                        </p>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardContent>
           </Card>

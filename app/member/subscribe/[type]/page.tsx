@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users, Loader2, Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -218,9 +219,14 @@ export default function SubscribePage() {
 
   const validateUrl = (url: string): boolean => {
     if (!url) return true // Optional fields
+    
+    // Allow URLs without protocol (e.g., "example.com", "www.example.com")
+    const urlToTest = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`
+    
     try {
-      new URL(url)
-      return true
+      const parsedUrl = new URL(urlToTest)
+      // Check if it has a valid domain structure (at least one dot and valid characters)
+      return /^[a-zA-Z0-9][a-zA-Z0-9-_.]+\.[a-zA-Z]{2,}/.test(parsedUrl.hostname)
     } catch {
       return false
     }
@@ -230,7 +236,7 @@ export default function SubscribePage() {
     // Common required fields for all types
     const requiredFields: Record<string, string[]> = {
       mosque: ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone'],
-      business: ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description'],
+      business: ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description'],
       coupon: ['title', 'merchant', 'description', 'phone', 'email', 'address'],
       nonprofit: ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
     }
@@ -254,7 +260,7 @@ export default function SubscribePage() {
 
     // URL validations
     if (['website', 'sundaySchool', 'programsLink', 'donateLink'].includes(fieldName) && value && !validateUrl(value)) {
-      return 'Please enter a valid URL (e.g., https://example.com)'
+      return 'Please enter a valid URL (e.g., example.com or https://example.com)'
     }
 
     // Zip code validation
@@ -285,6 +291,7 @@ export default function SubscribePage() {
     fieldsToValidate.forEach(field => {
       const error = validateField(field, formData[field])
       if (error) {
+        console.log(`[Validation] Field '${field}' has error:`, error)
         newErrors[field] = error
       }
     })
@@ -1720,21 +1727,39 @@ export default function SubscribePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="categories">Categories</Label>
-                <Input
-                  id="categories"
-                  value={formData.categories || ''}
-                  placeholder="e.g., Restaurant, Retail, Services (comma separated)"
-                  onChange={handleInputChange}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subCategories">Sub Categories</Label>
-                <Input
-                  id="subCategories"
-                  value={formData.subCategories || ''}
-                  placeholder="e.g., Halal, Mediterranean (comma separated)"
-                  onChange={handleInputChange}
-                />
+                {isMounted ? (
+                  <Select 
+                    value={formData.categories || ''} 
+                    onValueChange={(value) => {
+                      setFormData((prev: any) => ({ ...prev, categories: value }))
+                      setErrors((prev: any) => ({ ...prev, categories: '' }))
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Automotive">Automotive</SelectItem>
+                      <SelectItem value="Education and Training">Education and Training</SelectItem>
+                      <SelectItem value="Entertainment & Events">Entertainment & Events</SelectItem>
+                      <SelectItem value="Food & Dining">Food & Dining</SelectItem>
+                      <SelectItem value="For Sale">For Sale</SelectItem>
+                      <SelectItem value="Health & Wellness">Health & Wellness</SelectItem>
+                      <SelectItem value="Jobs">Jobs</SelectItem>
+                      <SelectItem value="Marriage & Family Services">Marriage & Family Services</SelectItem>
+                      <SelectItem value="Professional Services">Professional Services</SelectItem>
+                      <SelectItem value="Retail & Shopping">Retail & Shopping</SelectItem>
+                      <SelectItem value="Technology & Digital Services">Technology & Digital Services</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">Select a category</span>
+                  </div>
+                )}
+                {touched.categories && errors.categories && (
+                  <p className="text-sm text-destructive">{errors.categories}</p>
+                )}
               </div>
             </div>
           </div>
@@ -3190,6 +3215,21 @@ export default function SubscribePage() {
           </div>
         </div>
 
+        {/* Coupon Promotion Image - Show at top for coupon type */}
+        {type === "coupon" && (
+          <div className="mb-6 rounded-lg overflow-hidden shadow-md border border-border bg-black">
+            <div className="relative w-full h-[280px] md:h-[320px]">
+              <Image
+                src="/image.png"
+                alt="Buy 1 Get 1 Free Falafel Wrap"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Details */}
         {step === 1 && (
           <Card>
@@ -3265,7 +3305,9 @@ export default function SubscribePage() {
                       // Check validation errors
                       if (Object.keys(errors).length > 0) {
                         Object.entries(errors).forEach(([field, error]) => {
-                          missing.push(`• ${error}`)
+                          if (error && error.trim()) {
+                            missing.push(`• ${error}`)
+                          }
                         })
                       }
                       

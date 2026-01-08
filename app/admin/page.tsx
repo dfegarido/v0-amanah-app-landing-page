@@ -38,6 +38,7 @@ import {
   Bell,
   Loader2,
   Eye,
+  Save,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -107,6 +108,10 @@ export default function AdminDashboard() {
   const [membersPage, setMembersPage] = useState(1)
   const [membersPerPage] = useState(10)
   const [updatingSubscriptionId, setUpdatingSubscriptionId] = useState<string | null>(null)
+  
+  // Manual donations state (for mosque payouts)
+  const [manualDonationInputs, setManualDonationInputs] = useState<Record<string, string>>({})
+  const [savingDonationId, setSavingDonationId] = useState<string | null>(null)
 
   // Push notification requests state (using real API)
   const [pushNotificationRequests, setPushNotificationRequests] = useState<any[]>([])
@@ -1880,6 +1885,23 @@ export default function AdminDashboard() {
                               </div>
                             )}
 
+                            {/* Location Details */}
+                            <div>
+                              <h4 className="font-semibold mb-3">Location</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span>{mosque.address}</span>
+                                </div>
+                                <div className="grid md:grid-cols-4 gap-2 ml-6">
+                                  {(mosque as any).city && <p><span className="text-muted-foreground">City:</span> {(mosque as any).city}</p>}
+                                  {(mosque as any).state && <p><span className="text-muted-foreground">State:</span> {(mosque as any).state}</p>}
+                                  {(mosque as any).zip && <p><span className="text-muted-foreground">ZIP:</span> {(mosque as any).zip}</p>}
+                                  {(mosque as any).country && <p><span className="text-muted-foreground">Country:</span> {(mosque as any).country}</p>}
+                                </div>
+                              </div>
+                            </div>
+
                             {/* Contact Info */}
                             <div className="grid md:grid-cols-2 gap-4">
                               <div className="space-y-3">
@@ -1909,10 +1931,21 @@ export default function AdminDashboard() {
                                       <CopyButton text={mosque.website} fieldId={`${mosque.id}-website`} />
                                     </div>
                                   )}
-                                  {mosque.contactName && (
-                                    <div className="flex items-center gap-2">
-                                      <Users className="h-4 w-4 text-muted-foreground" />
-                                      <span>Contact: {mosque.contactName}</span>
+                                  {((mosque as any).emergency_contact_name || (mosque as any).emergency_contact_phone) && (
+                                    <div className="mt-3 pt-3 border-t">
+                                      <p className="font-medium text-xs text-muted-foreground mb-2">Emergency Contact</p>
+                                      {(mosque as any).emergency_contact_name && (
+                                        <div className="flex items-center gap-2">
+                                          <Users className="h-4 w-4 text-muted-foreground" />
+                                          <span>{(mosque as any).emergency_contact_name}</span>
+                                        </div>
+                                      )}
+                                      {(mosque as any).emergency_contact_phone && (
+                                        <div className="flex items-center gap-2">
+                                          <Phone className="h-4 w-4 text-muted-foreground" />
+                                          <span>{(mosque as any).emergency_contact_phone}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1927,6 +1960,175 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* Social Media */}
+                            <div>
+                              <h4 className="font-semibold mb-3">Social Media</h4>
+                              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                                {(mosque as any).facebook && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Facebook:</span>
+                                    <a href={(mosque as any).facebook} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).facebook}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).instagram && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Instagram:</span>
+                                    <a href={(mosque as any).instagram} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).instagram}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).twitter && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Twitter/X:</span>
+                                    <a href={(mosque as any).twitter} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).twitter}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).youtube && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">YouTube:</span>
+                                    <a href={(mosque as any).youtube} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).youtube}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).google && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Google:</span>
+                                    <a href={(mosque as any).google} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).google}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).tiktok && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">TikTok:</span>
+                                    <a href={(mosque as any).tiktok} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).tiktok}
+                                    </a>
+                                  </div>
+                                )}
+                                {(mosque as any).other_social && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground">Other:</span>
+                                    <a href={(mosque as any).other_social} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                                      {(mosque as any).other_social}
+                                    </a>
+                                  </div>
+                                )}
+                                {!(mosque as any).facebook && !(mosque as any).instagram && !(mosque as any).twitter && !(mosque as any).youtube && !(mosque as any).google && !(mosque as any).tiktok && !(mosque as any).other_social && (
+                                  <p className="text-muted-foreground col-span-full">No social media links provided</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Organization Details */}
+                            {mosque.description && (
+                              <div>
+                                <h4 className="font-semibold mb-3">About Organization</h4>
+                                <p className="text-sm whitespace-pre-wrap">{mosque.description}</p>
+                              </div>
+                            )}
+
+                            {/* Links */}
+                            <div className="grid md:grid-cols-2 gap-3 text-sm">
+                              {(mosque as any).donate_link && (
+                                <div>
+                                  <span className="text-muted-foreground">Donate Link:</span>
+                                  <a href={(mosque as any).donate_link} target="_blank" rel="noreferrer" className="text-primary hover:underline block truncate">
+                                    {(mosque as any).donate_link}
+                                  </a>
+                                </div>
+                              )}
+                              {(mosque as any).programs_link && (
+                                <div>
+                                  <span className="text-muted-foreground">Programs/Events:</span>
+                                  <a href={(mosque as any).programs_link} target="_blank" rel="noreferrer" className="text-primary hover:underline block truncate">
+                                    {(mosque as any).programs_link}
+                                  </a>
+                                </div>
+                              )}
+                              {(mosque as any).prayer_times_link && (
+                                <div>
+                                  <span className="text-muted-foreground">Prayer Times:</span>
+                                  <a href={(mosque as any).prayer_times_link} target="_blank" rel="noreferrer" className="text-primary hover:underline block truncate">
+                                    {(mosque as any).prayer_times_link}
+                                  </a>
+                                </div>
+                              )}
+                              {(mosque as any).sunday_school_link && (
+                                <div>
+                                  <span className="text-muted-foreground">Sunday School:</span>
+                                  <a href={(mosque as any).sunday_school_link} target="_blank" rel="noreferrer" className="text-primary hover:underline block truncate">
+                                    {(mosque as any).sunday_school_link}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Services/Programs */}
+                            {(() => {
+                              try {
+                                const services = typeof mosque.services === 'string' ? JSON.parse(mosque.services) : mosque.services || []
+                                if (services.length > 0) {
+                                  return (
+                                    <div>
+                                      <h4 className="font-semibold mb-3">Services / Programs</h4>
+                                      <div className="space-y-2">
+                                        {services.map((service: any, idx: number) => (
+                                          <div key={idx} className="border-l-2 border-primary pl-3 text-sm">
+                                            <p className="font-medium">{service.name}</p>
+                                            {service.link && (
+                                              <a href={service.link} target="_blank" rel="noreferrer" className="text-primary hover:underline text-xs truncate block">
+                                                {service.link}
+                                              </a>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                              } catch (e) {
+                                return null
+                              }
+                              return null
+                            })()}
+
+                            {/* Board Members / Leadership Team */}
+                            {(() => {
+                              try {
+                                const committee = typeof (mosque as any).committee_members === 'string' ? JSON.parse((mosque as any).committee_members) : (mosque as any).committee_members || []
+                                if (committee.length > 0) {
+                                  return (
+                                    <div>
+                                      <h4 className="font-semibold mb-3">Board Members / Leadership Team</h4>
+                                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {committee.map((member: any, idx: number) => (
+                                          <div key={idx} className="border rounded-lg p-3 space-y-2">
+                                            {member.photo && (
+                                              <img src={member.photo} alt={member.name} className="w-16 h-16 rounded-full object-cover mx-auto" />
+                                            )}
+                                            <div className="text-center">
+                                              <p className="font-medium text-sm">{member.name}</p>
+                                              <p className="text-xs text-muted-foreground">{member.title}</p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                              } catch (e) {
+                                return null
+                              }
+                              return null
+                            })()}
 
                             {/* Third Party Integrations */}
                             <div>
@@ -2470,67 +2672,177 @@ export default function AdminDashboard() {
                             </div>
                           )}
 
-                          {/* Description */}
+                          {/* Basic Information */}
                           <div>
-                            <h4 className="font-semibold mb-2">Description</h4>
-                            <p className="text-sm text-muted-foreground">{(coupon as any).description || 'No description provided'}</p>
+                            <h4 className="font-semibold mb-3 flex items-center gap-2">
+                              <Ticket className="h-4 w-4" />
+                              Basic Information
+                            </h4>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm">
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Title:</span>
+                                  <p className="mt-0.5">{coupon.title}</p>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Merchant:</span>
+                                  <p className="mt-0.5">{(coupon as any).merchant || coupon.memberName || 'Not provided'}</p>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Phone:</span>
+                                  <p className="mt-0.5">{(coupon as any).phone || 'Not provided'}</p>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Email:</span>
+                                  <p className="mt-0.5">{(coupon as any).email || 'Not provided'}</p>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Website:</span>
+                                  {(coupon as any).website ? (
+                                    <a 
+                                      href={(coupon as any).website} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="text-primary hover:underline flex items-center gap-1 mt-0.5"
+                                    >
+                                      {(coupon as any).website}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ) : (
+                                    <p className="mt-0.5">Not provided</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Address:</span>
+                                  <p className="mt-0.5">{(coupon as any).address || 'Not provided'}</p>
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Coupon Details */}
-                          <div className="grid md:grid-cols-2 gap-4">
-                            <div className="space-y-3">
-                              <h4 className="font-semibold">Coupon Information</h4>
-                              <div className="space-y-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <Ticket className="h-4 w-4 text-muted-foreground" />
-                                  <span className="font-medium">Merchant:</span>
-                                  <span>{(coupon as any).merchant || coupon.memberName}</span>
-                                </div>
-                                {(coupon as any).discount && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">Discount:</span>
-                                    <span>{(coupon as any).discount}</span>
-                                  </div>
-                                )}
-                                {(coupon as any).startDate && (
-                                  <div className="flex items-center gap-2">
-                                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                                    <span className="font-medium">Valid From:</span>
-                                    <span>{new Date((coupon as any).startDate).toLocaleDateString()}</span>
-                                  </div>
-                                )}
-                                {(coupon as any).endDate && (
-                                  <div className="flex items-center gap-2">
-                                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                                    <span className="font-medium">Valid Until:</span>
-                                    <span>{new Date((coupon as any).endDate).toLocaleDateString()}</span>
-                                  </div>
+                          {/* Redemption Options */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Redemption Options</h4>
+                            <div className="text-sm space-y-2">
+                              <div>
+                                <span className="font-medium text-muted-foreground">Redemption Type:</span>
+                                <p className="mt-0.5">
+                                  {(coupon as any).redemption_type === 'unlimited' ? 'Unlimited - No restrictions' : 'Limited Redemptions'}
+                                </p>
+                                {(coupon as any).redemption_type === 'limited' && (coupon as any).redeem_limit && (coupon as any).redeem_period && (
+                                  <p className="text-muted-foreground mt-1">
+                                    {(coupon as any).redeem_limit} redemption(s) per {(coupon as any).redeem_period}
+                                  </p>
                                 )}
                               </div>
                             </div>
-                            <div className="space-y-3">
-                              <h4 className="font-semibold">Subscription Details</h4>
-                              <div className="space-y-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                  <span className="font-medium">Monthly Fee:</span>
-                                  <span>${(coupon as any).subscriptionPrice || (coupon as any).price || 10}</span>
+                          </div>
+
+                          {/* Discount Details */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Discount Details</h4>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm">
+                              {(coupon as any).discount_amount && (
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Discount Amount:</span>
+                                  <p className="mt-0.5">{(coupon as any).discount_amount}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                                  <span className="font-medium">Started:</span>
-                                  <span>{new Date((coupon as any).startDate || (coupon as any).created_at).toLocaleDateString()}</span>
+                              )}
+                              {(coupon as any).discount_percentage && (
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Discount Percentage:</span>
+                                  <p className="mt-0.5">{(coupon as any).discount_percentage}</p>
                                 </div>
-                                {(coupon as any).affiliated_mosque_code && (
-                                  <div className="flex items-center gap-2">
-                                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                                    <span className="font-medium">Affiliated Mosque:</span>
+                              )}
+                            </div>
+                            {(coupon as any).discount_details && (
+                              <div className="mt-2">
+                                <span className="font-medium text-muted-foreground">Offer Details:</span>
+                                <p className="mt-0.5 whitespace-pre-wrap">{(coupon as any).discount_details}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Description & Display */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Description & Display</h4>
+                            <div className="space-y-3 text-sm">
+                              <div>
+                                <span className="font-medium text-muted-foreground">Description:</span>
+                                <p className="mt-0.5 whitespace-pre-wrap">{(coupon as any).description || 'No description provided'}</p>
+                              </div>
+                              {(coupon as any).thumbnail_description && (
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Thumbnail Description:</span>
+                                  <p className="mt-0.5">{(coupon as any).thumbnail_description}</p>
+                                </div>
+                              )}
+                              {(coupon as any).pop_up_text && (
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Pop Up Text:</span>
+                                  <p className="mt-0.5">{(coupon as any).pop_up_text}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Validity Period */}
+                          <div>
+                            <h4 className="font-semibold mb-3 flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              Validity Period
+                            </h4>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="font-medium text-muted-foreground">Start Date:</span>
+                                <p className="mt-0.5">
+                                  {(coupon as any).startDate || (coupon as any).start_date ? 
+                                    new Date((coupon as any).startDate || (coupon as any).start_date).toLocaleDateString() : 
+                                    'Not set'
+                                  }
+                                </p>
+                              </div>
+                              <div>
+                                <span className="font-medium text-muted-foreground">End Date:</span>
+                                <p className="mt-0.5">
+                                  {(coupon as any).endDate || (coupon as any).end_date ? 
+                                    new Date((coupon as any).endDate || (coupon as any).end_date).toLocaleDateString() : 
+                                    'No end date'
+                                  }
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Subscription Details */}
+                          <div>
+                            <h4 className="font-semibold mb-3 flex items-center gap-2">
+                              <DollarSign className="h-4 w-4" />
+                              Subscription Details
+                            </h4>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="font-medium text-muted-foreground">Monthly Fee:</span>
+                                <p className="mt-0.5">${(coupon as any).subscriptionPrice || (coupon as any).price || 10}</p>
+                              </div>
+                              <div>
+                                <span className="font-medium text-muted-foreground">Started:</span>
+                                <p className="mt-0.5">
+                                  {new Date((coupon as any).startDate || (coupon as any).created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              {(coupon as any).affiliated_mosque_code && (
+                                <div>
+                                  <span className="font-medium text-muted-foreground">Affiliated Mosque:</span>
+                                  <div className="mt-0.5">
                                     <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
                                       #{(coupon as any).affiliated_mosque_code}
                                     </Badge>
                                   </div>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2835,6 +3147,50 @@ export default function AdminDashboard() {
                         const manualDonations = (mosque as any).manualDonations || (mosque as any).manual_donations || 0
                         const totalPayout = totalKickback + totalDonations + manualDonations
                         const isExpanded = expandedItems[`payout-${mosque.id}`]
+                        const mosqueKey = (mosque as any).entityId || mosque.id
+                        const currentInput = manualDonationInputs[mosqueKey] ?? manualDonations.toString()
+                        const isSaving = savingDonationId === mosqueKey
+                        
+                        const handleSaveManualDonation = async () => {
+                          const newAmount = parseFloat(currentInput) || 0
+                          if (newAmount === manualDonations) {
+                            toast({
+                              title: "No changes",
+                              description: "Manual donation amount is unchanged",
+                            })
+                            return
+                          }
+                          
+                          setSavingDonationId(mosqueKey)
+                          try {
+                            console.log("[Admin] Updating manual donation for mosque entity:", (mosque as any).entityId, newAmount)
+                            const response = await authenticatedPatch(
+                              `/api/admin/mosque/${(mosque as any).entityId}/manual-donation`,
+                              { amount: newAmount }
+                            )
+            console.log("[Admin] Manual donation updated successfully")
+            toast({
+              title: "Success",
+              description: `Manual donation updated to $${newAmount.toFixed(2)}`,
+            })
+            // Refresh data
+            fetchMembers()
+                          } catch (error: any) {
+                            console.error("[Admin] Failed to update manual donation:", error)
+                            toast({
+                              title: "Error",
+                              description: error.message || "Failed to update manual donation",
+                              variant: "destructive",
+                            })
+                            // Reset value
+                            setManualDonationInputs(prev => ({
+                              ...prev,
+                              [mosqueKey]: manualDonations.toString()
+                            }))
+                          } finally {
+                            setSavingDonationId(null)
+                          }
+                        }
                         
                         return (
                           <React.Fragment key={mosque.id}>
@@ -2854,16 +3210,38 @@ export default function AdminDashboard() {
                               <TableCell className="text-right font-bold text-primary">${totalKickback.toFixed(2)}</TableCell>
                               <TableCell className="text-right font-bold text-orange-500">${totalDonations.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  defaultValue={manualDonations}
-                                  className="w-24 text-right"
-                                  placeholder="$0"
-                                  onChange={(e) => {
-                                    console.log("[v0] Updating manual donation for mosque:", mosque.id, e.target.value)
-                                    // In real app, this would update the mosque's manual donations
-                                  }}
-                                />
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    value={currentInput}
+                                    onChange={(e) => setManualDonationInputs(prev => ({
+                                      ...prev,
+                                      [mosqueKey]: e.target.value
+                                    }))}
+                                    className="w-24 text-right"
+                                    placeholder="$0"
+                                    disabled={isSaving}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleSaveManualDonation}
+                                    disabled={isSaving || currentInput === manualDonations.toString()}
+                                    className="whitespace-nowrap"
+                                  >
+                                    {isSaving ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Save className="h-3 w-3 mr-1" />
+                                        Save
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </TableCell>
                               <TableCell className="text-right font-bold text-green-500">${totalPayout.toFixed(2)}</TableCell>
                               <TableCell>
