@@ -169,7 +169,7 @@ export default function AdminNotificationsPage() {
     }
   }
 
-  const getNotificationIcon = (type: string) => {
+  const getNotificationIcon = (type: string, metadata?: any) => {
     switch (type) {
       case 'message_received':
         return '💬'
@@ -180,6 +180,12 @@ export default function AdminNotificationsPage() {
       case 'event_created':
       case 'event_updated':
         return '📅'
+      case 'admin_action':
+        // Check if it's a change request notification
+        if (metadata?.change_request_id) {
+          return '📝'
+        }
+        return '⚙️'
       default:
         return '🔔'
     }
@@ -196,6 +202,13 @@ export default function AdminNotificationsPage() {
       return notification.related_entity_id
         ? `/events/${notification.related_entity_id}`
         : basePath
+    } else if (notification.type === 'admin_action') {
+      // Check if it's a change request notification
+      if (notification.metadata?.change_request_id || notification.related_entity_type === 'change_request') {
+        return `${basePath}/change-requests`
+      }
+      // Otherwise go to admin dashboard
+      return basePath
     }
     return basePath
   }
@@ -284,7 +297,7 @@ export default function AdminNotificationsPage() {
                   >
                     <div className="flex items-start gap-4">
                       <span className="text-3xl flex-shrink-0">
-                        {getNotificationIcon(notification.type)}
+                        {getNotificationIcon(notification.type, notification.metadata)}
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-2">

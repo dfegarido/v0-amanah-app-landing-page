@@ -210,6 +210,8 @@ async function createBusinessRecord(supabase: any, subscriptionId: string, userI
   }
 
   // Add optional fields only if provided
+  if (data.title) businessRecord.title = data.title // Business Name
+  if (data.fax) businessRecord.fax = data.fax // Fax number
   if (data.description) businessRecord.description = data.description
   if (data.categories) businessRecord.categories = data.categories.split(',').map((c: string) => c.trim())
   if (data.subCategories) businessRecord.sub_categories = data.subCategories.split(',').map((c: string) => c.trim())

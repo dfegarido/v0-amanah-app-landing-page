@@ -155,6 +155,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   const [subscription, setSubscription] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pendingChangeRequest, setPendingChangeRequest] = useState<any>(null)
 
   const [isEditing, setIsEditing] = useState(false)
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -162,6 +163,14 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(new Set())
   const [uploadingDocuments, setUploadingDocuments] = useState<Set<string>>(new Set())
   const [showSaveConfirmDialog, setShowSaveConfirmDialog] = useState(false)
+  
+  // Services state for editing
+  const [servicesList, setServicesList] = useState<Array<{name: string, link: string}>>([{name: '', link: ''}])
+  const [serviceCount, setServiceCount] = useState(1)
+  
+  // Committee members state for editing
+  const [committeeList, setCommitteeList] = useState<Array<{name: string, title: string, photo: string, uploading?: boolean}>>([{name: '', title: '', photo: ''}])
+  const [committeeCount, setCommitteeCount] = useState(1)
   
   // Refs
   const documentInputRef = useRef<HTMLInputElement>(null)
@@ -220,8 +229,15 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     country: "",
     merchant: "",
     discount: "",
+    discountAmount: "",
+    discountPercentage: "",
+    discountDetails: "",
     redeemCode: "",
     redeemLimit: "",
+    redemptionType: "unlimited",
+    redeemPeriod: "",
+    thumbnailDescription: "",
+    popUpText: "",
     startDate: "",
     endDate: "",
     donateLink: "",
@@ -249,12 +265,11 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     donationMosqueCode: "",
   })
 
-  // Fetch subscription data
-  useEffect(() => {
-    const fetchSubscription = async () => {
-      try {
-        setLoading(true)
-        const response: any = await authenticatedGet('/api/subscriptions')
+  // Fetch subscription data - moved outside useEffect so it can be called from cancel button
+  const fetchSubscription = async () => {
+    try {
+      setLoading(true)
+      const response: any = await authenticatedGet('/api/subscriptions')
         
         if (response.success && response.data) {
           // Find the subscription by ID
@@ -332,6 +347,34 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 donationAmount: entity.donation_amount ? entity.donation_amount.toString() : "",
                 donationMosqueCode: entity.donation_mosque_code ? entity.donation_mosque_code.toString() : "",
               })
+              
+              // Initialize services list for editing
+              try {
+                const parsedServices = entity.services 
+                  ? (typeof entity.services === 'string' ? JSON.parse(entity.services) : entity.services)
+                  : []
+                const initialServices = parsedServices.length > 0 ? parsedServices : [{name: '', link: ''}]
+                setServicesList(initialServices)
+                setServiceCount(initialServices.length)
+              } catch (e) {
+                console.error('Error parsing services:', e)
+                setServicesList([{name: '', link: ''}])
+                setServiceCount(1)
+              }
+              
+              // Initialize committee members list for editing
+              try {
+                const parsedCommittee = entity.committee_members 
+                  ? (typeof entity.committee_members === 'string' ? JSON.parse(entity.committee_members) : entity.committee_members)
+                  : []
+                const initialCommittee = parsedCommittee.length > 0 ? parsedCommittee : [{name: '', title: '', photo: ''}]
+                setCommitteeList(initialCommittee)
+                setCommitteeCount(initialCommittee.length)
+              } catch (e) {
+                console.error('Error parsing committee members:', e)
+                setCommitteeList([{name: '', title: '', photo: ''}])
+                setCommitteeCount(1)
+              }
             }
           } else {
             setError("Subscription not found")
@@ -350,10 +393,67 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       } finally {
         setLoading(false)
       }
-    }
+  }
 
+  // Fetch pending change requests
+  const fetchPendingChangeRequests = async () => {
+    try {
+      const response: any = await authenticatedGet(`/api/subscriptions/${subscriptionId}/change-requests?status=pending`)
+      if (response.success && response.data && response.data.length > 0) {
+        // Get the most recent pending change request
+        setPendingChangeRequest(response.data[0])
+      } else {
+        setPendingChangeRequest(null)
+      }
+    } catch (err: any) {
+      console.error('Error fetching pending change requests:', err)
+      // Silently handle error - change requests are optional
+      setPendingChangeRequest(null)
+    }
+  }
+
+  // Load subscription on mount
+  useEffect(() => {
     fetchSubscription()
+    fetchPendingChangeRequests()
   }, [subscriptionId, toast])
+
+  // Reinitialize services and committee when entering edit mode
+  useEffect(() => {
+    if (isEditing && subscription?.entity) {
+      // Initialize services
+      try {
+        const parsedServices = subscription.entity.services 
+          ? (typeof subscription.entity.services === 'string' 
+              ? JSON.parse(subscription.entity.services) 
+              : subscription.entity.services)
+          : []
+        const initialServices = parsedServices.length > 0 ? parsedServices : [{name: '', link: ''}]
+        setServicesList(initialServices)
+        setServiceCount(initialServices.length)
+      } catch (e) {
+        console.error('Error parsing services for edit mode:', e)
+        setServicesList([{name: '', link: ''}])
+        setServiceCount(1)
+      }
+      
+      // Initialize committee members
+      try {
+        const parsedCommittee = subscription.entity.committee_members 
+          ? (typeof subscription.entity.committee_members === 'string' 
+              ? JSON.parse(subscription.entity.committee_members) 
+              : subscription.entity.committee_members)
+          : []
+        const initialCommittee = parsedCommittee.length > 0 ? parsedCommittee : [{name: '', title: '', photo: ''}]
+        setCommitteeList(initialCommittee)
+        setCommitteeCount(initialCommittee.length)
+      } catch (e) {
+        console.error('Error parsing committee for edit mode:', e)
+        setCommitteeList([{name: '', title: '', photo: ''}])
+        setCommitteeCount(1)
+      }
+    }
+  }, [isEditing, subscription])
 
   const handleCancelSubscription = () => {
     alert("Subscription cancelled successfully. You will retain access until the end of your billing period.")
@@ -364,19 +464,205 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     setShowSaveConfirmDialog(true)
   }
 
-  const handleConfirmSave = () => {
-    // TODO: Implement API call to save changes
+  const handleConfirmSave = async () => {
     setShowSaveConfirmDialog(false)
     setIsEditing(false)
     setShowPhotoUpload(false)
+    
+    // Show pending toast immediately
     toast({
-      title: "Changes Submitted",
-      description: "Your updates will be reviewed and applied within 1-2 business days.",
+      title: "Change Request Submitted!",
+      description: "Your changes are pending admin approval. You'll be notified once they're reviewed.",
     })
+    
+    // Submit change request to API
+    try {
+      const updateData = {
+        subscriptionId: subscription.id,
+        type: subscription.type,
+        data: formData
+      }
+      
+      const response: any = await authenticatedPost('/api/subscriptions/update', updateData)
+      
+      if (response.success) {
+        // Reset form data to original values (no optimistic update)
+        // The UI will show the original data until admin approves
+        await fetchSubscription()
+        
+        // Refresh the pending change requests to show the banner
+        await fetchPendingChangeRequests()
+        console.log('✅ Change request submitted successfully')
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to submit change request",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      console.error('Failed to submit change request:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit change request",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // Service management handlers
+  const handleServiceChange = (idx: number, field: 'name' | 'link', value: string) => {
+    const updatedServices = [...servicesList]
+    updatedServices[idx] = { ...updatedServices[idx], [field]: value }
+    setServicesList(updatedServices)
+    // Update formData with filtered services (remove empty entries)
+    const filtered = updatedServices.filter(s => s.name || s.link)
+    setFormData(prev => ({ ...prev, services: JSON.stringify(filtered) }))
+  }
+
+  const handleAddService = () => {
+    setServiceCount(prev => prev + 1)
+    setServicesList(prev => [...prev, {name: '', link: ''}])
+  }
+
+  const handleRemoveService = (idx: number) => {
+    if (serviceCount > 1) {
+      setServiceCount(prev => prev - 1)
+      const updated = servicesList.filter((_, i) => i !== idx)
+      setServicesList(updated)
+      const filtered = updated.filter(s => s.name || s.link)
+      setFormData(prev => ({ ...prev, services: JSON.stringify(filtered) }))
+    }
+  }
+
+  // Committee management handlers
+  const handleCommitteeChange = (idx: number, field: 'name' | 'title' | 'photo', value: string) => {
+    const updatedCommittee = [...committeeList]
+    updatedCommittee[idx] = { ...updatedCommittee[idx], [field]: value }
+    setCommitteeList(updatedCommittee)
+    // Update formData with filtered committee (remove empty entries)
+    const filtered = updatedCommittee.filter(m => m.name || m.title || m.photo)
+    setFormData(prev => ({ ...prev, committeeMembers: JSON.stringify(filtered) }))
+  }
+
+  const handleAddCommittee = () => {
+    setCommitteeCount(prev => prev + 1)
+    setCommitteeList(prev => [...prev, {name: '', title: '', photo: ''}])
+  }
+
+  const handleRemoveCommittee = (idx: number) => {
+    if (committeeCount > 1) {
+      setCommitteeCount(prev => prev - 1)
+      const updated = committeeList.filter((_, i) => i !== idx)
+      setCommitteeList(updated)
+      const filtered = updated.filter(m => m.name || m.title || m.photo)
+      setFormData(prev => ({ ...prev, committeeMembers: JSON.stringify(filtered) }))
+    }
+  }
+
+  // Committee photo upload handler
+  const handleCommitteePhotoUpload = async (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPEG or PNG image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create temporary preview URL (optimistic UI)
+    const tempPreviewUrl = URL.createObjectURL(file)
+    
+    // Update member with temp preview and uploading status
+    const updatedMembers = [...committeeList]
+    updatedMembers[index] = { ...updatedMembers[index], photo: tempPreviewUrl, uploading: true }
+    setCommitteeList(updatedMembers)
+
+    try {
+      // Process and upload in background
+      const processedFile = await resizeImage(file, 1) // Smaller size for profile photos
+
+      const getTableName = (type: string): string => {
+        if (type === 'business') return 'businesses'
+        return `${type}s`
+      }
+
+      const fileName = `committee-${subscription.type}-${Date.now()}-${Math.random().toString(36).substring(7)}.webp`
+      const filePath = `${getTableName(subscription.type)}/${fileName}`
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(filePath, processedFile, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Upload error:', error)
+        
+        // Remove temp preview on error
+        const resetMembers = [...committeeList]
+        resetMembers[index] = { ...resetMembers[index], photo: '', uploading: false }
+        setCommitteeList(resetMembers)
+        URL.revokeObjectURL(tempPreviewUrl)
+        
+        toast({
+          title: "Upload failed",
+          description: error.message || "Failed to upload photo",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(filePath)
+
+      // Replace temp URL with real URL
+      const finalMembers = [...committeeList]
+      finalMembers[index] = { ...finalMembers[index], photo: publicUrl, uploading: false }
+      setCommitteeList(finalMembers)
+      
+      // Update formData
+      const filtered = finalMembers.filter(m => m.name || m.title || m.photo)
+      setFormData(prev => ({ ...prev, committeeMembers: JSON.stringify(filtered) }))
+      
+      // Clean up temp URL
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload complete",
+        description: `Photo uploaded successfully`,
+      })
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      
+      // Remove temp preview on error
+      const resetMembers = [...committeeList]
+      resetMembers[index] = { ...resetMembers[index], photo: '', uploading: false }
+      setCommitteeList(resetMembers)
+      URL.revokeObjectURL(tempPreviewUrl)
+      
+      toast({
+        title: "Upload failed",
+        description: error.message || "An error occurred while uploading the photo",
+        variant: "destructive",
+      })
+    }
+    
+    // Reset input
+    event.target.value = ''
   }
 
   // Helper function to resize/compress image and convert to WebP
@@ -1195,6 +1481,34 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         </div>
       </header>
 
+      {/* Pending Change Request Banner */}
+      {pendingChangeRequest && (
+        <div className="border-b border-border bg-yellow-50 dark:bg-yellow-950/20">
+          <div className="container mx-auto px-4 py-4 max-w-4xl">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
+                  Change Request Pending Approval
+                </h3>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2">
+                  Your change request submitted on {new Date(pendingChangeRequest.created_at).toLocaleDateString()} is awaiting admin approval. 
+                  You cannot make additional changes until this request is reviewed.
+                </p>
+                <div className="text-xs text-yellow-700 dark:text-yellow-300">
+                  <strong>Requested Changes:</strong> {Object.keys(pendingChangeRequest.changes || {}).length} field(s)
+                </div>
+              </div>
+              <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700">
+                Pending
+              </Badge>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="container mx-auto p-6 space-y-6">
         {/* Quick Actions Card */}
         {subscription.type === "mosque" && (
@@ -1258,7 +1572,11 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
               </div>
               <div className="flex gap-2 ml-4">
                 {!isEditing ? (
-                  <Button variant="outline" onClick={() => setIsEditing(true)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsEditing(true)}
+                    disabled={!!pendingChangeRequest}
+                  >
                     <Edit className="h-4 w-4 mr-2" />
                     Edit Details
                   </Button>
@@ -1267,6 +1585,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     <Button variant="outline" onClick={() => {
                       setIsEditing(false)
                       setShowPhotoUpload(false) // Close photo upload section when canceling
+                      // Reload subscription data to reset all fields including services
+                      fetchSubscription()
                     }}>
                       <X className="h-4 w-4 mr-2" />
                       Cancel
@@ -1500,66 +1820,191 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 
                 <Separator />
                 <h3 className="font-semibold">Services / Programs</h3>
-                {(() => {
-                  try {
-                    const services = typeof subscription.entity?.services === 'string' 
-                      ? JSON.parse(subscription.entity.services)
-                      : subscription.entity?.services || []
-                    
-                    return services.length > 0 ? (
-                      <div className="space-y-3">
-                        {services.map((service: any, idx: number) => (
-                          <div key={idx} className="border-l-2 border-primary pl-4">
-                            <p className="font-medium">{service.name}</p>
-                            {service.link && (
-                              <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                                {service.link}
-                              </a>
-                            )}
-                          </div>
-                        ))}
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-muted-foreground">Add services or programs your organization offers</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddService}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Service
+                      </Button>
+                    </div>
+                    {Array.from({ length: serviceCount }).map((_, idx) => (
+                      <div key={idx} className="grid md:grid-cols-2 gap-3 p-3 border rounded-lg">
+                        <Input
+                          value={servicesList[idx]?.name || ''}
+                          placeholder="Service/Program name"
+                          onChange={(e) => handleServiceChange(idx, 'name', e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="url"
+                            value={servicesList[idx]?.link || ''}
+                            placeholder="Link (optional)"
+                            className="flex-1"
+                            onChange={(e) => handleServiceChange(idx, 'link', e.target.value)}
+                          />
+                          {serviceCount > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveService(idx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-muted-foreground">No services/programs listed</p>
-                    )
-                  } catch (e) {
-                    return <p className="text-muted-foreground">No services/programs listed</p>
-                  }
-                })()}
+                    ))}
+                  </div>
+                ) : (
+                  (() => {
+                    try {
+                      const services = typeof subscription.entity?.services === 'string' 
+                        ? JSON.parse(subscription.entity.services)
+                        : subscription.entity?.services || []
+                      
+                      return services.length > 0 ? (
+                        <div className="space-y-3">
+                          {services.map((service: any, idx: number) => (
+                            <div key={idx} className="border-l-2 border-primary pl-4">
+                              <p className="font-medium">{service.name}</p>
+                              {service.link && (
+                                <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                                  {service.link}
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No services/programs listed</p>
+                      )
+                    } catch (e) {
+                      return <p className="text-muted-foreground">No services/programs listed</p>
+                    }
+                  })()
+                )}
                 
                 <Separator />
                 <h3 className="font-semibold">Board Members / Leadership Team</h3>
-                {(() => {
-                  try {
-                    const committee = typeof subscription.entity?.committee_members === 'string' 
-                      ? JSON.parse(subscription.entity.committee_members)
-                      : subscription.entity?.committee_members || []
-                    
-                    return committee.length > 0 ? (
-                      <div className="grid gap-4 md:grid-cols-3">
-                        {committee.map((member: any, idx: number) => (
-                          <div key={idx} className="border rounded-lg p-4 space-y-2">
-                            {member.photo && (
-                              <img 
-                                src={member.photo} 
-                                alt={member.name} 
-                                className="w-20 h-20 rounded-full object-cover mx-auto"
-                              />
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-muted-foreground">Add board members or leadership team</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddCommittee}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Member
+                      </Button>
+                    </div>
+                    {Array.from({ length: committeeCount }).map((_, idx) => (
+                      <div key={idx} className="grid md:grid-cols-3 gap-3 p-4 border rounded-lg relative">
+                        <div className="space-y-2">
+                          <Label className="text-sm">Photo</Label>
+                          <div className="flex flex-col gap-2">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              className="hidden"
+                              id={`nonprofit-committee-photo-${idx}`}
+                              onChange={(e) => handleCommitteePhotoUpload(idx, e)}
+                            />
+                            <Button 
+                              type="button"
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => document.getElementById(`nonprofit-committee-photo-${idx}`)?.click()}
+                              disabled={committeeList[idx]?.uploading}
+                            >
+                              {committeeList[idx]?.uploading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4 mr-1" />
+                                  {committeeList[idx]?.photo ? 'Change' : 'Upload'}
+                                </>
+                              )}
+                            </Button>
+                            {committeeList[idx]?.photo && !committeeList[idx]?.uploading && (
+                              <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                                <img src={committeeList[idx]?.photo} alt={committeeList[idx]?.name || 'Member'} className="w-full h-full object-cover" />
+                              </div>
                             )}
-                            <div className="text-center">
-                              <p className="font-medium">{member.name}</p>
-                              <p className="text-sm text-muted-foreground">{member.title}</p>
-                            </div>
                           </div>
-                        ))}
+                        </div>
+                        <Input
+                          value={committeeList[idx]?.name || ''}
+                          placeholder="Full Name"
+                          onChange={(e) => handleCommitteeChange(idx, 'name', e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            value={committeeList[idx]?.title || ''}
+                            placeholder="Title / Role (e.g., President)"
+                            className="flex-1"
+                            onChange={(e) => handleCommitteeChange(idx, 'title', e.target.value)}
+                          />
+                          {committeeCount > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveCommittee(idx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-muted-foreground">No board members listed</p>
-                    )
-                  } catch (e) {
-                    return <p className="text-muted-foreground">No board members listed</p>
-                  }
-                })()}
+                    ))}
+                  </div>
+                ) : (
+                  (() => {
+                    try {
+                      const committee = typeof subscription.entity?.committee_members === 'string' 
+                        ? JSON.parse(subscription.entity.committee_members)
+                        : subscription.entity?.committee_members || []
+                      
+                      return committee.length > 0 ? (
+                        <div className="grid gap-4 md:grid-cols-3">
+                          {committee.map((member: any, idx: number) => (
+                            <div key={idx} className="border rounded-lg p-4 space-y-2">
+                              {member.photo && (
+                                <img 
+                                  src={member.photo} 
+                                  alt={member.name} 
+                                  className="w-20 h-20 rounded-full object-cover mx-auto"
+                                />
+                              )}
+                              <div className="text-center">
+                                <p className="font-medium">{member.name}</p>
+                                <p className="text-sm text-muted-foreground">{member.title}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No board members listed</p>
+                      )
+                    } catch (e) {
+                      return <p className="text-muted-foreground">No board members listed</p>
+                    }
+                  })()
+                )}
               </>
             )}
 
@@ -2189,66 +2634,191 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 
                 <Separator />
                 <h3 className="font-semibold">Services Offered</h3>
-                {(() => {
-                  try {
-                    const services = typeof subscription.entity?.services === 'string' 
-                      ? JSON.parse(subscription.entity.services)
-                      : subscription.entity?.services || []
-                    
-                    return services.length > 0 ? (
-                      <div className="space-y-3">
-                        {services.map((service: any, idx: number) => (
-                          <div key={idx} className="border-l-2 border-primary pl-4">
-                            <p className="font-medium">{service.name}</p>
-                            {service.link && (
-                              <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                                {service.link}
-                              </a>
-                            )}
-                          </div>
-                        ))}
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-muted-foreground">Add services your mosque offers to the community</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddService}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Service
+                      </Button>
+                    </div>
+                    {Array.from({ length: serviceCount }).map((_, idx) => (
+                      <div key={idx} className="grid md:grid-cols-2 gap-3 p-3 border rounded-lg">
+                        <Input
+                          value={servicesList[idx]?.name || ''}
+                          placeholder={`Service name (e.g., ${idx === 0 ? 'Counseling Services' : idx === 1 ? 'Nikah Services' : 'Funeral Services'})`}
+                          onChange={(e) => handleServiceChange(idx, 'name', e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            type="url"
+                            value={servicesList[idx]?.link || ''}
+                            placeholder="Service page link (optional)"
+                            className="flex-1"
+                            onChange={(e) => handleServiceChange(idx, 'link', e.target.value)}
+                          />
+                          {serviceCount > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveService(idx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-muted-foreground">No services listed</p>
-                    )
-                  } catch (e) {
-                    return <p className="text-muted-foreground">No services listed</p>
-                  }
-                })()}
+                    ))}
+                  </div>
+                ) : (
+                  (() => {
+                    try {
+                      const services = typeof subscription.entity?.services === 'string' 
+                        ? JSON.parse(subscription.entity.services)
+                        : subscription.entity?.services || []
+                      
+                      return services.length > 0 ? (
+                        <div className="space-y-3">
+                          {services.map((service: any, idx: number) => (
+                            <div key={idx} className="border-l-2 border-primary pl-4">
+                              <p className="font-medium">{service.name}</p>
+                              {service.link && (
+                                <a href={service.link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                                  {service.link}
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No services listed</p>
+                      )
+                    } catch (e) {
+                      return <p className="text-muted-foreground">No services listed</p>
+                    }
+                  })()
+                )}
                 
                 <Separator />
                 <h3 className="font-semibold">Committee / Board of Trustees</h3>
-                {(() => {
-                  try {
-                    const committee = typeof subscription.entity?.committee_members === 'string' 
-                      ? JSON.parse(subscription.entity.committee_members)
-                      : subscription.entity?.committee_members || []
-                    
-                    return committee.length > 0 ? (
-                      <div className="grid gap-4 md:grid-cols-3">
-                        {committee.map((member: any, idx: number) => (
-                          <div key={idx} className="border rounded-lg p-4 space-y-2">
-                            {member.photo && (
-                              <img 
-                                src={member.photo} 
-                                alt={member.name} 
-                                className="w-20 h-20 rounded-full object-cover mx-auto"
-                              />
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm text-muted-foreground">Add committee members or board of trustees</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddCommittee}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Member
+                      </Button>
+                    </div>
+                    {Array.from({ length: committeeCount }).map((_, idx) => (
+                      <div key={idx} className="grid md:grid-cols-3 gap-3 p-4 border rounded-lg relative">
+                        <div className="space-y-2">
+                          <Label className="text-sm">Photo</Label>
+                          <div className="flex flex-col gap-2">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              className="hidden"
+                              id={`mosque-committee-photo-${idx}`}
+                              onChange={(e) => handleCommitteePhotoUpload(idx, e)}
+                            />
+                            <Button 
+                              type="button"
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => document.getElementById(`mosque-committee-photo-${idx}`)?.click()}
+                              disabled={committeeList[idx]?.uploading}
+                            >
+                              {committeeList[idx]?.uploading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4 mr-1" />
+                                  {committeeList[idx]?.photo ? 'Change' : 'Upload'}
+                                </>
+                              )}
+                            </Button>
+                            {committeeList[idx]?.photo && !committeeList[idx]?.uploading && (
+                              <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                                <img src={committeeList[idx]?.photo} alt={committeeList[idx]?.name || 'Member'} className="w-full h-full object-cover" />
+                              </div>
                             )}
-                            <div className="text-center">
-                              <p className="font-medium">{member.name}</p>
-                              <p className="text-sm text-muted-foreground">{member.title}</p>
-                            </div>
                           </div>
-                        ))}
+                        </div>
+                        <Input
+                          value={committeeList[idx]?.name || ''}
+                          placeholder="Full Name"
+                          onChange={(e) => handleCommitteeChange(idx, 'name', e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            value={committeeList[idx]?.title || ''}
+                            placeholder="Title / Role (e.g., President)"
+                            className="flex-1"
+                            onChange={(e) => handleCommitteeChange(idx, 'title', e.target.value)}
+                          />
+                          {committeeCount > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveCommittee(idx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-muted-foreground">No committee members listed</p>
-                    )
-                  } catch (e) {
-                    return <p className="text-muted-foreground">No committee members listed</p>
-                  }
-                })()}
+                    ))}
+                  </div>
+                ) : (
+                  (() => {
+                    try {
+                      const committee = typeof subscription.entity?.committee_members === 'string' 
+                        ? JSON.parse(subscription.entity.committee_members)
+                        : subscription.entity?.committee_members || []
+                      
+                      return committee.length > 0 ? (
+                        <div className="grid gap-4 md:grid-cols-3">
+                          {committee.map((member: any, idx: number) => (
+                            <div key={idx} className="border rounded-lg p-4 space-y-2">
+                              {member.photo && (
+                                <img 
+                                  src={member.photo} 
+                                  alt={member.name} 
+                                  className="w-20 h-20 rounded-full object-cover mx-auto"
+                                />
+                              )}
+                              <div className="text-center">
+                                <p className="font-medium">{member.name}</p>
+                                <p className="text-sm text-muted-foreground">{member.title}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No committee members listed</p>
+                      )
+                    } catch (e) {
+                      return <p className="text-muted-foreground">No committee members listed</p>
+                    }
+                  })()
+                )}
               </>
             )}
 

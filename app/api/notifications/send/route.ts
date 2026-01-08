@@ -3,7 +3,7 @@ import { getServerSupabase } from '@/lib/auth'
 import { successResponse, errorResponse, requireAuth } from '@/lib/api-helpers'
 
 interface SendNotificationRequest {
-  type: 'new_subscription' | 'subscription_cancelled' | 'payment_failed'
+  type: 'new_subscription' | 'subscription_cancelled' | 'payment_failed' | 'subscription_updated'
   subscriptionId: string
   subscriptionType: 'mosque' | 'business' | 'coupon' | 'nonprofit'
   entityName: string
@@ -101,6 +101,24 @@ export async function POST(request: NextRequest) {
           </ul>
           
           <p>Please contact the user to update their payment method.</p>
+        `
+        break
+
+      case 'subscription_updated':
+        subject = `📝 Subscription Details Updated`
+        emailBody = `
+          <h2>Subscription Details Updated</h2>
+          <p>A member has updated their ${body.subscriptionType} subscription details.</p>
+          
+          <h3>Details:</h3>
+          <ul>
+            <li><strong>Type:</strong> ${body.subscriptionType.charAt(0).toUpperCase() + body.subscriptionType.slice(1)}</li>
+            <li><strong>Name:</strong> ${body.entityName}</li>
+            <li><strong>Subscription ID:</strong> ${body.subscriptionId}</li>
+          </ul>
+          
+          <p>Please review the changes in the admin dashboard to verify the updated information.</p>
+          <p><a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://amanahbiz.com'}/admin">View in Admin Dashboard</a></p>
         `
         break
     }

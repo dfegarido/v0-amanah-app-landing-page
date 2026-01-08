@@ -566,14 +566,15 @@ export default function MemberDashboard() {
               <DollarSign className="h-4 w-4 mr-2" />
               Affiliate Earnings
             </TabsTrigger>
-            <TabsTrigger value="messages" className="relative">
+            {/* Messages tab hidden per user request */}
+            {/* <TabsTrigger value="messages" className="relative">
               Messages
               {unreadMessageCount > 0 && (
                 <Badge className="ml-2 h-5 min-w-5 flex items-center justify-center px-1.5">
                   {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
                 </Badge>
               )}
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           <TabsContent value="subscriptions" className="space-y-8">
@@ -1266,7 +1267,8 @@ export default function MemberDashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="messages" className="space-y-4">
+          {/* Messages tab content hidden per user request */}
+          {/* <TabsContent value="messages" className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">Messages</h3>
@@ -1386,7 +1388,7 @@ export default function MemberDashboard() {
                 })()}
               </CardContent>
             </Card>
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </main>
     </div>

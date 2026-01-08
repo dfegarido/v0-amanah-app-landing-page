@@ -396,6 +396,8 @@ async function createBusinessRecord(supabase: any, subscriptionId: string, userI
       subscription_id: subscriptionId,
       user_id: userId,
       name: data.title || data.name,
+      title: data.title, // Business Name
+      fax: data.fax, // Fax number
       description: data.description,
       categories: data.categories ? data.categories.split(',').map((c: string) => c.trim()) : [],
       sub_categories: data.subCategories ? data.subCategories.split(',').map((c: string) => c.trim()) : [],

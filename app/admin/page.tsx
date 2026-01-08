@@ -1084,35 +1084,26 @@ export default function AdminDashboard() {
       type: subscription.type
     })
     
-    // If cancelled or removed, show "Mark as Removed" to clear and turn gray
-    if (subscription.status === "cancelled" && subscription.appStatus !== "removed") {
+    // If removed, show "To Be Removed" text (no button)
+    if (subscription.appStatus === "removed") {
       return (
-        <Button
-          size="sm"
-          variant="outline"
-          className="bg-gray-400/10 hover:bg-gray-400/20 text-gray-600 border-gray-400/20"
-          onClick={(e) => {
-            e.stopPropagation()
-            updateAppStatus(subscriptionId, "removed")
-          }}
-        >
-          <X className="h-4 w-4 mr-1" />
-          Mark as Removed
-        </Button>
+        <Badge variant="outline" className="bg-gray-400/10 text-gray-600 border-gray-400/20">
+          To Be Removed
+        </Badge>
       )
     }
 
-    // If removed, show "Mark as Added" to bring back online
-    if (subscription.appStatus === "removed") {
+    // If cancelled, show "Mark as Removed" button so admin can manually remove it
+    if (subscription.status === "cancelled" || subscription.appStatus === "cancelled") {
       const isUpdating = updatingSubscriptionId === subscriptionId
       return (
         <Button
           size="sm"
           variant="outline"
-          className="bg-green-500/10 hover:bg-green-500/20 text-green-600 border-green-500/20"
+          className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 border-orange-500/20"
           onClick={(e) => {
             e.stopPropagation()
-            updateAppStatus(subscriptionId, "active", "active")
+            updateAppStatus(subscriptionId, "removed", "inactive")
           }}
           disabled={isUpdating}
         >
@@ -1123,8 +1114,8 @@ export default function AdminDashboard() {
             </>
           ) : (
             <>
-              <Check className="h-4 w-4 mr-1" />
-              Mark as Added
+              <X className="h-4 w-4 mr-1" />
+              Mark as Removed
             </>
           )}
         </Button>
@@ -1592,6 +1583,12 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/change-requests">
+                <FileText className="h-4 w-4 mr-2" />
+                Change Requests
+              </Link>
+            </Button>
             {/* CHANGE: Make settings button functional */}
             <Button variant="ghost" size="icon" asChild>
               <Link href="/admin/settings">
