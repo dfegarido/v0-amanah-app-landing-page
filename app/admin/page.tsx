@@ -878,7 +878,7 @@ export default function AdminDashboard() {
         const recordAmount = sub.type === 'business' && sub.entity?.donation_amount 
           ? amount - (sub.entity.donation_amount || 0) 
           : amount
-        
+
         records.push({
           id: sub.id,
           date: subscriptionDate,
@@ -1935,11 +1935,11 @@ export default function AdminDashboard() {
                                     <div className="mt-3 pt-3 border-t">
                                       <p className="font-medium text-xs text-muted-foreground mb-2">Emergency Contact</p>
                                       {(mosque as any).emergency_contact_name && (
-                                        <div className="flex items-center gap-2">
-                                          <Users className="h-4 w-4 text-muted-foreground" />
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4 text-muted-foreground" />
                                           <span>{(mosque as any).emergency_contact_name}</span>
-                                        </div>
-                                      )}
+                                    </div>
+                                  )}
                                       {(mosque as any).emergency_contact_phone && (
                                         <div className="flex items-center gap-2">
                                           <Phone className="h-4 w-4 text-muted-foreground" />
@@ -2137,17 +2137,6 @@ export default function AdminDashboard() {
                                 Third Party Integrations
                               </h4>
                               <div className="space-y-3">
-                                {/* Amanah App - Coming soon */}
-                                <div className="p-3 rounded-lg bg-secondary/50 border border-dashed">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="font-medium text-muted-foreground">Amanah App</p>
-                                    <Badge variant="outline" className="text-muted-foreground">Coming Soon</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    Mosque login credentials will be available in the next version
-                                  </p>
-                                </div>
-                                
                                 {/* Stripe Connected Account */}
                                 <div className="p-3 rounded-lg bg-secondary/50 border">
                                   <div className="flex items-center justify-between mb-2">
@@ -2441,14 +2430,362 @@ export default function AdminDashboard() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="border-t border-border p-6 bg-secondary/20 space-y-6">
-                          {/* Photos Gallery */}
-                          {business.photos && business.photos.length > 0 && (
+                          {/* Business Details Card */}
+                          <div className="grid md:grid-cols-2 gap-6">
+                            {/* Left Column */}
+                            <div className="space-y-4">
+                              {/* Business Name */}
                             <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="font-semibold flex items-center gap-2">
-                                  <ImageIcon className="h-4 w-4" />
-                                  Photos ({business.photos.length})
-                                </h4>
+                                <p className="text-xs text-muted-foreground mb-1">Business Name</p>
+                                <p className="font-semibold">{business.title}</p>
+                              </div>
+
+                              {/* Categories */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Categories</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {business.categories && business.categories.length > 0 ? (
+                                    business.categories.map((cat, idx) => (
+                                      <Badge key={idx} variant="secondary" className="text-xs">
+                                        {cat}
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">Not provided</p>
+                                  )}
+                              </div>
+                            </div>
+
+                              {/* Phone */}
+                          <div>
+                                <p className="text-xs text-muted-foreground mb-1">Phone</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{business.phone || 'Not provided'}</p>
+                                  {business.phone && <CopyButton text={business.phone} fieldId={`${business.id}-phone`} />}
+                                </div>
+                          </div>
+
+                              {/* Email */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Email</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{business.email || 'Not provided'}</p>
+                                  {business.email && <CopyButton text={business.email} fieldId={`${business.id}-email`} />}
+                                </div>
+                                </div>
+
+                              {/* Website */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Website</p>
+                                {business.website ? (
+                                    <a
+                                      href={business.website}
+                                      target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                      rel="noreferrer"
+                                    >
+                                      {business.website}
+                                    <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+
+                              {/* Fax */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Fax</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{(business as any).fax || 'Not provided'}</p>
+                                  {(business as any).fax && <CopyButton text={(business as any).fax} fieldId={`${business.id}-fax`} />}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Right Column */}
+                            <div className="space-y-4">
+                              {/* Zip */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Zip</p>
+                                <p className="text-sm">{business.zip || 'Not provided'}</p>
+                              </div>
+
+                              {/* Address */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Address</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{business.address || 'Not provided'}</p>
+                                  {business.address && (
+                                <CopyButton
+                                  text={`${business.address}, ${business.city}, ${business.state} ${business.zip}`}
+                                  fieldId={`${business.id}-address`}
+                                />
+                                  )}
+                              </div>
+                            </div>
+
+                              {/* City */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">City</p>
+                                <p className="text-sm">{business.city || 'Not provided'}</p>
+                          </div>
+
+                              {/* State */}
+                          <div>
+                                <p className="text-xs text-muted-foreground mb-1">State</p>
+                                <p className="text-sm">{business.state || 'Not provided'}</p>
+                              </div>
+
+                              {/* Country */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Country</p>
+                                <p className="text-sm">{business.country || 'USA'}</p>
+                              </div>
+
+                              {/* Description */}
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Description</p>
+                                <p className="text-sm whitespace-pre-wrap">{business.description || 'Not provided'}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Internal Contact Information */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Internal Contact Information</h4>
+                            <p className="text-xs text-muted-foreground mb-3">For internal use only, not displayed publicly</p>
+                            <div className="grid md:grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Contact Name</p>
+                                <p className="text-sm">{(business as any).contact_name || 'Not provided'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Contact Cell</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{(business as any).contact_phone || 'Not provided'}</p>
+                                  {(business as any).contact_phone && (
+                                    <CopyButton text={(business as any).contact_phone} fieldId={`${business.id}-contact-phone`} />
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Contact Email</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{(business as any).contact_email || 'Not provided'}</p>
+                                  {(business as any).contact_email && (
+                                    <CopyButton text={(business as any).contact_email} fieldId={`${business.id}-contact-email`} />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Social Media */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Social Media</h4>
+                            <div className="grid md:grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Facebook</p>
+                                {(business as any).facebook ? (
+                                  <a
+                                    href={(business as any).facebook}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).facebook}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Instagram</p>
+                                {(business as any).instagram ? (
+                                  <a
+                                    href={(business as any).instagram}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).instagram}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Twitter/X</p>
+                                {(business as any).twitter ? (
+                                  <a
+                                    href={(business as any).twitter}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).twitter}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">YouTube</p>
+                                {(business as any).youtube ? (
+                                  <a
+                                    href={(business as any).youtube}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).youtube}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">LinkedIn</p>
+                                {(business as any).linkedin ? (
+                                  <a
+                                    href={(business as any).linkedin}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).linkedin}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">TikTok</p>
+                                {(business as any).tiktok ? (
+                                  <a
+                                    href={(business as any).tiktok}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).tiktok}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Google</p>
+                                {(business as any).google ? (
+                                  <a
+                                    href={(business as any).google}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).google}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Other</p>
+                                {(business as any).other_social ? (
+                                  <a
+                                    href={(business as any).other_social}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(business as any).other_social}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Additional Information */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Additional Information</h4>
+                            <p className="text-sm whitespace-pre-wrap">{(business as any).comments || 'Not provided'}</p>
+                          </div>
+
+                          <Separator />
+
+                          {/* Additional Donation */}
+                          <div>
+                            <h4 className="font-semibold mb-2">Additional Donation</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {(business as any).additionalDonationAmount 
+                                ? `$${(business as any).additionalDonationAmount}` 
+                                : 'No additional donation requested'}
+                            </p>
+                          </div>
+
+                          <Separator />
+
+                          {/* Subscription Details */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Subscription Details</h4>
+                            <div className="grid md:grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Price</p>
+                                <p className="text-sm font-semibold">${business.price}/month</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Next Billing Date</p>
+                                <p className="text-sm">
+                                  {business.next_billing_date 
+                                    ? new Date(business.next_billing_date).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                      })
+                                    : 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Payment Start Date</p>
+                                <p className="text-sm">
+                                  {business.paymentStartDate 
+                                    ? new Date(business.paymentStartDate).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                      })
+                                    : 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Photos Gallery */}
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-semibold flex items-center gap-2">
+                                <ImageIcon className="h-4 w-4" />
+                                Photos {business.photos && business.photos.length > 0 ? `(${business.photos.length})` : ''}
+                              </h4>
+                              {business.photos && business.photos.length > 0 && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -2457,7 +2794,9 @@ export default function AdminDashboard() {
                                   <Download className="h-4 w-4 mr-2" />
                                   Download All Photos
                                 </Button>
-                              </div>
+                              )}
+                            </div>
+                            {business.photos && business.photos.length > 0 ? (
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 {business.photos.map((photo, idx) => (
                                   <img
@@ -2466,94 +2805,29 @@ export default function AdminDashboard() {
                                     alt={`${business.title} ${idx + 1}`}
                                     className="h-24 w-full object-cover rounded-lg"
                                   />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Description */}
-                          <div>
-                            <h4 className="font-semibold mb-2">Description</h4>
-                            <p className="text-sm text-muted-foreground">{business.description}</p>
-                          </div>
-
-                          {/* Contact & Location */}
-                          <div className="grid md:grid-cols-2 gap-4">
-                            <div className="space-y-3">
-                              <h4 className="font-semibold">Contact Information</h4>
-                              <div className="space-y-2 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <Mail className="h-4 w-4 text-muted-foreground" />
-                                  <span>{business.email}</span>
-                                  <CopyButton text={business.email} fieldId={`${business.id}-email`} />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Phone className="h-4 w-4 text-muted-foreground" />
-                                  <span>{business.phone}</span>
-                                  <CopyButton text={business.phone} fieldId={`${business.id}-phone`} />
-                                </div>
-                                {business.website && (
-                                  <div className="flex items-center gap-2">
-                                    <Globe className="h-4 w-4 text-muted-foreground" />
-                                    <a
-                                      href={business.website}
-                                      target="_blank"
-                                      className="text-primary hover:underline"
-                                      rel="noreferrer"
-                                    >
-                                      {business.website}
-                                    </a>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <h4 className="font-semibold">Location</h4>
-                              <div className="space-y-2 text-sm">
-                                <p>
-                                  {business.address}, {business.city}, {business.state} {business.zip}
-                                </p>
-                                <p>{business.country}</p>
-                                <CopyButton
-                                  text={`${business.address}, ${business.city}, ${business.state} ${business.zip}`}
-                                  fieldId={`${business.id}-address`}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Categories */}
-                          <div>
-                            <h4 className="font-semibold mb-2">Categories</h4>
-                            <div className="flex flex-wrap gap-2">
-                              {business.categories?.map((cat, idx) => (
-                                <Badge key={idx} variant="secondary">
-                                  {cat}
-                                </Badge>
-                              ))}
-                              {business.subCategories?.map((cat, idx) => (
-                                <Badge key={idx} variant="outline">
-                                  {cat}
-                                </Badge>
                               ))}
                             </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No photos uploaded</p>
+                            )}
                           </div>
+
+                          <Separator />
 
                           {/* Documents */}
-                          {business.documents && business.documents.length > 0 && (
                             <div>
                               <h4 className="font-semibold flex items-center gap-2 mb-3">
                                 <FileText className="h-4 w-4" />
                                 Documents
                               </h4>
+                            {business.documents && business.documents.length > 0 ? (
                               <div className="space-y-2">
                                 {business.documents.map((doc) => (
                                   <div
                                     key={doc.id}
                                     className="flex items-center justify-between p-3 rounded-lg bg-secondary"
                                   >
-                                    <span>{doc.name}</span>
+                                    <span className="text-sm">{doc.name}</span>
                                     <Button 
                                       variant="ghost" 
                                       size="sm"
@@ -2565,8 +2839,10 @@ export default function AdminDashboard() {
                                   </div>
                                 ))}
                               </div>
-                            </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No documents uploaded yet</p>
                           )}
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </div>
@@ -2736,7 +3012,7 @@ export default function AdminDashboard() {
                                     {(coupon as any).redeem_limit} redemption(s) per {(coupon as any).redeem_period}
                                   </p>
                                 )}
-                              </div>
+                                </div>
                             </div>
                           </div>
 
@@ -2748,22 +3024,22 @@ export default function AdminDashboard() {
                                 <div>
                                   <span className="font-medium text-muted-foreground">Discount Amount:</span>
                                   <p className="mt-0.5">{(coupon as any).discount_amount}</p>
-                                </div>
-                              )}
+                                  </div>
+                                )}
                               {(coupon as any).discount_percentage && (
                                 <div>
                                   <span className="font-medium text-muted-foreground">Discount Percentage:</span>
                                   <p className="mt-0.5">{(coupon as any).discount_percentage}</p>
-                                </div>
-                              )}
+                                  </div>
+                                )}
                             </div>
                             {(coupon as any).discount_details && (
                               <div className="mt-2">
                                 <span className="font-medium text-muted-foreground">Offer Details:</span>
                                 <p className="mt-0.5 whitespace-pre-wrap">{(coupon as any).discount_details}</p>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
 
                           {/* Description & Display */}
                           <div>
@@ -2772,7 +3048,7 @@ export default function AdminDashboard() {
                               <div>
                                 <span className="font-medium text-muted-foreground">Description:</span>
                                 <p className="mt-0.5 whitespace-pre-wrap">{(coupon as any).description || 'No description provided'}</p>
-                              </div>
+                            </div>
                               {(coupon as any).thumbnail_description && (
                                 <div>
                                   <span className="font-medium text-muted-foreground">Thumbnail Description:</span>
@@ -2832,8 +3108,8 @@ export default function AdminDashboard() {
                                 <p className="mt-0.5">
                                   {new Date((coupon as any).startDate || (coupon as any).created_at).toLocaleDateString()}
                                 </p>
-                              </div>
-                              {(coupon as any).affiliated_mosque_code && (
+                                </div>
+                                {(coupon as any).affiliated_mosque_code && (
                                 <div>
                                   <span className="font-medium text-muted-foreground">Affiliated Mosque:</span>
                                   <div className="mt-0.5">
@@ -2841,8 +3117,8 @@ export default function AdminDashboard() {
                                       #{(coupon as any).affiliated_mosque_code}
                                     </Badge>
                                   </div>
-                                </div>
-                              )}
+                                  </div>
+                                )}
                             </div>
                           </div>
                         </div>
@@ -2890,9 +3166,12 @@ export default function AdminDashboard() {
                           </div>
                           <div className="flex items-center gap-2">
                             {getActionButton(nonprofit)}
-                            <Button variant="outline" size="sm">
-                              Cancel Subscription
-                            </Button>
+                            <div className="text-right mr-2">
+                              <p className="text-sm font-semibold text-foreground">${(nonprofit as any).subscriptionPrice || (nonprofit as any).price || 0}/mo</p>
+                              <p className="text-xs text-muted-foreground">
+                                Started: {new Date((nonprofit as any).startDate || (nonprofit as any).paymentStartDate || (nonprofit as any).created_at).toLocaleDateString()}
+                              </p>
+                            </div>
                             {expandedItems[subscriptionId] ? (
                               <ChevronUp className="h-5 w-5" />
                             ) : (
@@ -2905,140 +3184,340 @@ export default function AdminDashboard() {
                         <div className="border-t border-border p-6 bg-secondary/20 space-y-6">
                           {/* Organization Name */}
                           <div>
-                            <h4 className="text-muted-foreground text-sm mb-1">Organization Name</h4>
-                            <p className="font-medium">{nonprofit.name}</p>
+                            <p className="text-xs text-muted-foreground mb-1">Organization Name</p>
+                            <p className="font-semibold">{nonprofit.name}</p>
                           </div>
 
-                          {/* Contact Details in 2 columns */}
-                          <div className="grid md:grid-cols-2 gap-6">
-                            {/* Email */}
+                          <Separator />
+
+                          {/* Location */}
                             <div>
-                              <h4 className="text-muted-foreground text-sm mb-1">Email</h4>
+                            <h4 className="font-semibold mb-3">Location</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Address</p>
                               <div className="flex items-center gap-2">
-                                <p>{(nonprofit as any).email}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => navigator.clipboard.writeText((nonprofit as any).email)}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
+                                  <p className="text-sm">{(nonprofit as any).address || 'Not provided'}</p>
+                                  {(nonprofit as any).address && (
+                                    <CopyButton
+                                      text={`${(nonprofit as any).address}, ${(nonprofit as any).city}, ${(nonprofit as any).state} ${(nonprofit as any).zip}`}
+                                      fieldId={`${subscriptionId}-address`}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">City</p>
+                                <p className="text-sm">{(nonprofit as any).city || 'Not provided'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">State</p>
+                                <p className="text-sm">{(nonprofit as any).state || 'Not provided'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Zip</p>
+                                <p className="text-sm">{(nonprofit as any).zip || 'Not provided'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Country</p>
+                                <p className="text-sm">{(nonprofit as any).country || 'USA'}</p>
+                              </div>
                               </div>
                             </div>
 
-                            {/* Website */}
+                          <Separator />
+
+                          {/* Contact Information */}
                             <div>
-                              <h4 className="text-muted-foreground text-sm mb-1">Website</h4>
+                            <h4 className="font-semibold mb-3">Contact Information</h4>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Email</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{(nonprofit as any).email || 'Not provided'}</p>
+                                  {(nonprofit as any).email && (
+                                    <CopyButton text={(nonprofit as any).email} fieldId={`${subscriptionId}-email`} />
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Phone</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm">{(nonprofit as any).phone || 'Not provided'}</p>
+                                  {(nonprofit as any).phone && (
+                                    <CopyButton text={(nonprofit as any).phone} fieldId={`${subscriptionId}-phone`} />
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Website</p>
+                                {(nonprofit as any).website ? (
                               <a 
                                 href={(nonprofit as any).website} 
                                 target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-primary hover:underline"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
                               >
                                 {(nonprofit as any).website}
+                                    <ExternalLink className="h-3 w-3" />
                               </a>
-                            </div>
-                          </div>
-
-                          {/* Phone and Address in 2 columns */}
-                          <div className="grid md:grid-cols-2 gap-6">
-                            {/* Phone */}
-                            <div>
-                              <h4 className="text-muted-foreground text-sm mb-1">Phone</h4>
-                              <div className="flex items-center gap-2">
-                                <p>{(nonprofit as any).phone}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => navigator.clipboard.writeText((nonprofit as any).phone)}
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
                               </div>
                             </div>
-
-                            {/* Empty div for spacing */}
-                            <div></div>
                           </div>
 
-                          {/* Address */}
+                          <Separator />
+
+                          {/* Social Media */}
+                            <div>
+                            <h4 className="font-semibold mb-3">Social Media</h4>
+                            <div className="grid md:grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Facebook</p>
+                                {(nonprofit as any).facebook ? (
+                                  <a
+                                    href={(nonprofit as any).facebook}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).facebook}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Instagram</p>
+                                {(nonprofit as any).instagram ? (
+                                  <a
+                                    href={(nonprofit as any).instagram}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).instagram}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                            </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Twitter/X</p>
+                                {(nonprofit as any).twitter ? (
+                                  <a
+                                    href={(nonprofit as any).twitter}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).twitter}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                          </div>
                           <div>
-                            <h4 className="text-muted-foreground text-sm mb-1">Address</h4>
-                            <div className="flex items-center gap-2">
-                              <p>
-                                {(nonprofit as any).address}, {(nonprofit as any).city}, {(nonprofit as any).state} {(nonprofit as any).zip}
-                              </p>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0"
-                                onClick={() => navigator.clipboard.writeText(`${(nonprofit as any).address}, ${(nonprofit as any).city}, ${(nonprofit as any).state} ${(nonprofit as any).zip}`)}
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
+                                <p className="text-xs text-muted-foreground mb-1">YouTube</p>
+                                {(nonprofit as any).youtube ? (
+                                  <a
+                                    href={(nonprofit as any).youtube}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).youtube}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                            </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">TikTok</p>
+                                {(nonprofit as any).tiktok ? (
+                                  <a
+                                    href={(nonprofit as any).tiktok}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).tiktok}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                          </div>
+                          <div>
+                                <p className="text-xs text-muted-foreground mb-1">Google</p>
+                                {(nonprofit as any).google ? (
+                                  <a
+                                    href={(nonprofit as any).google}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).google}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Other</p>
+                                {(nonprofit as any).other_social ? (
+                                  <a
+                                    href={(nonprofit as any).other_social}
+                                    target="_blank"
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).other_social}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          {/* About */}
-                          <div>
-                            <h4 className="text-muted-foreground text-sm mb-1">About</h4>
-                            <p className="text-sm">{(nonprofit as any).description || (nonprofit as any).about || 'No description provided'}</p>
-                          </div>
+                          <Separator />
 
-                          {/* Donate Link and Social Media in 2 columns */}
-                          <div className="grid md:grid-cols-2 gap-6">
-                            {/* Donate Link */}
+                          {/* Organization Details */}
                             <div>
-                              <h4 className="text-muted-foreground text-sm mb-1">Donate Link</h4>
+                            <h4 className="font-semibold mb-3">Organization Details</h4>
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">About</p>
+                                <p className="text-sm whitespace-pre-wrap">{(nonprofit as any).description || (nonprofit as any).about || 'Not provided'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Donate Link</p>
+                                {(nonprofit as any).donate_link ? (
                               <a 
                                 href={(nonprofit as any).donate_link} 
                                 target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-primary hover:underline"
-                              >
-                                {(nonprofit as any).donate_link || 'N/A'}
-                              </a>
+                                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                                    rel="noreferrer"
+                                  >
+                                    {(nonprofit as any).donate_link}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">Not provided</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">EIN</p>
+                                <p className="text-sm">{(nonprofit as any).ein || 'Not provided'}</p>
+                              </div>
+                            </div>
                             </div>
 
-                            {/* Social Media */}
+                          <Separator />
+
+                          {/* Services / Programs */}
                             <div>
-                              <h4 className="text-muted-foreground text-sm mb-2">Social Media</h4>
-                              <div className="space-y-1 text-sm">
-                                {(() => {
-                                  const socialMedia = (nonprofit as any).social_media
-                                  if (!socialMedia) return <p className="text-muted-foreground">N/A</p>
-                                  if (typeof socialMedia === 'string') return <p>{socialMedia}</p>
-                                  return (
-                                    <>
-                                      {socialMedia.facebook && (
-                                        <p>Facebook: {socialMedia.facebook}</p>
-                                      )}
-                                      {socialMedia.instagram && (
-                                        <p>Instagram: {socialMedia.instagram}</p>
-                                      )}
-                                      {socialMedia.twitter && (
-                                        <p>Twitter: {socialMedia.twitter}</p>
-                                      )}
-                                      {socialMedia.other_social && (
-                                        <p>Other: {socialMedia.other_social}</p>
-                                      )}
-                                      {!socialMedia.facebook && !socialMedia.instagram && !socialMedia.twitter && !socialMedia.other_social && (
-                                        <p className="text-muted-foreground">N/A</p>
-                                      )}
-                                    </>
-                                  )
-                                })()}
+                            <h4 className="font-semibold mb-3">Services / Programs</h4>
+                            {(nonprofit as any).services && Array.isArray((nonprofit as any).services) && (nonprofit as any).services.length > 0 ? (
+                              <div className="space-y-3">
+                                {(nonprofit as any).services.map((service: any, idx: number) => (
+                                  <div key={idx} className="p-3 bg-secondary/50 rounded-lg">
+                                    <p className="font-medium text-sm mb-1">{service.name || 'Unnamed Service'}</p>
+                                    {service.link && (
+                                      <a
+                                        href={service.link}
+                                        target="_blank"
+                                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                                        rel="noreferrer"
+                                      >
+                                        {service.link}
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No services/programs listed</p>
+                            )}
+                          </div>
+
+                          <Separator />
+
+                          {/* Board Members / Leadership Team */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Board Members / Leadership Team</h4>
+                            {(nonprofit as any).board_members && Array.isArray((nonprofit as any).board_members) && (nonprofit as any).board_members.length > 0 ? (
+                              <div className="space-y-3">
+                                {(nonprofit as any).board_members.map((member: any, idx: number) => (
+                                  <div key={idx} className="p-3 bg-secondary/50 rounded-lg">
+                                    <p className="font-medium text-sm">{member.name || 'Unnamed Member'}</p>
+                                    <p className="text-xs text-muted-foreground">{member.title || 'No title provided'}</p>
+                                    {member.role && <p className="text-xs mt-1">{member.role}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No board members listed</p>
+                            )}
+                              </div>
+
+                          <Separator />
+
+                          {/* Subscription Details */}
+                          <div>
+                            <h4 className="font-semibold mb-3">Subscription Details</h4>
+                            <div className="grid md:grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Price</p>
+                                <p className="text-sm font-semibold">${(nonprofit as any).subscriptionPrice || (nonprofit as any).price || 0}/month</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Next Billing Date</p>
+                                <p className="text-sm">
+                                  {(nonprofit as any).next_billing_date 
+                                    ? new Date((nonprofit as any).next_billing_date).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                      })
+                                    : 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground mb-1">Payment Start Date</p>
+                                <p className="text-sm">
+                                  {(nonprofit as any).startDate || (nonprofit as any).paymentStartDate || (nonprofit as any).created_at
+                                    ? new Date((nonprofit as any).startDate || (nonprofit as any).paymentStartDate || (nonprofit as any).created_at).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                      })
+                                    : 'N/A'}
+                                </p>
                               </div>
                             </div>
                           </div>
 
-                          {/* Photos */}
-                          {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
+                          <Separator />
+
+                          {/* Logo & Photos */}
                             <div>
                               <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-muted-foreground text-sm">Photos</h4>
+                              <h4 className="font-semibold flex items-center gap-2">
+                                <ImageIcon className="h-4 w-4" />
+                                Logo & Photos
+                              </h4>
+                              {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -3047,19 +3526,42 @@ export default function AdminDashboard() {
                                   <Download className="h-4 w-4 mr-2" />
                                   Download All Photos
                                 </Button>
+                              )}
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-4">
+                              {/* Logo */}
+                              {(nonprofit as any).logo && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-2">Logo</p>
+                                  <img
+                                    src={(nonprofit as any).logo}
+                                    alt={`${nonprofit.name} logo`}
+                                    className="h-24 w-24 object-cover rounded-lg"
+                                  />
+                                </div>
+                              )}
+                              {/* Photos */}
+                              {(nonprofit as any).photos && (nonprofit as any).photos.length > 0 ? (
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-2">Photos</p>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 {(nonprofit as any).photos.map((photo: string, idx: number) => (
                                   <img
                                     key={idx}
                                     src={photo || "/placeholder.svg"}
                                     alt={`${nonprofit.name} ${idx + 1}`}
-                                    className="w-full h-48 object-cover rounded-lg"
+                                        className="h-24 w-full object-cover rounded-lg"
                                   />
                                 ))}
                               </div>
                             </div>
+                              ) : (
+                                !((nonprofit as any).logo) && (
+                                  <p className="text-sm text-muted-foreground">No logo or photos uploaded</p>
+                                )
                           )}
+                            </div>
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </div>
@@ -3211,15 +3713,15 @@ export default function AdminDashboard() {
                               <TableCell className="text-right font-bold text-orange-500">${totalDonations.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center gap-2">
-                                  <Input
-                                    type="number"
+                                <Input
+                                  type="number"
                                     value={currentInput}
                                     onChange={(e) => setManualDonationInputs(prev => ({
                                       ...prev,
                                       [mosqueKey]: e.target.value
                                     }))}
-                                    className="w-24 text-right"
-                                    placeholder="$0"
+                                  className="w-24 text-right"
+                                  placeholder="$0"
                                     disabled={isSaving}
                                   />
                                   <Button
@@ -5259,3 +5761,4 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
