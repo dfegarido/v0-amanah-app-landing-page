@@ -2205,6 +2205,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                           <SelectItem value="Food & Dining">Food & Dining</SelectItem>
                           <SelectItem value="For Sale">For Sale</SelectItem>
                           <SelectItem value="Health & Wellness">Health & Wellness</SelectItem>
+                          <SelectItem value="Home Improvement & Construction">Home Improvement & Construction</SelectItem>
                           <SelectItem value="Jobs">Jobs</SelectItem>
                           <SelectItem value="Marriage & Family Services">Marriage & Family Services</SelectItem>
                           <SelectItem value="Professional Services">Professional Services</SelectItem>

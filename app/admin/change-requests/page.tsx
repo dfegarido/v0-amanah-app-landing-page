@@ -355,13 +355,13 @@ export default function AdminChangeRequestsPage() {
                         </TableCell>
                         <TableCell>
                           <Badge
-                            variant={
-                              request.status === 'approved' ? 'default' :
-                              request.status === 'rejected' ? 'destructive' :
-                              'secondary'
-                            }
+                            variant="outline"
                             className={
-                              request.status === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+                              request.status === 'approved' 
+                                ? 'bg-green-500 text-white border-green-500 hover:bg-green-600' 
+                                : request.status === 'pending'
+                                ? 'bg-yellow-500 text-white border-yellow-500 hover:bg-yellow-600'
+                                : 'bg-red-500 text-white border-red-500 hover:bg-red-600'
                             }
                           >
                             {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
