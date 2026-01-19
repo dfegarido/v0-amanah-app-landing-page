@@ -82,6 +82,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return fetchUserProfile(userId, retries + 1, maxRetries)
         }
         
+        // Profile not found after all retries - user profile doesn't exist
+        // This means the user was deleted from the database but is still authenticated
+        if (error.code === 'PGRST116' || error.message?.includes('0 rows')) {
+          console.error('⚠️ User profile does not exist in database')
+          console.error('User ID:', userId)
+          console.error('Automatically logging out user...')
+          
+          // Automatically sign out the user since their profile doesn't exist
+          await supabase.auth.signOut()
+          setUser(null)
+          setSession(null)
+          
+          // Redirect to login page
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login'
+          }
+          
+          return
+        }
+        
         console.error('⚠️ User profile fetch failed after all retries')
         console.error('This usually means:')
         console.error('1. Profile does not exist in public.users table')
@@ -100,6 +120,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         code: error?.code,
         details: error?.details
       })
+      
+      // If it's a "profile not found" error, sign out automatically
+      if (error?.code === 'PGRST116' || error?.message?.includes('0 rows') || error?.details?.includes('0 rows')) {
+        console.error('⚠️ User profile does not exist - automatically logging out')
+        await supabase.auth.signOut()
+        setUser(null)
+        setSession(null)
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login'
+        }
+        return
+      }
+      
       setUser(null)
     } finally {
       setLoading(false)
