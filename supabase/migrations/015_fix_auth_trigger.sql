@@ -18,7 +18,12 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'name', 'User'),
     COALESCE(NEW.raw_user_meta_data->>'phone', NULL),
-    COALESCE((NEW.raw_user_meta_data->>'role')::user_role, 'user'::user_role),
+    CASE 
+      WHEN (NEW.raw_user_meta_data->>'role') IN ('user', 'business_owner', 'admin') THEN
+        (NEW.raw_user_meta_data->>'role')::user_role
+      ELSE
+        'user'::user_role
+    END,
     NOW(),
     NOW()
   )
@@ -91,7 +96,12 @@ SELECT
   au.email,
   COALESCE(au.raw_user_meta_data->>'name', 'User'),
   au.raw_user_meta_data->>'phone',
-  COALESCE((au.raw_user_meta_data->>'role')::user_role, 'user'::user_role),
+  CASE 
+    WHEN (au.raw_user_meta_data->>'role') IN ('user', 'business_owner', 'admin') THEN
+      (au.raw_user_meta_data->>'role')::user_role
+    ELSE
+      'user'::user_role
+  END,
   au.created_at,
   NOW()
 FROM auth.users au

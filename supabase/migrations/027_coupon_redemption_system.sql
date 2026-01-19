@@ -6,7 +6,7 @@ CREATE TYPE redemption_status AS ENUM ('pending', 'completed', 'cancelled', 'exp
 
 -- Create coupon_redemptions table
 CREATE TABLE public.coupon_redemptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Relationships
   coupon_id UUID REFERENCES public.coupons(id) ON DELETE CASCADE NOT NULL,
@@ -47,7 +47,7 @@ CREATE INDEX idx_coupon_redemptions_code ON public.coupon_redemptions(redemption
 
 -- Create coupon_analytics table for aggregated stats
 CREATE TABLE public.coupon_analytics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   coupon_id UUID REFERENCES public.coupons(id) ON DELETE CASCADE NOT NULL,
   
   -- Daily stats
@@ -68,7 +68,7 @@ CREATE INDEX idx_coupon_analytics_coupon_date ON public.coupon_analytics(coupon_
 
 -- Create user_saved_coupons table for favorites
 CREATE TABLE public.user_saved_coupons (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   coupon_id UUID REFERENCES public.coupons(id) ON DELETE CASCADE NOT NULL,
   saved_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,

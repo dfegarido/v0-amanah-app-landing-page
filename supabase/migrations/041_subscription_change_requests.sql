@@ -7,7 +7,7 @@ CREATE TYPE change_request_status AS ENUM ('pending', 'approved', 'rejected');
 
 -- Create subscription_change_requests table
 CREATE TABLE IF NOT EXISTS public.subscription_change_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Subscription reference
   subscription_id UUID REFERENCES public.subscriptions(id) ON DELETE CASCADE NOT NULL,
@@ -62,12 +62,22 @@ CREATE POLICY "Users can create change requests"
 -- Admins can view all change requests
 CREATE POLICY "Admins can view all change requests"
   ON public.subscription_change_requests FOR SELECT
-  USING (is_admin());
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid() AND users.role = 'admin'
+    )
+  );
 
 -- Admins can update change requests (approve/reject)
 CREATE POLICY "Admins can update change requests"
   ON public.subscription_change_requests FOR UPDATE
-  USING (is_admin());
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid() AND users.role = 'admin'
+    )
+  );
 
 -- Trigger to update updated_at
 CREATE TRIGGER update_change_requests_updated_at

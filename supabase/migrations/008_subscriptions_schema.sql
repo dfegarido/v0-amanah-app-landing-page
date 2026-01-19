@@ -9,7 +9,7 @@ CREATE TYPE app_status AS ENUM ('pending_verification', 'active', 'removed', 'ca
 
 -- Subscriptions table (tracks payment and billing)
 CREATE TABLE public.subscriptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   type subscription_type NOT NULL,
   status subscription_status DEFAULT 'active' NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE public.subscriptions (
 
 -- Coupons table
 CREATE TABLE public.coupons (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   subscription_id UUID REFERENCES public.subscriptions(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   
@@ -96,7 +96,7 @@ CREATE TABLE public.coupons (
 
 -- Nonprofits table
 CREATE TABLE public.nonprofits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   subscription_id UUID REFERENCES public.subscriptions(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   

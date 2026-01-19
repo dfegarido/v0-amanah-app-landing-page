@@ -25,9 +25,20 @@ export async function GET(request: NextRequest) {
       .select('pricing_mosque, pricing_business, pricing_coupon, pricing_nonprofit')
       .single()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('[Pricing API] Error fetching pricing settings:', error)
-      return errorResponse('Failed to fetch pricing settings', 500)
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned - this is OK, we'll use defaults
+        console.log('[Pricing API] No settings found (PGRST116), using defaults')
+      } else {
+        console.error('[Pricing API] Error fetching pricing settings:', error)
+        // Still return defaults instead of error, so the app can function
+        return successResponse({
+          pricing_mosque: 10000,
+          pricing_business: 1000,
+          pricing_coupon: 1000,
+          pricing_nonprofit: 5000
+        })
+      }
     }
 
     // Return default pricing if no settings exist
@@ -42,18 +53,25 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[Pricing API] Found settings in database:', settings)
+    // Convert from dollars (stored in DB) to cents (expected by frontend)
     const responseData = {
-      pricing_mosque: settings.pricing_mosque,
-      pricing_business: settings.pricing_business,
-      pricing_coupon: settings.pricing_coupon,
-      pricing_nonprofit: settings.pricing_nonprofit
+      pricing_mosque: Math.round(Number(settings.pricing_mosque) * 100),
+      pricing_business: Math.round(Number(settings.pricing_business) * 100),
+      pricing_coupon: Math.round(Number(settings.pricing_coupon) * 100),
+      pricing_nonprofit: Math.round(Number(settings.pricing_nonprofit) * 100)
     }
-    console.log('[Pricing API] Returning pricing data:', responseData)
+    console.log('[Pricing API] Returning pricing data (converted to cents):', responseData)
     
     return successResponse(responseData)
   } catch (error: any) {
-    console.error('[Pricing API] Error:', error)
-    return errorResponse('Internal server error', 500)
+    console.error('[Pricing API] Unexpected error:', error)
+    // Return defaults on any error so the app can still function
+    return successResponse({
+      pricing_mosque: 10000,
+      pricing_business: 1000,
+      pricing_coupon: 1000,
+      pricing_nonprofit: 5000
+    })
   }
 }
 

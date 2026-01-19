@@ -4,7 +4,7 @@
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   
   -- Push subscription endpoint and keys (from browser PushSubscription object)

@@ -1,0 +1,58 @@
+Initialising login role...
+Connecting to remote database...
+Do you want to push these migrations to the remote database?
+ • 010_fix_mosque_code_sequence.sql
+ • 011_cleanup_orphaned_subscriptions.sql
+ • 012_add_documents_column.sql
+ • 013_admin_read_all_policies.sql
+ • 014_admin_settings_table.sql
+ • 015_fix_auth_trigger.sql
+ • 016_cleanup_orphaned_auth_users.sql
+ • 017_create_missing_profile_api.sql
+ • 018_messages_table.sql
+ • 019_notifications_table.sql
+ • 020_donations_table.sql
+ • 021_enable_messages_realtime.sql
+ • 022_push_subscriptions_table.sql
+ • 023_enable_notifications_realtime.sql
+ • 024_activity_logs_table.sql
+ • 025_push_notification_requests_table.sql
+ • 026_add_new_form_fields.sql
+ • 027_coupon_redemption_system.sql
+ • 028_update_coupons_for_redemption.sql
+ • 029_add_nonprofit_mosque_affiliation.sql
+ • 030_sync_subscription_prices.sql
+ • 031_add_stripe_connected_accounts.sql
+ • 031_add_stripe_credentials.sql
+ • 032_create_mosque_payouts.sql
+ • 033_update_mosque_payouts.sql
+ • 034_backfill_payout_subscription_ids.sql
+ • 035_add_social_media_fields.sql
+ • 036_add_emergency_contact_fields.sql
+ • 037_add_business_form_fields.sql
+ • 038_add_business_donation_fields.sql
+ • 039_add_subscription_updated_notification.sql
+ • 040_ensure_admin_settings_record.sql
+ • 041_subscription_change_requests.sql
+ • 042_add_business_title_fax.sql
+ • 043_add_manual_donations.sql
+ • 044_add_business_fields.sql
+ • 045_additional_donations.sql
+
+ [Y/n] Y
+Applying migration 010_fix_mosque_code_sequence.sql...
+Applying migration 011_cleanup_orphaned_subscriptions.sql...
+Applying migration 012_add_documents_column.sql...
+Applying migration 013_admin_read_all_policies.sql...
+NOTICE (00000): policy "Admins can view all users" for relation "public.users" does not exist, skipping
+NOTICE (00000): policy "Admins can view all mosques" for relation "public.mosques" does not exist, skipping
+NOTICE (00000): policy "Admins can view all businesses" for relation "public.businesses" does not exist, skipping
+Applying migration 014_admin_settings_table.sql...
+ERROR: function is_admin() does not exist (SQLSTATE 42883)
+At statement: 3                                           
+-- Only admins can read settings                          
+CREATE POLICY "Admins can view settings"                  
+  ON public.admin_settings                                
+  FOR SELECT                                              
+  USING (is_admin())                                      
+Try rerunning the command with --debug to troubleshoot the error.

@@ -121,8 +121,20 @@ export default function MemberDashboard() {
         setLoadingPricing(true)
         console.log('[Member Portal] Fetching pricing from API...')
         const response = await fetch('/api/settings/pricing')
-        const result = await response.json()
         
+        if (!response.ok) {
+          console.error('[Member Portal] Pricing API error:', response.status, response.statusText)
+          // Use default pricing if API fails
+          setPricing({
+            pricing_mosque: 10000,
+            pricing_business: 1000,
+            pricing_coupon: 1000,
+            pricing_nonprofit: 5000
+          })
+          return
+        }
+        
+        const result = await response.json()
         console.log('[Member Portal] Pricing API response:', result)
         
         if (result.success && result.data) {
@@ -135,10 +147,24 @@ export default function MemberDashboard() {
             nonprofit: `$${(result.data.pricing_nonprofit / 100).toFixed(0)}`
           })
         } else {
-          console.error('[Member Portal] Invalid response format:', result)
+          console.warn('[Member Portal] Invalid response format, using defaults:', result)
+          // Use default pricing if response format is invalid
+          setPricing({
+            pricing_mosque: 10000,
+            pricing_business: 1000,
+            pricing_coupon: 1000,
+            pricing_nonprofit: 5000
+          })
         }
       } catch (error) {
         console.error('[Member Portal] Error fetching pricing settings:', error)
+        // Use default pricing on error
+        setPricing({
+          pricing_mosque: 10000,
+          pricing_business: 1000,
+          pricing_coupon: 1000,
+          pricing_nonprofit: 5000
+        })
       } finally {
         setLoadingPricing(false)
       }

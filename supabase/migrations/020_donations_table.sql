@@ -18,7 +18,7 @@ CREATE TYPE donation_status AS ENUM (
 
 -- Create donations table
 CREATE TABLE IF NOT EXISTS public.donations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Donor information (optional for anonymous donations)
   user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,

@@ -3,7 +3,7 @@ CREATE TYPE push_notification_status AS ENUM ('pending', 'approved', 'sent', 're
 
 -- Create push_notification_requests table
 CREATE TABLE public.push_notification_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Mosque information
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,

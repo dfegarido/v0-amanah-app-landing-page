@@ -25,7 +25,7 @@ CREATE TYPE activity_action AS ENUM (
 
 -- Create activity logs table
 CREATE TABLE IF NOT EXISTS public.activity_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Who performed the action
   admin_id UUID REFERENCES public.users(id) ON DELETE SET NULL,

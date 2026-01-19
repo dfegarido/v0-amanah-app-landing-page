@@ -4,7 +4,7 @@
 
 -- Create messages table for user-to-user and user-to-admin messaging
 CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Sender and recipient
   sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,

@@ -1,5 +1,5 @@
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- PostgreSQL 13+ has gen_random_uuid() built-in, no extension needed
+-- This is more reliable than uuid-ossp in Supabase
 
 -- Create user roles enum
 CREATE TYPE user_role AS ENUM ('user', 'business_owner', 'admin');
@@ -17,7 +17,7 @@ CREATE TABLE public.users (
 
 -- Businesses table
 CREATE TABLE public.businesses (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
@@ -42,7 +42,7 @@ CREATE TABLE public.businesses (
 
 -- Mosques table
 CREATE TABLE public.mosques (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   mosque_code INTEGER UNIQUE NOT NULL,

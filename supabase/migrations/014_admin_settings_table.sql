@@ -1,6 +1,6 @@
 -- Create admin_settings table
 CREATE TABLE IF NOT EXISTS public.admin_settings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- General Settings
   platform_name TEXT DEFAULT 'Amanah',
@@ -80,13 +80,23 @@ ALTER TABLE public.admin_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can view settings"
   ON public.admin_settings
   FOR SELECT
-  USING (is_admin());
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid() AND users.role = 'admin'
+    )
+  );
 
 -- Only admins can update settings
 CREATE POLICY "Admins can update settings"
   ON public.admin_settings
   FOR UPDATE
-  USING (is_admin());
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE users.id = auth.uid() AND users.role = 'admin'
+    )
+  );
 
 -- Add trigger to update updated_at
 CREATE TRIGGER update_admin_settings_updated_at 

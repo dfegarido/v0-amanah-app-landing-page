@@ -11,7 +11,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 // Service role Supabase client for admin operations (bypasses RLS)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 )
 
 // Default pricing configuration (fallback if no settings in database)
@@ -74,6 +80,12 @@ export async function POST(request: NextRequest) {
       console.error('[Stripe] STRIPE_SECRET_KEY is not configured')
       return errorResponse('Stripe configuration error. Please contact support.', 500)
     }
+    
+    // Verify Supabase admin key is configured
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[Subscription Create] SUPABASE_SERVICE_ROLE_KEY is not configured')
+      return errorResponse('Database configuration error. Please contact support.', 500)
+    }
 
     const authResult = await requireAuth(request)
     if (authResult.error) return authResult.error
@@ -120,7 +132,8 @@ export async function POST(request: NextRequest) {
         console.log('[Stripe] Customer created:', customerId)
 
         // Update user with Stripe customer ID
-        await supabase
+        // Use admin client to bypass RLS since we've already authenticated the user
+        await supabaseAdmin
           .from('users')
           .update({ stripe_customer_id: customerId })
           .eq('id', userId)
@@ -230,7 +243,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create subscription record in database
-    const { data: subscription, error: subscriptionError } = await supabase
+    // Use admin client to bypass RLS since we've already authenticated the user
+    const { data: subscription, error: subscriptionError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
         user_id: userId,
@@ -250,11 +264,17 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (subscriptionError) {
-      console.error('Database error creating subscription:', subscriptionError)
+      console.error('[Subscription Create] ❌ Database error creating subscription:', subscriptionError)
+      console.error('[Subscription Create] Error code:', subscriptionError.code)
+      console.error('[Subscription Create] Error message:', subscriptionError.message)
+      console.error('[Subscription Create] Error details:', subscriptionError.details)
+      console.error('[Subscription Create] Error hint:', subscriptionError.hint)
       // Rollback: Cancel Stripe subscription
       await stripe.subscriptions.cancel(stripeSubscription.id)
-      return errorResponse('Failed to create subscription', 500)
+      return errorResponse(`Failed to create subscription: ${subscriptionError.message || subscriptionError.details || 'Unknown error'}`, 500)
     }
+    
+    console.log('[Subscription Create] ✅ Subscription created successfully:', subscription.id)
 
     // Create entity-specific record based on type
     let entityRecord: any
@@ -263,7 +283,7 @@ export async function POST(request: NextRequest) {
     switch (type) {
       case 'mosque':
         const { data: mosqueData, error: mosqueError } = await createMosqueRecord(
-          supabase,
+          supabaseAdmin, // Use admin client to bypass RLS
           subscription.id,
           userId,
           data
@@ -274,7 +294,7 @@ export async function POST(request: NextRequest) {
 
       case 'business':
         const { data: businessData, error: businessError } = await createBusinessRecord(
-          supabase,
+          supabaseAdmin, // Use admin client to bypass RLS
           subscription.id,
           userId,
           data
@@ -285,7 +305,7 @@ export async function POST(request: NextRequest) {
 
       case 'coupon':
         const { data: couponData, error: couponError } = await createCouponRecord(
-          supabase,
+          supabaseAdmin, // Use admin client to bypass RLS
           subscription.id,
           userId,
           data
@@ -296,7 +316,7 @@ export async function POST(request: NextRequest) {
 
       case 'nonprofit':
         const { data: nonprofitData, error: nonprofitError } = await createNonprofitRecord(
-          supabase,
+          supabaseAdmin, // Use admin client to bypass RLS
           subscription.id,
           userId,
           data
@@ -307,14 +327,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (entityError) {
-      console.error(`Error creating ${type} record:`, entityError)
-      console.error(`Error details:`, JSON.stringify(entityError, null, 2))
-      console.error(`Data sent:`, JSON.stringify(data, null, 2))
+      console.error(`[Subscription Create] ❌ Error creating ${type} record:`, entityError)
+      console.error(`[Subscription Create] Error code:`, entityError.code)
+      console.error(`[Subscription Create] Error message:`, entityError.message)
+      console.error(`[Subscription Create] Error details:`, entityError.details)
+      console.error(`[Subscription Create] Error hint:`, entityError.hint)
+      console.error(`[Subscription Create] Data sent:`, JSON.stringify(data, null, 2))
       // Rollback: Delete subscription and cancel Stripe subscription
-      await supabase.from('subscriptions').delete().eq('id', subscription.id)
+      await supabaseAdmin.from('subscriptions').delete().eq('id', subscription.id)
       await stripe.subscriptions.cancel(stripeSubscription.id)
       return errorResponse(`Failed to create ${type} record: ${entityError.message || entityError.details || 'Unknown error'}`, 500)
     }
+    
+    console.log(`[Subscription Create] ✅ ${type} record created successfully:`, entityRecord?.id)
 
     // Handle additional donations for business subscriptions
     if (type === 'business' && data.donationOrganizations && Array.isArray(data.donationOrganizations) && data.donationOrganizations.length > 0) {
@@ -352,7 +377,7 @@ export async function POST(request: NextRequest) {
             continue
           }
 
-          const { data: mosque } = await supabase
+          const { data: mosque } = await supabaseAdmin
             .from('mosques')
             .select('id')
             .eq('mosque_code', mosqueCode)
@@ -369,7 +394,7 @@ export async function POST(request: NextRequest) {
           organizationId = orgIdentifier
           
           // Verify the nonprofit exists
-          const { data: nonprofit, error: nonprofitError } = await supabase
+          const { data: nonprofit, error: nonprofitError } = await supabaseAdmin
             .from('nonprofits')
             .select('id')
             .eq('id', organizationId)
