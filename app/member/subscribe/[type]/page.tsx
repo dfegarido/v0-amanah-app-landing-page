@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import Image from "next/image"
+import NextImage from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Building2, Store, Ticket, CreditCard, Check, Plus, X, Upload, Info, Users, Loader2, Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -236,7 +236,7 @@ export default function SubscribePage() {
     // Common required fields for all types
     const requiredFields: Record<string, string[]> = {
       mosque: ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone'],
-      business: ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description'],
+      business: ['title', 'categories', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description'],
       coupon: ['title', 'merchant', 'description', 'phone', 'email', 'address'],
       nonprofit: ['orgName', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'description']
     }
@@ -280,7 +280,7 @@ export default function SubscribePage() {
     if (type === 'mosque') {
       fieldsToValidate = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
     } else if (type === 'business') {
-      fieldsToValidate = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+      fieldsToValidate = ['title', 'categories', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
     } else if (type === 'coupon') {
       fieldsToValidate = ['title', 'merchant', 'description', 'phone', 'email', 'address']
     } else if (type === 'nonprofit') {
@@ -356,7 +356,7 @@ export default function SubscribePage() {
     if (type === 'mosque') {
       fieldsToCheck = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
     } else if (type === 'business') {
-      fieldsToCheck = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+      fieldsToCheck = ['title', 'categories', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
     } else if (type === 'coupon') {
       fieldsToCheck = ['title', 'merchant', 'description', 'phone', 'email', 'address']
     } else if (type === 'nonprofit') {
@@ -364,14 +364,31 @@ export default function SubscribePage() {
     }
 
     // Check all required fields are filled
+    const missingFields: string[] = []
     const allFieldsFilled = fieldsToCheck.every(field => {
       const value = formData[field]
-      return value && String(value).trim() !== ''
+      const isFilled = value && String(value).trim() !== ''
+      if (!isFilled) {
+        missingFields.push(field)
+      }
+      return isFilled
     })
 
     // Check logo and images
     const hasLogo = uploadedLogo !== null
     const hasImages = uploadedImages.length > 0
+
+    // Debug logging
+    if (!allFieldsFilled || !hasImages || Object.keys(errors).length > 0) {
+      console.log('[Form Validation Debug]', {
+        type,
+        missingFields,
+        allFieldsFilled,
+        hasImages,
+        errors: Object.keys(errors),
+        formData: Object.keys(formData)
+      })
+    }
 
     // Coupon specific checks (no logo required)
     if (type === 'coupon') {
@@ -1726,13 +1743,20 @@ export default function SubscribePage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categories">Categories</Label>
+                <Label htmlFor="categories">
+                  Categories <span className="text-destructive">*</span>
+                </Label>
                 {isMounted ? (
                   <Select 
                     value={formData.categories || ''} 
                     onValueChange={(value) => {
                       setFormData((prev: any) => ({ ...prev, categories: value }))
-                      setErrors((prev: any) => ({ ...prev, categories: '' }))
+                      // Clear the error by removing it from the errors object
+                      setErrors((prev: any) => {
+                        const newErrors = { ...prev }
+                        delete newErrors.categories
+                        return newErrors
+                      })
                     }}
                   >
                     <SelectTrigger>
@@ -2140,30 +2164,100 @@ export default function SubscribePage() {
 
               {formData.donateToSameOrganization === true && (
                 <div className="space-y-4 pl-6 border-l-2 border-primary/20">
-                  {affiliatedMosqueCode && affiliatedMosqueCode !== 'none' ? (
-                    <>
-                      <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                        <p className="text-sm text-foreground">
-                          Donation will go to: <span className="font-semibold">Mosque #{affiliatedMosqueCode}</span>
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="donationAmount">How much would you like to donate to each selected organization? ($)</Label>
-                        <Input
-                          id="donationAmount"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.donationAmount || ''}
-                          placeholder="Enter your answer"
-                          onChange={handleInputChange}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Please select a mosque affiliation above to donate to the same organization.
+                  <div className="space-y-2">
+                    <Label htmlFor="donationOrganizations">Select organizations to donate to</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      You can select multiple mosques or non-profit organizations
                     </p>
+                    {isMounted ? (
+                      <div className="space-y-2">
+                        {/* Mosques Section */}
+                        <div>
+                          <p className="text-sm font-medium mb-2">Mosques</p>
+                          <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                            {availableMosques.length > 0 ? (
+                              availableMosques.map((mosque) => (
+                                <div key={mosque.id} className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`mosque-${mosque.id}`}
+                                    checked={formData.donationOrganizations?.includes(`mosque-${mosque.mosque_code}`) || false}
+                                    onChange={(e) => {
+                                      const orgId = `mosque-${mosque.mosque_code}`
+                                      const current = formData.donationOrganizations || []
+                                      const updated = e.target.checked
+                                        ? [...current, orgId]
+                                        : current.filter((id: string) => id !== orgId)
+                                      handleFieldChange("donationOrganizations", updated)
+                                    }}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor={`mosque-${mosque.id}`} className="font-normal cursor-pointer text-sm">
+                                    #{mosque.mosque_code} - {mosque.name}
+                                  </Label>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No mosques available</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Non-Profits Section */}
+                        <div>
+                          <p className="text-sm font-medium mb-2">Non-Profit Organizations</p>
+                          <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                            {availableNonprofits.length > 0 ? (
+                              availableNonprofits.map((nonprofit) => (
+                                <div key={nonprofit.id} className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`nonprofit-${nonprofit.id}`}
+                                    checked={formData.donationOrganizations?.includes(`nonprofit-${nonprofit.id}`) || false}
+                                    onChange={(e) => {
+                                      const orgId = `nonprofit-${nonprofit.id}`
+                                      const current = formData.donationOrganizations || []
+                                      const updated = e.target.checked
+                                        ? [...current, orgId]
+                                        : current.filter((id: string) => id !== orgId)
+                                      handleFieldChange("donationOrganizations", updated)
+                                    }}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor={`nonprofit-${nonprofit.id}`} className="font-normal cursor-pointer text-sm">
+                                    {nonprofit.name}
+                                  </Label>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No non-profit organizations available</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">Loading organizations...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {formData.donationOrganizations && formData.donationOrganizations.length > 0 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="donationAmount">How much would you like to donate to each selected organization per month? ($)</Label>
+                      <Input
+                        id="donationAmount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.donationAmount || ''}
+                        placeholder="Enter amount (e.g., 10.00)"
+                        onChange={handleInputChange}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Total monthly donation: ${((parseFloat(formData.donationAmount) || 0) * (formData.donationOrganizations?.length || 0)).toFixed(2)}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -3220,7 +3314,7 @@ export default function SubscribePage() {
         {type === "coupon" && (
           <div className="mb-6 rounded-lg overflow-hidden shadow-md border border-border bg-black">
             <div className="relative w-full h-[280px] md:h-[320px]">
-              <Image
+              <NextImage
                 src="/image.png"
                 alt="Buy 1 Get 1 Free Falafel Wrap"
                 fill
@@ -3251,7 +3345,7 @@ export default function SubscribePage() {
                       if (type === 'mosque') {
                         fieldsToCheck = ['name', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone']
                       } else if (type === 'business') {
-                        fieldsToCheck = ['title', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
+                        fieldsToCheck = ['title', 'categories', 'address', 'city', 'state', 'zip', 'country', 'email', 'phone', 'website', 'description']
                       } else if (type === 'coupon') {
                         fieldsToCheck = ['title', 'merchant', 'description', 'phone', 'email', 'address']
                       } else if (type === 'nonprofit') {
@@ -3263,6 +3357,7 @@ export default function SubscribePage() {
                         title: 'Business Name',
                         name: 'Name',
                         orgName: 'Organization Name',
+                        categories: 'Categories',
                         description: 'Description',
                         address: 'Address',
                         city: 'City',
@@ -3303,13 +3398,19 @@ export default function SubscribePage() {
                         }
                       }
                       
-                      // Check validation errors
+                      // Check validation errors (only show non-empty errors)
                       if (Object.keys(errors).length > 0) {
                         Object.entries(errors).forEach(([field, error]) => {
                           if (error && error.trim()) {
                             missing.push(`• ${error}`)
                           }
+                          // Don't show anything for empty error strings - they should be deleted instead
                         })
+                      }
+                      
+                      // If no specific errors but form is invalid, show generic message
+                      if (missing.length === 0) {
+                        missing.push('• Please check all required fields')
                       }
                       
                       return missing.map((msg, idx) => <p key={idx} className="text-xs">{msg}</p>)
@@ -3357,13 +3458,30 @@ export default function SubscribePage() {
                   formData.donateToSameOrganization === true &&
                   formData.donationAmount &&
                   parseFloat(formData.donationAmount) > 0 &&
-                  affiliatedMosqueCode &&
-                  affiliatedMosqueCode !== "none" && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Additional Donation to Mosque</span>
-                      <span className="text-primary">
-                        ${parseFloat(formData.donationAmount || '0').toFixed(2)} to Mosque #{affiliatedMosqueCode}
-                      </span>
+                  formData.donationOrganizations &&
+                  formData.donationOrganizations.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Additional Donations:</span>
+                      </div>
+                      {formData.donationOrganizations.map((orgId: string) => {
+                        const amount = parseFloat(formData.donationAmount || '0')
+                        const orgName = orgId.startsWith('mosque-') 
+                          ? `Mosque #${orgId.replace('mosque-', '')}`
+                          : availableNonprofits.find((np: any) => `nonprofit-${np.id}` === orgId)?.name || 'Organization'
+                        return (
+                          <div key={orgId} className="flex items-center justify-between text-xs ml-4">
+                            <span className="text-muted-foreground">{orgName}</span>
+                            <span className="text-primary">${amount.toFixed(2)}</span>
+                          </div>
+                        )
+                      })}
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span className="text-muted-foreground">Total Donations:</span>
+                        <span className="text-primary">
+                          ${(parseFloat(formData.donationAmount || '0') * formData.donationOrganizations.length).toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                   )}
                 <Separator className="my-2" />
@@ -3375,8 +3493,10 @@ export default function SubscribePage() {
                       const donationAmount = type === "business" &&
                         formData.donateToSameOrganization === true &&
                         formData.donationAmount &&
-                        parseFloat(formData.donationAmount) > 0
-                        ? parseFloat(formData.donationAmount || '0')
+                        parseFloat(formData.donationAmount) > 0 &&
+                        formData.donationOrganizations &&
+                        formData.donationOrganizations.length > 0
+                        ? parseFloat(formData.donationAmount || '0') * formData.donationOrganizations.length
                         : 0
                       const total = basePrice + donationAmount
                       return `$${total.toFixed(2)}/month`

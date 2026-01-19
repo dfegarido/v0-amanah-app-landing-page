@@ -31,6 +31,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { authenticatedGet, authenticatedPost } from '@/lib/api-client'
 import { useAuth } from '@/lib/auth-context'
+import { supabase } from '@/lib/supabase'
 
 interface ChangeRequest {
   id: string
@@ -61,6 +62,7 @@ export default function AdminChangeRequestsPage() {
   const [processing, setProcessing] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
+  const [organizationNames, setOrganizationNames] = useState<Record<string, {name: string, code?: string}>>({})
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'admin')) {
@@ -73,6 +75,18 @@ export default function AdminChangeRequestsPage() {
       fetchChangeRequests()
     }
   }, [user, statusFilter])
+
+  // Fetch organization names when rows are expanded
+  useEffect(() => {
+    const expandedRequestIds = Object.keys(expandedRows).filter(id => expandedRows[id])
+    
+    for (const requestId of expandedRequestIds) {
+      const request = changeRequests.find(r => r.id === requestId)
+      if (request && request.changes.additional_donations && Array.isArray(request.changes.additional_donations)) {
+        fetchOrganizationNames(request.changes.additional_donations)
+      }
+    }
+  }, [expandedRows, changeRequests])
 
   const fetchChangeRequests = async () => {
     try {
@@ -219,10 +233,71 @@ export default function AdminChangeRequestsPage() {
       .replace(/\b\w/g, (l) => l.toUpperCase())
   }
 
-  const formatFieldValue = (value: any): string => {
+  const fetchOrganizationNames = async (donations: any[]) => {
+    const newNames: Record<string, {name: string, code?: string}> = {}
+    
+    // Fetch all mosques at once
+    const mosqueIds = donations.filter(d => d.type === 'mosque' && !organizationNames[d.id]).map(d => d.id)
+    const nonprofitIds = donations.filter(d => d.type === 'nonprofit' && !organizationNames[d.id]).map(d => d.id)
+    
+    console.log('[fetchOrganizationNames] Fetching mosques:', mosqueIds, 'nonprofits:', nonprofitIds)
+    
+    try {
+      // Fetch mosques directly from Supabase (admins need to see ALL mosques, not just approved)
+      if (mosqueIds.length > 0) {
+        const { data: mosques } = await supabase
+          .from('mosques')
+          .select('id, name, mosque_code')
+          .in('id', mosqueIds)
+
+        console.log('[fetchOrganizationNames] Mosques data:', mosques)
+        if (mosques) {
+          for (const mosque of mosques) {
+            newNames[mosque.id] = { name: mosque.name, code: mosque.mosque_code }
+            console.log('[fetchOrganizationNames] Found mosque:', mosque.id, mosque.name, '#' + mosque.mosque_code)
+          }
+        }
+      }
+
+      // Fetch nonprofits using Supabase directly
+      if (nonprofitIds.length > 0) {
+        const { data: nonprofits } = await supabase
+          .from('nonprofits')
+          .select('id, name')
+          .in('id', nonprofitIds)
+
+        console.log('[fetchOrganizationNames] Nonprofits data:', nonprofits)
+        if (nonprofits) {
+          for (const nonprofit of nonprofits) {
+            newNames[nonprofit.id] = { name: nonprofit.name }
+            console.log('[fetchOrganizationNames] Found nonprofit:', nonprofit.id, nonprofit.name)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[fetchOrganizationNames] Error fetching organizations:', error)
+    }
+    
+    console.log('[fetchOrganizationNames] New names to add:', newNames)
+    if (Object.keys(newNames).length > 0) {
+      setOrganizationNames(prev => {
+        const updated = { ...prev, ...newNames }
+        console.log('[fetchOrganizationNames] Updated organizationNames:', updated)
+        return updated
+      })
+    }
+  }
+
+  const formatFieldValue = (value: any, fieldName?: string): any => {
     if (value === null || value === undefined) return 'N/A'
-    if (typeof value === 'object') return JSON.stringify(value, null, 2)
     if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+    
+    // Special handling for additional_donations
+    if (fieldName === 'additional_donations' && Array.isArray(value)) {
+      return null // We'll render this separately
+    }
+    
+    if (typeof value === 'object') return JSON.stringify(value, null, 2)
     return String(value)
   }
 
@@ -403,16 +478,73 @@ export default function AdminChangeRequestsPage() {
                               <div>
                                 <h4 className="font-semibold mb-3">Requested Changes:</h4>
                                 <div className="bg-background rounded-lg p-4 space-y-3">
-                                  {Object.entries(request.changes).map(([key, value]) => (
-                                    <div key={key} className="grid grid-cols-3 gap-4 text-sm">
-                                      <span className="font-medium text-muted-foreground">
-                                        {formatFieldName(key)}:
-                                      </span>
-                                      <span className="col-span-2 text-foreground break-words">
-                                        {formatFieldValue(value)}
-                                      </span>
-                                    </div>
-                                  ))}
+                                  {Object.entries(request.changes).map(([key, value]) => {
+                                    // Special rendering for additional_donations
+                                    if (key === 'additional_donations' && Array.isArray(value)) {
+                                      return (
+                                        <div key={key} className="space-y-2">
+                                          <span className="font-medium text-muted-foreground">
+                                            {formatFieldName(key)}:
+                                          </span>
+                                          <div className="col-span-2 space-y-2 mt-2">
+                                            {value.map((donation: any, idx: number) => {
+                                              const orgInfo = organizationNames[donation.id]
+                                              return (
+                                                <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg border">
+                                                  <div className="flex-1">
+                                                    <p className="font-medium text-sm">
+                                                      {orgInfo ? (
+                                                        <>
+                                                          {donation.type === 'mosque' && orgInfo.code && (
+                                                            <span className="text-primary">Mosque #{orgInfo.code}</span>
+                                                          )}
+                                                          {donation.type === 'nonprofit' && (
+                                                            <span className="text-primary">Nonprofit</span>
+                                                          )}
+                                                          {' - '}
+                                                          <span>{orgInfo.name}</span>
+                                                        </>
+                                                      ) : (
+                                                        <span className="text-muted-foreground">
+                                                          {donation.type === 'mosque' ? 'Mosque' : 'Nonprofit'} (Loading...)
+                                                        </span>
+                                                      )}
+                                                    </p>
+                                                  </div>
+                                                  <div className="text-right">
+                                                    <p className="font-semibold text-green-600">
+                                                      ${parseFloat(donation.amount).toFixed(2)}/month
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              )
+                                            })}
+                                            <div className="flex justify-between items-center p-3 bg-secondary rounded-lg font-semibold mt-2">
+                                              <span>Total Monthly Donations:</span>
+                                              <span className="text-lg text-primary">
+                                                ${value.reduce((sum: number, d: any) => sum + parseFloat(d.amount), 0).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+                                    
+                                    // Regular field rendering
+                                    const formattedValue = formatFieldValue(value, key)
+                                    if (formattedValue === null) return null
+                                    
+                                    return (
+                                      <div key={key} className="grid grid-cols-3 gap-4 text-sm">
+                                        <span className="font-medium text-muted-foreground">
+                                          {formatFieldName(key)}:
+                                        </span>
+                                        <span className="col-span-2 text-foreground break-words">
+                                          {formattedValue}
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
 

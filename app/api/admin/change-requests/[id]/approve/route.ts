@@ -58,7 +58,12 @@ export async function POST(
 
     // Apply changes, filtering out invalid fields and mapping field names
     for (const [key, value] of Object.entries(changeRequest.changes)) {
-      // Skip fields that don't exist in the specific table
+      // Skip fields that don't belong in entity tables
+      if (key === 'additional_donations') {
+        // Handle this separately later
+        continue
+      }
+      
       // Map field names if necessary
       if (changeRequest.subscription_type === 'mosque') {
         // Mosques use 'description' not 'about'
@@ -87,16 +92,61 @@ export async function POST(
       }
     }
 
-    const { data: updatedEntity, error: updateError } = await supabaseAdmin
-      .from(tableName)
-      .update(updateData)
-      .eq('subscription_id', changeRequest.subscription_id)
-      .select()
-      .single()
+    // Only update entity if there are changes to apply
+    let updatedEntity = null
+    if (Object.keys(updateData).length > 0) {
+      const { data: entityData, error: updateError } = await supabaseAdmin
+        .from(tableName)
+        .update(updateData)
+        .eq('subscription_id', changeRequest.subscription_id)
+        .select()
+        .single()
 
-    if (updateError) {
-      console.error(`Error applying changes to ${tableName}:`, updateError)
-      return errorResponse(`Failed to apply changes`, 500)
+      if (updateError) {
+        console.error(`Error applying changes to ${tableName}:`, updateError)
+        return errorResponse(`Failed to apply changes`, 500)
+      }
+      
+      updatedEntity = entityData
+    } else {
+      console.log('[Approve] No entity changes to apply, only additional donations')
+    }
+
+    // Handle additional donations if they were changed
+    if (changeRequest.changes.additional_donations) {
+      console.log('[Approve] Updating additional donations...')
+      
+      // Delete existing donations for this subscription
+      const { error: deleteError } = await supabaseAdmin
+        .from('additional_donations')
+        .delete()
+        .eq('subscription_id', changeRequest.subscription_id)
+
+      if (deleteError) {
+        console.error('Error deleting old donations:', deleteError)
+        // Continue even if delete fails
+      }
+
+      // Insert new donations
+      if (changeRequest.changes.additional_donations.length > 0) {
+        const donationsToInsert = changeRequest.changes.additional_donations.map((d: any) => ({
+          subscription_id: changeRequest.subscription_id,
+          organization_type: d.type,
+          organization_id: d.id,
+          amount_per_month: parseFloat(d.amount)
+        }))
+
+        const { error: insertError } = await supabaseAdmin
+          .from('additional_donations')
+          .insert(donationsToInsert)
+
+        if (insertError) {
+          console.error('Error inserting new donations:', insertError)
+          // Continue even if insert fails - the main entity update succeeded
+        } else {
+          console.log('[Approve] Successfully updated additional donations')
+        }
+      }
     }
 
     // Update the change request status

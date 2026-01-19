@@ -269,6 +269,11 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     donationAmount: "",
     donationMosqueCode: "",
   })
+  
+  const [additionalDonations, setAdditionalDonations] = useState<any[]>([])
+  const [availableMosques, setAvailableMosques] = useState<any[]>([])
+  const [availableNonprofits, setAvailableNonprofits] = useState<any[]>([])
+  const [editingDonations, setEditingDonations] = useState<{id: string, type: 'mosque'|'nonprofit', amount: string}[]>([])
 
   // Fetch subscription data - moved outside useEffect so it can be called from cancel button
   const fetchSubscription = async () => {
@@ -417,10 +422,49 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
+  // Fetch additional donations for this subscription
+  const fetchAdditionalDonations = async () => {
+    try {
+      const response: any = await authenticatedGet(`/api/subscriptions/${subscriptionId}/donations`)
+      if (response.success && response.data) {
+        setAdditionalDonations(response.data.donations || [])
+      }
+    } catch (error) {
+      console.error('Error fetching additional donations:', error)
+      setAdditionalDonations([])
+    }
+  }
+
+  // Fetch available mosques and nonprofits for editing
+  const fetchAvailableOrganizations = async () => {
+    try {
+      // Fetch mosques
+      const mosquesResponse: any = await authenticatedGet('/api/mosques/approved')
+      if (mosquesResponse.success && mosquesResponse.data?.mosques) {
+        setAvailableMosques(mosquesResponse.data.mosques)
+      }
+
+      // Fetch nonprofits
+      const { data: nonprofits } = await supabase
+        .from('nonprofits')
+        .select('id, name, subscription_id')
+        .eq('status', 'active')
+        .order('name', { ascending: true })
+      
+      if (nonprofits) {
+        setAvailableNonprofits(nonprofits)
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error)
+    }
+  }
+
   // Load subscription on mount
   useEffect(() => {
     fetchSubscription()
     fetchPendingChangeRequests()
+    fetchAdditionalDonations()
+    fetchAvailableOrganizations()
   }, [subscriptionId, toast])
 
   // Reinitialize services and committee when entering edit mode
@@ -457,8 +501,20 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         setCommitteeList([{name: '', title: '', photo: ''}])
         setCommitteeCount(1)
       }
+      
+      // Initialize editing donations from current donations
+      if (additionalDonations && additionalDonations.length > 0) {
+        const editingDons = additionalDonations.map(d => ({
+          id: d.organization_id,
+          type: d.organization_type,
+          amount: d.amount_per_month.toString()
+        }))
+        setEditingDonations(editingDons)
+      } else {
+        setEditingDonations([])
+      }
     }
-  }, [isEditing, subscription])
+  }, [isEditing, subscription, additionalDonations])
 
   const handleCancelSubscription = () => {
     alert("Subscription cancelled successfully. You will retain access until the end of your billing period.")
@@ -485,7 +541,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       const updateData = {
         subscriptionId: subscription.id,
         type: subscription.type,
-        data: formData
+        data: formData,
+        additionalDonations: editingDonations
       }
       
       const response: any = await authenticatedPost('/api/subscriptions/update', updateData)
@@ -2394,29 +2451,159 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 <Separator />
 
                 <h3 className="font-semibold">Additional Donation</h3>
-                {formData.donateToSameOrganization ? (
+                {isEditing ? (
                   <div className="space-y-4">
-                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                      <p className="text-sm text-foreground">
-                        Donation will go to: <span className="font-semibold">Mosque #{formData.donationMosqueCode || 'N/A'}</span>
-                      </p>
+                    <p className="text-sm text-muted-foreground">Select organizations to donate to each month:</p>
+                    
+                    {/* Mosques section */}
+                    {availableMosques && availableMosques.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="font-semibold">Mosques</Label>
+                        <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                          {availableMosques.map((mosque) => {
+                            const isSelected = editingDonations.some(d => d.id === mosque.id && d.type === 'mosque')
+                            const selectedDonation = editingDonations.find(d => d.id === mosque.id && d.type === 'mosque')
+                            
+                            return (
+                              <div key={mosque.id} className="flex items-center gap-3 p-2 hover:bg-secondary rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditingDonations(prev => [...prev, {id: mosque.id, type: 'mosque', amount: '10.00'}])
+                                    } else {
+                                      setEditingDonations(prev => prev.filter(d => !(d.id === mosque.id && d.type === 'mosque')))
+                                    }
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{mosque.name}</p>
+                                  <p className="text-xs text-muted-foreground">Mosque #{mosque.mosque_code}</p>
+                                </div>
+                                {isSelected && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-sm">$</span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={selectedDonation?.amount || ''}
+                                      onChange={(e) => {
+                                        setEditingDonations(prev => prev.map(d => 
+                                          (d.id === mosque.id && d.type === 'mosque') 
+                                            ? {...d, amount: e.target.value} 
+                                            : d
+                                        ))
+                                      }}
+                                      placeholder="0.00"
+                                      className="w-24 h-8"
+                                    />
+                                    <span className="text-sm">/mo</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Nonprofits section */}
+                    {availableNonprofits && availableNonprofits.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="font-semibold">Nonprofits</Label>
+                        <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                          {availableNonprofits.map((nonprofit) => {
+                            const isSelected = editingDonations.some(d => d.id === nonprofit.id && d.type === 'nonprofit')
+                            const selectedDonation = editingDonations.find(d => d.id === nonprofit.id && d.type === 'nonprofit')
+                            
+                            return (
+                              <div key={nonprofit.id} className="flex items-center gap-3 p-2 hover:bg-secondary rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditingDonations(prev => [...prev, {id: nonprofit.id, type: 'nonprofit', amount: '10.00'}])
+                                    } else {
+                                      setEditingDonations(prev => prev.filter(d => !(d.id === nonprofit.id && d.type === 'nonprofit')))
+                                    }
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{nonprofit.name}</p>
+                                </div>
+                                {isSelected && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-sm">$</span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={selectedDonation?.amount || ''}
+                                      onChange={(e) => {
+                                        setEditingDonations(prev => prev.map(d => 
+                                          (d.id === nonprofit.id && d.type === 'nonprofit') 
+                                            ? {...d, amount: e.target.value} 
+                                            : d
+                                        ))
+                                      }}
+                                      placeholder="0.00"
+                                      className="w-24 h-8"
+                                    />
+                                    <span className="text-sm">/mo</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {editingDonations.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
+                          <span className="font-semibold">Total Monthly Donations:</span>
+                          <span className="font-bold text-lg text-primary">
+                            ${editingDonations.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : additionalDonations && additionalDonations.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      {additionalDonations.map((donation) => (
+                        <div key={donation.id} className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-foreground">
+                              {donation.organization_type === 'mosque' ? (
+                                <span>
+                                  <span className="font-semibold">Mosque #{donation.organizationCode}</span> - {donation.organizationName}
+                                </span>
+                              ) : (
+                                <span className="font-semibold">{donation.organizationName}</span>
+                              )}
+                            </p>
+                            <p className="text-sm font-semibold text-primary">
+                              ${parseFloat(donation.amount_per_month).toFixed(2)}/month
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Donation Amount ($)</Label>
-                      {isEditing ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={formData.donationAmount || ''}
-                          onChange={(e) => handleInputChange("donationAmount", e.target.value)}
-                          placeholder="0.00"
-                        />
-                      ) : (
-                        <p className="text-foreground">
-                          ${formData.donationAmount ? parseFloat(formData.donationAmount).toFixed(2) : '0.00'}
-                        </p>
-                      )}
+                    <Separator />
+                    <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
+                      <span className="font-semibold">Total Monthly Donations:</span>
+                      <span className="font-bold text-lg text-primary">
+                        ${additionalDonations.reduce((sum, d) => sum + parseFloat(d.amount_per_month), 0).toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 ) : (

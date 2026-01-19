@@ -316,6 +316,103 @@ export async function POST(request: NextRequest) {
       return errorResponse(`Failed to create ${type} record: ${entityError.message || entityError.details || 'Unknown error'}`, 500)
     }
 
+    // Handle additional donations for business subscriptions
+    if (type === 'business' && data.donationOrganizations && Array.isArray(data.donationOrganizations) && data.donationOrganizations.length > 0) {
+      console.log('[Additional Donations] Processing donations:', data.donationOrganizations)
+      console.log('[Additional Donations] Donation amount per org:', data.donationAmount)
+      
+      const donationAmount = parseFloat(data.donationAmount) || 10.00
+
+      for (const orgString of data.donationOrganizations) {
+        if (!orgString || typeof orgString !== 'string') continue
+
+        // Parse the format: 'mosque-51' or 'nonprofit-{uuid}'
+        // Split only on the FIRST dash to preserve UUIDs which contain dashes
+        const firstDashIndex = orgString.indexOf('-')
+        if (firstDashIndex === -1) {
+          console.error('[Additional Donations] Invalid org format (no dash):', orgString)
+          continue
+        }
+
+        const orgType = orgString.substring(0, firstDashIndex)
+        const orgIdentifier = orgString.substring(firstDashIndex + 1)
+        
+        if (!orgType || !orgIdentifier) {
+          console.error('[Additional Donations] Invalid org format:', orgString)
+          continue
+        }
+
+        let organizationId: string | null = null
+
+        if (orgType === 'mosque') {
+          // For mosques, orgIdentifier is the mosque_code, we need to get the actual UUID
+          const mosqueCode = parseInt(orgIdentifier)
+          if (isNaN(mosqueCode)) {
+            console.error('[Additional Donations] Invalid mosque code:', orgIdentifier)
+            continue
+          }
+
+          const { data: mosque } = await supabase
+            .from('mosques')
+            .select('id')
+            .eq('mosque_code', mosqueCode)
+            .single()
+
+          if (mosque) {
+            organizationId = mosque.id
+          } else {
+            console.error('[Additional Donations] Mosque not found for code:', mosqueCode)
+            continue
+          }
+        } else if (orgType === 'nonprofit') {
+          // For nonprofits, orgIdentifier is already the UUID
+          organizationId = orgIdentifier
+          
+          // Verify the nonprofit exists
+          const { data: nonprofit, error: nonprofitError } = await supabase
+            .from('nonprofits')
+            .select('id')
+            .eq('id', organizationId)
+            .single()
+
+          if (nonprofitError || !nonprofit) {
+            console.error('[Additional Donations] Nonprofit not found:', organizationId, nonprofitError)
+            continue
+          }
+        } else {
+          console.error('[Additional Donations] Unknown org type:', orgType)
+          continue
+        }
+
+        if (!organizationId) {
+          console.error('[Additional Donations] No organization ID found for:', orgString)
+          continue
+        }
+
+        console.log(`[Additional Donations] Inserting donation for ${orgType}:`, organizationId, 'amount:', donationAmount)
+
+        // Insert the donation
+        const { data: insertedDonation, error: donationError } = await supabaseAdmin
+          .from('additional_donations')
+          .insert({
+            subscription_id: subscription.id,
+            organization_type: orgType as 'mosque' | 'nonprofit',
+            organization_id: organizationId,
+            amount_per_month: donationAmount
+          })
+          .select()
+
+        if (donationError) {
+          console.error('[Additional Donations] ❌ Error inserting donation:', donationError)
+          console.error('[Additional Donations] Error details:', JSON.stringify(donationError, null, 2))
+          // Continue even if one donation fails
+        } else {
+          console.log(`[Additional Donations] ✅ Successfully inserted donation for ${orgType}:`, organizationId)
+          console.log('[Additional Donations] Inserted data:', insertedDonation)
+        }
+      }
+    }
+
     // Get payment intent client secret if needed
     const latestInvoice: any = stripeSubscription.latest_invoice
     const clientSecret = latestInvoice?.payment_intent?.client_secret

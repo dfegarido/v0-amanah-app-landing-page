@@ -391,6 +391,39 @@ export default function AmanahLanding() {
         </div>
       </section>
 
+      {/* Amanah Us Section */}
+      <section className="px-4 py-12 bg-gradient-to-br from-amber-50 to-amber-100 border-t border-b border-amber-200">
+        <div className="mx-auto max-w-4xl">
+          <Card className="border-amber-300 shadow-lg bg-white/80 backdrop-blur">
+            <div className="p-8 md:p-12">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0">
+                  <div className="rounded-full bg-amber-500 p-4 shadow-lg">
+                    <Heart className="h-10 w-10 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1 text-center md:text-left">
+                  <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                    {language === "en" ? "Learn About Amanah Us" : "تعرف على أمانة نحن"}
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    {language === "en" 
+                      ? "15% of all proceeds fund mosques, nonprofits, and Islamic schools. See the real impact of your support."
+                      : "يتم التبرع بـ 15% من جميع العائدات لتمويل المساجد والمنظمات غير الربحية والمدارس الإسلامية. شاهد التأثير الحقيقي لدعمك."}
+                  </p>
+                  <Button asChild variant="default" className="bg-amber-500 hover:bg-amber-600 text-white">
+                    <Link href="/amanah-us">
+                      {language === "en" ? "View Impact Metrics" : "عرض مقاييس التأثير"}
+                      <TrendingUp className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </section>
+
       {/* Add Mosque / Business / Coupon Section */}
       <section className="px-4 py-16 bg-secondary/30">
         <div className="mx-auto max-w-3xl text-center">

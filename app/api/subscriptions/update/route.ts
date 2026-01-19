@@ -8,6 +8,7 @@ interface UpdateSubscriptionRequest {
   subscriptionId: string
   type: 'mosque' | 'business' | 'coupon' | 'nonprofit'
   data: Record<string, any>
+  additionalDonations?: {id: string, type: 'mosque'|'nonprofit', amount: string}[]
 }
 
 // POST /api/subscriptions/update - Create change request for subscription updates
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('Invalid request body', 400)
     }
 
-    const { subscriptionId, type, data } = body
+    const { subscriptionId, type, data, additionalDonations } = body
     const supabase = getServerSupabase(request)
     const supabaseAdmin = getSupabaseAdmin()
 
@@ -55,6 +56,16 @@ export async function POST(request: NextRequest) {
     if (entityError || !currentEntity) {
       console.error(`Error fetching current ${type} data:`, entityError)
       return errorResponse(`Failed to fetch current ${type} data`, 500)
+    }
+
+    // Get current additional donations
+    const { data: currentDonations, error: donationsError } = await supabase
+      .from('additional_donations')
+      .select('*')
+      .eq('subscription_id', subscriptionId)
+
+    if (donationsError) {
+      console.error('Error fetching current donations:', donationsError)
     }
 
     // Helper function to check if a value has changed
@@ -144,6 +155,28 @@ export async function POST(request: NextRequest) {
     for (const [key, newValue] of Object.entries(allChanges)) {
       if (hasChanged(newValue, currentEntity[key])) {
         changes[key] = newValue
+      }
+    }
+
+    // Check if additional donations have changed
+    let donationsChanged = false
+    if (additionalDonations !== undefined) {
+      const currentDonationsList = (currentDonations || []).map((d: any) => ({
+        id: d.organization_id,
+        type: d.organization_type,
+        amount: parseFloat(d.amount_per_month).toFixed(2)
+      })).sort((a: any, b: any) => a.id.localeCompare(b.id))
+
+      const newDonationsList = additionalDonations.map((d: any) => ({
+        id: d.id,
+        type: d.type,
+        amount: parseFloat(d.amount).toFixed(2)
+      })).sort((a: any, b: any) => a.id.localeCompare(b.id))
+
+      donationsChanged = JSON.stringify(currentDonationsList) !== JSON.stringify(newDonationsList)
+      
+      if (donationsChanged) {
+        changes.additional_donations = newDonationsList
       }
     }
 
