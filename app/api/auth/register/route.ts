@@ -29,11 +29,17 @@ export async function POST(request: NextRequest) {
       return errorResponse('Password must be at least 8 characters long', 400)
     }
 
+    // Get the site URL for email confirmation redirect
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+                    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                    'https://www.amanahbiz.com'
+
     // Create user in Supabase Auth with metadata
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: body.email,
       password: body.password,
       options: {
+        emailRedirectTo: `${siteUrl}/auth/login`,
         data: {
           name: body.name,
           role: body.role || 'user',

@@ -165,10 +165,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Starting sign up for:', email)
       
+      // Get the current site URL for email confirmation redirect
+      const siteUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : process.env.NEXT_PUBLIC_SITE_URL || 'https://www.amanahbiz.com'
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: `${siteUrl}/auth/login`,
           data: {
             name,
             phone: phone || null,
