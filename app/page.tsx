@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   MSquare as Mosque,
@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { LanguageToggle } from "@/components/language-toggle"
-import { getTotalCommunityFunding } from "@/lib/mock-data"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
 const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
@@ -116,6 +115,14 @@ const translations = {
 
 export default function AmanahLanding() {
   const [language, setLanguage] = useState<"en" | "ar">("en")
+  const [communityFunding, setCommunityFunding] = useState({
+    totalGivenBack: 0,
+    amanahOrgFund: 0,
+    mosqueKickbacks: 0,
+    manualDonations: 0,
+    additionalDonations: 0
+  })
+  const [loadingFunding, setLoadingFunding] = useState(true)
   const t = translations[language]
   const isRTL = language === "ar"
 
@@ -123,7 +130,28 @@ export default function AmanahLanding() {
     setLanguage(language === "en" ? "ar" : "en")
   }
 
-  const communityFunding = getTotalCommunityFunding()
+  // Fetch community funding from API
+  useEffect(() => {
+    const fetchCommunityFunding = async () => {
+      try {
+        setLoadingFunding(true)
+        const response = await fetch('/api/community-funding')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data) {
+            setCommunityFunding(result.data)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching community funding:', error)
+        // Keep default values on error
+      } finally {
+        setLoadingFunding(false)
+      }
+    }
+
+    fetchCommunityFunding()
+  }, [])
 
   return (
     <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
@@ -300,7 +328,11 @@ export default function AmanahLanding() {
 
             <Card className="p-8 text-center bg-background/50 backdrop-blur border-primary/20 inline-block">
               <div className="text-5xl font-bold text-primary mb-3">
-                ${communityFunding.totalGivenBack.toLocaleString()}
+                {loadingFunding ? (
+                  <span className="text-2xl">Loading...</span>
+                ) : (
+                  `$${communityFunding.totalGivenBack.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                )}
               </div>
               <p className="text-muted-foreground font-semibold">
                 {language === "en" ? "Given Back to Community" : "إجمالي الأموال المعادة للمجتمع المسلم"}
@@ -408,7 +440,7 @@ export default function AmanahLanding() {
                   </h3>
                   <p className="text-slate-600 mb-4">
                     {language === "en" 
-                      ? "15% of all proceeds fund mosques, nonprofits, and Islamic schools. See the real impact of your support."
+                      ? "25% of all proceeds fund mosques, nonprofits, and Islamic schools. See the real impact of your support."
                       : "يتم التبرع بـ 15% من جميع العائدات لتمويل المساجد والمنظمات غير الربحية والمدارس الإسلامية. شاهد التأثير الحقيقي لدعمك."}
                   </p>
                   <Button asChild variant="default" className="bg-amber-500 hover:bg-amber-600 text-white">
