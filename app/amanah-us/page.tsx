@@ -89,12 +89,8 @@ export default function AmanahUsPage() {
         
         <div className="container relative mx-auto">
           <div className="mx-auto max-w-4xl text-center">
-            <Badge className="mb-6 bg-amber-500/20 text-amber-600 border-amber-500/30 hover:bg-amber-500/30 text-sm px-4 py-1">
-              Launching Soon
-            </Badge>
-            
             <h1 className="mb-6 text-5xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl">
-              Welcome to <span className="text-amber-500">Amanah Us</span>
+              Welcome to <span className="text-amber-500">Amanah US</span>
             </h1>
             
             <p className="mx-auto mb-8 max-w-2xl text-lg text-muted-foreground md:text-xl">
@@ -106,9 +102,9 @@ export default function AmanahUsPage() {
               <Button 
                 size="lg" 
                 className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-8"
-                onClick={() => window.open('https://amanahus.org', '_blank')}
+                onClick={() => window.location.href = '/'}
               >
-                Visit AmanahUs.org
+                Back to Amanah Platform
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
@@ -116,12 +112,12 @@ export default function AmanahUsPage() {
         </div>
       </section>
 
-      {/* What Is Amanah Us Section */}
+      {/* What Is Amanah US Section */}
       <section className="container mx-auto px-4 py-16 md:py-24">
         <div className="mx-auto max-w-4xl">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-foreground md:text-4xl mb-4">
-              What Is Amanah Us?
+              What Is Amanah US?
             </h2>
             <div className="w-20 h-1 bg-amber-500 mx-auto mb-6"></div>
           </div>
@@ -137,7 +133,7 @@ export default function AmanahUsPage() {
                     The Nonprofit Arm of Amanah
                   </h3>
                   <p className="text-muted-foreground leading-relaxed mb-4">
-                    <strong>Amanah Us</strong> is the nonprofit organization that receives <strong>15% of all proceeds</strong> from 
+                    <strong>Amanah US</strong> is the nonprofit organization that receives <strong>15% of all proceeds</strong> from 
                     the Amanah platform. These funds are strategically distributed to support mosques, 
                     nonprofits, and Islamic schools across America.
                   </p>
@@ -313,7 +309,7 @@ export default function AmanahUsPage() {
                   </h3>
                   
                   <div className="space-y-6">
-                    {/* Amanah Us Education */}
+                    {/* Amanah US Education */}
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -445,7 +441,7 @@ export default function AmanahUsPage() {
                 <CardContent className="pt-12 p-6">
                   <Heart className="h-10 w-10 text-amber-500 mb-4" />
                   <h3 className="text-lg font-semibold text-foreground mb-2">
-                    15% Allocated to Amanah Us
+                    15% Allocated to Amanah US
                   </h3>
                   <p className="text-muted-foreground">
                     A portion of all proceeds is automatically set aside for the nonprofit mission.
@@ -529,7 +525,7 @@ export default function AmanahUsPage() {
 
               <div className="bg-amber-50/30 border-l-4 border-amber-500/60 p-6 rounded">
                 <p className="text-foreground leading-relaxed">
-                  <strong className="text-amber-600">Amanah Us</strong> is a separate nonprofit entity 
+                  <strong className="text-amber-600">Amanah US</strong> is a separate nonprofit entity 
                   (501(c)(3) pending) dedicated to the mission of strengthening the Muslim community through 
                   responsible, transparent giving. We believe in accountability at every step.
                 </p>
@@ -539,21 +535,17 @@ export default function AmanahUsPage() {
         </div>
       </section>
 
-      {/* Future Vision Section */}
+      {/* Programs Section */}
       <section className="bg-gradient-to-b from-background to-secondary/30 py-16 md:py-24">
         <div className="container mx-auto px-4">
           <div className="mx-auto max-w-4xl text-center">
-            <Badge className="mb-6 bg-amber-500/20 text-amber-600 border-amber-500/30 text-sm px-4 py-1">
-              Coming Soon
-            </Badge>
-            
             <h2 className="text-3xl font-bold text-foreground md:text-4xl mb-6">
-              The Future of Amanah Us
+              Our Programs
             </h2>
             
             <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto leading-relaxed">
-              Amanah Us will soon have its own dedicated website at <strong className="text-amber-500">AmanahUs.org</strong>, 
-              featuring expanded programs, grant applications, and deeper integration with the main platform.
+              Amanah US supports the Muslim community through various programs, 
+              featuring expanded initiatives, grant applications, and deeper integration with the main platform.
             </p>
 
             <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto text-left">
@@ -600,7 +592,7 @@ export default function AmanahUsPage() {
                     Platform Integration
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Seamless connection between the Amanah app and Amanah Us nonprofit initiatives.
+                    Seamless connection between the Amanah app and Amanah US nonprofit initiatives.
                   </p>
                 </CardContent>
               </Card>
@@ -624,18 +616,10 @@ export default function AmanahUsPage() {
             <Button 
               size="lg" 
               className="bg-amber-500 hover:bg-amber-600 text-white font-semibold"
-              onClick={() => window.open('https://amanahus.org', '_blank')}
-            >
-              Learn More About Our Mission
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            
-            <Button 
-              size="lg" 
-              variant="outline"
               onClick={() => window.location.href = '/'}
             >
               Back to Amanah Platform
+              <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
 
@@ -649,7 +633,7 @@ export default function AmanahUsPage() {
       <footer className="bg-secondary/30 border-t py-8">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} Amanah Us. A 501(c)(3) nonprofit organization (pending).
+            &copy; {new Date().getFullYear()} Amanah US. A 501(c)(3) nonprofit organization (pending).
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             This page is hosted on the Amanah platform until AmanahUs.org launches.

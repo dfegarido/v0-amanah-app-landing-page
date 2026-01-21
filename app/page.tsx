@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   MSquare as Mosque,
@@ -13,11 +13,11 @@ import {
   LogIn,
   Plus,
   TrendingUp,
+  ArrowRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { LanguageToggle } from "@/components/language-toggle"
-import { getTotalCommunityFunding } from "@/lib/mock-data"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
 const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
@@ -116,6 +116,14 @@ const translations = {
 
 export default function AmanahLanding() {
   const [language, setLanguage] = useState<"en" | "ar">("en")
+  const [communityFunding, setCommunityFunding] = useState({
+    totalGivenBack: 0,
+    amanahOrgFund: 0,
+    mosqueKickbacks: 0,
+    manualDonations: 0,
+    additionalDonations: 0
+  })
+  const [loadingFunding, setLoadingFunding] = useState(true)
   const t = translations[language]
   const isRTL = language === "ar"
 
@@ -123,20 +131,32 @@ export default function AmanahLanding() {
     setLanguage(language === "en" ? "ar" : "en")
   }
 
-  const communityFunding = getTotalCommunityFunding()
+  // Fetch community funding from API
+  useEffect(() => {
+    const fetchCommunityFunding = async () => {
+      try {
+        setLoadingFunding(true)
+        const response = await fetch('/api/community-funding')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data) {
+            setCommunityFunding(result.data)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching community funding:', error)
+        // Keep default values on error
+      } finally {
+        setLoadingFunding(false)
+      }
+    }
+
+    fetchCommunityFunding()
+  }, [])
 
   return (
     <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
       <LanguageToggle language={language} onToggle={toggleLanguage} />
-
-        <div className="fixed top-4 left-4 z-50">
-        <Button asChild variant="outline" className="bg-background/80 backdrop-blur-sm">
-          <Link href="/auth/login">
-            <LogIn className="mr-2 h-4 w-4" />
-            {language === "en" ? "Login" : "تسجيل الدخول"}
-          </Link>
-        </Button>
-      </div>
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-background to-secondary/30 px-4 py-20 md:py-32">
@@ -158,17 +178,50 @@ export default function AmanahLanding() {
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
               <Button
                 size="lg"
-                className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6 w-full sm:w-auto"
                 asChild
               >
                 <a href={IOS_APP_URL} target="_blank" rel="noopener noreferrer">
                   {t.downloadIOS}
                 </a>
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 py-6 bg-transparent" asChild>
+              <Button size="lg" variant="outline" className="text-lg px-8 py-6 bg-transparent w-full sm:w-auto" asChild>
                 <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer">
                   {t.downloadAndroid}
                 </a>
+              </Button>
+            </div>
+
+            <div className="mt-8 flex flex-col gap-4 items-center">
+              <Button
+                size="lg"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 text-xl font-bold px-12 py-7 shadow-lg hover:shadow-xl transition-all w-full sm:w-auto"
+                asChild
+              >
+                <Link href="/auth/login">
+                  {language === "en" ? "Login" : "تسجيل الدخول"}
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-lg px-8 py-6 w-full sm:w-auto"
+                asChild
+              >
+                <Link href="/member/register">
+                  {language === "en" ? "Register" : "إنشاء حساب"}
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-lg px-8 py-6 w-full sm:w-auto border-amber-500 text-amber-600 hover:bg-amber-50"
+                asChild
+              >
+                <Link href="/amanah-us">
+                  {language === "en" ? "Visit AmanahUS.org" : "زيارة AmanahUS.org"}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -300,7 +353,11 @@ export default function AmanahLanding() {
 
             <Card className="p-8 text-center bg-background/50 backdrop-blur border-primary/20 inline-block">
               <div className="text-5xl font-bold text-primary mb-3">
-                ${communityFunding.totalGivenBack.toLocaleString()}
+                {loadingFunding ? (
+                  <span className="text-2xl">Loading...</span>
+                ) : (
+                  `$${communityFunding.totalGivenBack.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                )}
               </div>
               <p className="text-muted-foreground font-semibold">
                 {language === "en" ? "Given Back to Community" : "إجمالي الأموال المعادة للمجتمع المسلم"}
@@ -404,11 +461,11 @@ export default function AmanahLanding() {
                 </div>
                 <div className="flex-1 text-center md:text-left">
                   <h3 className="text-2xl font-bold text-slate-900 mb-2">
-                    {language === "en" ? "Learn About Amanah Us" : "تعرف على أمانة نحن"}
+                    {language === "en" ? "Learn About Amanah US" : "تعرف على أمانة نحن"}
                   </h3>
                   <p className="text-slate-600 mb-4">
                     {language === "en" 
-                      ? "15% of all proceeds fund mosques, nonprofits, and Islamic schools. See the real impact of your support."
+                      ? "25% of all proceeds fund mosques, nonprofits, and Islamic schools. See the real impact of your support."
                       : "يتم التبرع بـ 15% من جميع العائدات لتمويل المساجد والمنظمات غير الربحية والمدارس الإسلامية. شاهد التأثير الحقيقي لدعمك."}
                   </p>
                   <Button asChild variant="default" className="bg-amber-500 hover:bg-amber-600 text-white">

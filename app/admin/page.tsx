@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -149,8 +149,29 @@ export default function AdminDashboard() {
     }
   }, [user, loading, router])
 
+  // Fetch push notification requests (real API)
+  const fetchPushNotifications = useCallback(async () => {
+    if (!user || user.role !== 'admin') return
+
+    try {
+      setPushNotifLoading(true)
+      const response: any = await authenticatedGet('/api/admin/push-notifications')
+      
+      if (response.success && response.data) {
+        setPushNotificationRequests(response.data.requests || [])
+      } else {
+        setPushNotificationRequests([])
+      }
+    } catch (error) {
+      console.error('[Admin Dashboard] Error fetching push notifications:', error)
+      setPushNotificationRequests([])
+    } finally {
+      setPushNotifLoading(false)
+    }
+  }, [user])
+
   // Fetch members data
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     if (!user || user.role !== 'admin') return
     
     try {
@@ -180,10 +201,10 @@ export default function AdminDashboard() {
     } finally {
       setMembersLoading(false)
     }
-  }
+  }, [user, toast])
 
   // Fetch payment alerts data
-  const fetchPaymentAlerts = async () => {
+  const fetchPaymentAlerts = useCallback(async () => {
     if (!user || user.role !== 'admin') return
     
     try {
@@ -210,7 +231,7 @@ export default function AdminDashboard() {
     } finally {
       setAlertsLoading(false)
     }
-  }
+  }, [user, toast])
 
   useEffect(() => {
     if (!loading) {
@@ -218,28 +239,7 @@ export default function AdminDashboard() {
       fetchPaymentAlerts()
       fetchPushNotifications()
     }
-  }, [user, loading])
-
-  // Fetch push notification requests (real API)
-  const fetchPushNotifications = async () => {
-    if (!user || user.role !== 'admin') return
-
-    try {
-      setPushNotifLoading(true)
-      const response: any = await authenticatedGet('/api/admin/push-notifications')
-      
-      if (response.success && response.data) {
-        setPushNotificationRequests(response.data.requests || [])
-      } else {
-        setPushNotificationRequests([])
-      }
-    } catch (error) {
-      console.error('[Admin Dashboard] Error fetching push notifications:', error)
-      setPushNotificationRequests([])
-    } finally {
-      setPushNotifLoading(false)
-    }
-  }
+  }, [loading, fetchMembers, fetchPaymentAlerts, fetchPushNotifications])
 
   // Approve push notification (real API)
   const handleApprovePushNotification = async (requestId: string) => {
@@ -1079,15 +1079,6 @@ export default function AdminDashboard() {
   const getActionButton = (subscription: Subscription & { subscriptionId?: string }) => {
     // Use subscriptionId if available (preserved subscription ID), otherwise use id
     const subscriptionId = (subscription as any).subscriptionId || subscription.id
-    
-    // Debug: Log subscription data
-    console.log('[getActionButton] Subscription:', {
-      id: subscription.id,
-      subscriptionId: subscriptionId,
-      appStatus: subscription.appStatus,
-      status: subscription.status,
-      type: subscription.type
-    })
     
     // If removed, show "To Be Removed" text (no button)
     if (subscription.appStatus === "removed") {
