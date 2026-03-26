@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     // Fetch each subscription from Stripe and compare prices
     for (const sub of subscriptions) {
       try {
+        if (!sub.stripe_subscription_id) continue
         const stripeSubscription = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
         
         // Get the price from the first item

@@ -152,6 +152,7 @@ export default function SubscribePage() {
   const [uploadedLogo, setUploadedLogo] = useState<string | null>(null)
   const [affiliatedMosqueCode, setAffiliatedMosqueCode] = useState<string>("")
   const [formData, setFormData] = useState<any>({ redemptionType: 'unlimited', country: 'USA' }) // Store all form data, defaults
+  const [promoCode, setPromoCode] = useState<string>("")
   const [availableMosques, setAvailableMosques] = useState<any[]>([])
   const [availableNonprofits, setAvailableNonprofits] = useState<any[]>([])
   const [nextMosqueCode, setNextMosqueCode] = useState<number>(1)
@@ -169,6 +170,8 @@ export default function SubscribePage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<any>(null)
   const [useSavedPaymentMethod, setUseSavedPaymentMethod] = useState(false)
+  const [promoPreview, setPromoPreview] = useState<any>(null)
+  const [promoPreviewError, setPromoPreviewError] = useState<string | null>(null)
   
   // Optimistic UI state for uploads
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set())
@@ -263,8 +266,8 @@ export default function SubscribePage() {
       return 'Please enter a valid URL (e.g., example.com or https://example.com)'
     }
 
-    // Zip code validation
-    if (fieldName === 'zip' && value && !/^\d{5}(-\d{4})?$/.test(value)) {
+    // Postal code validation (supports US ZIP and international formats)
+    if (fieldName === 'zip' && value && !/^[A-Za-z0-9][A-Za-z0-9\s-]{2,11}$/.test(value)) {
       return 'Please enter a valid zip code'
     }
 
@@ -921,6 +924,7 @@ export default function SubscribePage() {
     setIsProcessing(true)
     
     try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
       // Serialize committee members to JSON for mosque and nonprofit types
       if (type === 'mosque' || type === 'nonprofit') {
         // Filter out empty committee members (ones with no name, title, or photo)
@@ -970,7 +974,9 @@ export default function SubscribePage() {
       const response: any = await authenticatedPost('/api/subscriptions/create', {
         type: type,
         data: subscriptionData,
-        paymentMethodId: paymentMethodId
+        paymentMethodId: paymentMethodId,
+        promoCode: promoCode.trim() ? promoCode.trim() : undefined,
+        timezone
       })
 
       if (response.success) {
@@ -1051,6 +1057,44 @@ export default function SubscribePage() {
       console.error('Error fetching payment method:', error)
     }
   }
+
+  // Promo preview shown in Step 2 for mosque/business subscriptions.
+  useEffect(() => {
+    const previewPromo = async () => {
+      if (step !== 2) return
+      if (type !== 'mosque' && type !== 'business') return
+
+      const enteredCode = promoCode.trim()
+      if (!enteredCode) {
+        setPromoPreview(null)
+        setPromoPreviewError(null)
+        return
+      }
+
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const response: any = await authenticatedPost('/api/promos/preview', {
+          code: enteredCode,
+          subscriptionType: type,
+          timezone,
+          basePriceCents: Math.round(getCurrentPrice() * 100),
+        })
+
+        if (response.success && response.data) {
+          setPromoPreview(response.data)
+          setPromoPreviewError(null)
+        } else {
+          setPromoPreview(null)
+          setPromoPreviewError(response.error || 'Unable to validate promo code')
+        }
+      } catch (error: any) {
+        setPromoPreview(null)
+        setPromoPreviewError(error.message || 'Unable to validate promo code')
+      }
+    }
+
+    previewPromo()
+  }, [step, promoCode, type, loadingPricing, pricing])
 
   const handlePaymentSuccess = () => {
     setClientSecret(null)
@@ -3334,6 +3378,16 @@ export default function SubscribePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {renderDetailsForm()}
+              {(type === "mosque" || type === "business") && (
+                <div className="space-y-2">
+                  <Label>Promo Code (optional)</Label>
+                  <Input
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                    placeholder="Enter promo code created by admin"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 {!isFormValid() && (
                   <div className="text-sm text-destructive text-center space-y-1">
@@ -3441,9 +3495,24 @@ export default function SubscribePage() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-muted-foreground">{info.title}</span>
                   <span className="font-semibold">
-                    {loadingPricing ? 'Loading...' : `$${getCurrentPrice()}/month`}
+                    {loadingPricing
+                      ? 'Loading...'
+                      : promoPreview?.pricing?.effectivePriceCents !== undefined
+                        ? `$${(promoPreview.pricing.effectivePriceCents / 100).toFixed(2)}/month`
+                        : `$${getCurrentPrice()}/month`}
                   </span>
                 </div>
+                {promoPreview?.pricing?.discountCents > 0 && (
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Promo ({promoPreview?.promo?.code})</span>
+                    <span className="text-green-600">-${(promoPreview.pricing.discountCents / 100).toFixed(2)}/month</span>
+                  </div>
+                )}
+                {promoPreviewError && (
+                  <div className="text-sm text-destructive mb-2">
+                    Promo not applied: {promoPreviewError}
+                  </div>
+                )}
                 {(type === "business" || type === "coupon" || type === "nonprofit") &&
                   affiliatedMosqueCode &&
                   affiliatedMosqueCode !== "none" && (
@@ -3489,7 +3558,9 @@ export default function SubscribePage() {
                   <span className="font-semibold">Total</span>
                   <span className="font-bold text-lg">
                     {loadingPricing ? 'Loading...' : (() => {
-                      const basePrice = getCurrentPrice()
+                      const basePrice = promoPreview?.pricing?.effectivePriceCents !== undefined
+                        ? promoPreview.pricing.effectivePriceCents / 100
+                        : getCurrentPrice()
                       const donationAmount = type === "business" &&
                         formData.donateToSameOrganization === true &&
                         formData.donationAmount &&
@@ -3549,7 +3620,7 @@ export default function SubscribePage() {
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4 mr-2" />
-                      Continue to Payment
+                      {promoPreview?.promo?.promoType === 'free' ? 'Create Subscription' : 'Continue to Payment'}
                     </>
                   )}
                 </Button>

@@ -1679,6 +1679,10 @@ export default function AdminDashboard() {
               <Users className="h-4 w-4 mr-2" />
               Non-Profits ({membersLoading ? "..." : totalNonprofits})
             </TabsTrigger>
+            <TabsTrigger value="promos">
+              <Ticket className="h-4 w-4 mr-2" />
+              Promo Codes
+            </TabsTrigger>
             <TabsTrigger value="payouts">
               <DollarSign className="h-4 w-4 mr-2" />
               Mosque Payouts
@@ -3117,6 +3121,26 @@ export default function AdminDashboard() {
                     </div>
                   </Collapsible>
                 )})}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Promo Codes Tab */}
+          <TabsContent value="promos">
+            <Card>
+              <CardHeader>
+                <CardTitle>Promo Codes</CardTitle>
+                <CardDescription>Create and manage promo codes for mosque/business subscriptions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <p className="text-sm text-muted-foreground">
+                    Use the dedicated promo-code page for the full form and list.
+                  </p>
+                  <Button asChild>
+                    <Link href="/admin/promos">Open Promo Codes</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

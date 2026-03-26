@@ -268,7 +268,8 @@ export default function MemberDashboard() {
       
       try {
         setLoadingSubscriptions(true)
-        const response: any = await authenticatedGet('/api/subscriptions')
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const response: any = await authenticatedGet(`/api/subscriptions?timezone=${encodeURIComponent(timezone)}`)
         
         if (response.success && response.data) {
           // Transform data to include entity name
@@ -299,7 +300,7 @@ export default function MemberDashboard() {
               name: name,
               status: sub.status,
               entityStatus: entityStatus,
-              price: sub.price_amount,
+              price: sub.effective_price_amount ?? sub.price_amount,
               nextBillingDate: sub.next_billing_date,
               entity: sub.entity,
               mosqueCode: sub.entity?.mosque_code,

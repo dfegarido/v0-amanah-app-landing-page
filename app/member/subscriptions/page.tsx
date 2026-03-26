@@ -54,7 +54,8 @@ export default function SubscriptionsPage() {
 
       try {
         setLoading(true)
-        const response: any = await authenticatedGet('/api/subscriptions')
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const response: any = await authenticatedGet(`/api/subscriptions?timezone=${encodeURIComponent(timezone)}`)
 
         if (response.success && response.data) {
           // Transform data to include entity name
@@ -85,7 +86,7 @@ export default function SubscriptionsPage() {
               paymentStatus: sub.status, // Payment status from subscriptions table
               appStatus: sub.app_status || 'pending_verification', // App/subscription status
               entityStatus: entityStatus,
-              price: sub.price_amount,
+              price: sub.effective_price_amount ?? sub.price_amount,
               nextBillingDate: sub.next_billing_date,
               entity: sub.entity,
               mosqueCode: sub.entity?.mosque_code,
@@ -418,7 +419,11 @@ export default function SubscriptionsPage() {
                         <TableCell>
                           {getAppStatusBadge(subscription.appStatus)}
                         </TableCell>
-                        <TableCell className="font-medium">{getSubscriptionPrice(subscription.type)}</TableCell>
+                        <TableCell className="font-medium">
+                          {typeof subscription.price === 'number'
+                            ? `$${subscription.price.toFixed(2)}/month`
+                            : `$${subscription.price}/month`}
+                        </TableCell>
                         <TableCell>
                           {subscription.nextBillingDate ? (
                             <span className="text-sm">{new Date(subscription.nextBillingDate).toLocaleDateString()}</span>

@@ -1534,7 +1534,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 )}
               </div>
               <p className="text-sm text-muted-foreground capitalize">
-                {subscription.type} Subscription • ${subscription.price_amount}/month
+                {subscription.type} Subscription • $
+                {(subscription as any).effective_price_amount ?? subscription.price_amount ?? subscription.price ?? 0}/month
                 {subscription.entity?.mosque_code && ` • Code #${subscription.entity.mosque_code}`}
                 {subscription.entity?.affiliated_mosque_code && ` • Affiliated with #${subscription.entity.affiliated_mosque_code}`}
               </p>
@@ -3026,7 +3027,9 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Price</Label>
-                <p className="text-foreground font-semibold">${subscription.price_amount || subscription.price || 0}/month</p>
+                <p className="text-foreground font-semibold">
+                  ${(subscription as any).effective_price_amount ?? subscription.price_amount ?? subscription.price ?? 0}/month
+                </p>
               </div>
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Next Billing Date</Label>

@@ -4,9 +4,18 @@ import { successResponse, errorResponse, requireAuth, parseRequestBody } from '@
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia'
-})
+let stripeClient: any = null
+function getStripeClient() {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('Stripe secret key is not configured')
+  }
+  if (!stripeClient) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-12-18.acacia',
+    })
+  }
+  return stripeClient
+}
 
 // Service role Supabase client for admin operations (bypasses RLS)
 const supabaseAdmin = createClient(
@@ -28,8 +37,42 @@ const DEFAULT_SUBSCRIPTION_PRICING = {
   nonprofit: { amount: 5000, currency: 'usd' } // $50/month
 }
 
+function getLocalDateISO(timeZone: string, date: Date = new Date()): string {
+  // Returns YYYY-MM-DD for the provided IANA time zone.
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((p) => p.type === 'year')?.value
+  const month = parts.find((p) => p.type === 'month')?.value
+  const day = parts.find((p) => p.type === 'day')?.value
+
+  if (!year || !month || !day) return date.toISOString().split('T')[0]
+  return `${year}-${month}-${day}`
+}
+
+function isPromoActiveForLocalDate(promo: any, localDateISO: string): boolean {
+  // Inclusive validation: start_date <= localToday <= end_date
+  if (promo.use_start_date && promo.start_date && localDateISO < promo.start_date) return false
+  if (promo.use_end_date && promo.end_date && localDateISO > promo.end_date) return false
+  return true
+}
+
 // Fetch pricing from admin settings (uses service role to bypass RLS)
 async function getSubscriptionPricing(type: 'mosque' | 'business' | 'coupon' | 'nonprofit') {
+  const toCents = (raw: any, fallbackCents: number): number => {
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallbackCents
+
+    // admin_settings stores dollars in this project; convert to cents.
+    // If value is already large, treat it as already-cents for safety.
+    if (parsed <= 500) return Math.round(parsed * 100)
+    return Math.round(parsed)
+  }
+
   try {
     console.log('[Pricing] Fetching pricing from admin_settings for type:', type)
     const { data: settings, error: fetchError } = await supabaseAdmin
@@ -47,10 +90,10 @@ async function getSubscriptionPricing(type: 'mosque' | 'business' | 'coupon' | '
 
     if (settings) {
       const pricingMap: Record<string, number> = {
-        mosque: settings.pricing_mosque || DEFAULT_SUBSCRIPTION_PRICING.mosque.amount,
-        business: settings.pricing_business || DEFAULT_SUBSCRIPTION_PRICING.business.amount,
-        coupon: settings.pricing_coupon || DEFAULT_SUBSCRIPTION_PRICING.coupon.amount,
-        nonprofit: settings.pricing_nonprofit || DEFAULT_SUBSCRIPTION_PRICING.nonprofit.amount
+        mosque: toCents(settings.pricing_mosque, DEFAULT_SUBSCRIPTION_PRICING.mosque.amount),
+        business: toCents(settings.pricing_business, DEFAULT_SUBSCRIPTION_PRICING.business.amount),
+        coupon: toCents(settings.pricing_coupon, DEFAULT_SUBSCRIPTION_PRICING.coupon.amount),
+        nonprofit: toCents(settings.pricing_nonprofit, DEFAULT_SUBSCRIPTION_PRICING.nonprofit.amount)
       }
 
       console.log('[Pricing] Pricing map:', pricingMap)
@@ -71,16 +114,12 @@ interface CreateSubscriptionRequest {
   type: 'mosque' | 'business' | 'coupon' | 'nonprofit'
   data: any // Form data specific to each type
   paymentMethodId?: string // If using existing payment method
+  promoCode?: string
+  timezone?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify Stripe key is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('[Stripe] STRIPE_SECRET_KEY is not configured')
-      return errorResponse('Stripe configuration error. Please contact support.', 500)
-    }
-    
     // Verify Supabase admin key is configured
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error('[Subscription Create] SUPABASE_SERVICE_ROLE_KEY is not configured')
@@ -95,52 +134,131 @@ export async function POST(request: NextRequest) {
       return errorResponse('Missing required fields: type and data', 400)
     }
 
-    const { type, data, paymentMethodId } = body
+    const { type, data, paymentMethodId, promoCode, timezone } = body
     const userId = authResult.user.id
 
     console.log(`[Subscription Create] Type: ${type}, User: ${userId}`)
     console.log(`[Subscription Create] Data:`, JSON.stringify(data, null, 2))
 
-    const supabase = getServerSupabase(request)
+    // Optional promo code validation (applies only to mosque/business subscriptions)
+    let appliedPromo: any | null = null
+    let isFreePromo = false
+    const normalizedPromoCode = promoCode?.trim() ? promoCode.trim().toUpperCase() : null
+    if (normalizedPromoCode) {
+      if (!timezone || !String(timezone).trim()) {
+        return errorResponse('timezone is required when applying a promo code', 400)
+      }
+      if (type !== 'mosque' && type !== 'business') {
+        return errorResponse('This promo code can only be applied to mosque/business subscriptions', 400)
+      }
 
-    // Get or create Stripe customer
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('stripe_customer_id, email, name')
-      .eq('id', userId)
-      .single()
+      const { data: promo, error: promoError } = await supabaseAdmin
+        .from('promo_codes')
+        .select('*')
+        .ilike('code', normalizedPromoCode)
+        .limit(1)
+        .maybeSingle()
 
-    if (userError || !user) {
-      console.error('[Subscription Create] User not found:', userError)
-      return errorResponse('User not found', 404)
+      if (promoError || !promo) {
+        return errorResponse('Invalid promo code', 400)
+      }
+
+      // Enabled toggle
+      if (!promo.enabled) {
+        return errorResponse('This promo code is disabled', 400)
+      }
+
+      // Apply-to selection (separate promos for mosque vs business)
+      if (promo.applies_to !== type) {
+        return errorResponse('This promo code does not apply to your subscription type', 400)
+      }
+
+      // Date validation uses the user's timezone and inclusive comparisons.
+      const localToday = getLocalDateISO(String(timezone))
+      if (!isPromoActiveForLocalDate(promo, localToday)) {
+        return errorResponse('This promo code is not active for today', 400)
+      }
+
+      // Enforce unique user usage per promo code
+      const { data: existingRedemption } = await supabaseAdmin
+        .from('promo_code_redemptions')
+        .select('id')
+        .eq('promo_code_id', promo.id)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (existingRedemption) {
+        return errorResponse('Promo code already used by this account', 400)
+      }
+
+      // Enforce max_users (unique users)
+      if (promo.max_users !== null && promo.max_users !== undefined) {
+        const { count: usedCount, error: countError } = await supabaseAdmin
+          .from('promo_code_redemptions')
+          .select('*', { count: 'exact', head: true })
+          .eq('promo_code_id', promo.id)
+          .eq('status', 'active')
+
+        if (countError) {
+          console.error('[Promo] max_users count error:', countError)
+          return errorResponse('Failed to validate promo usage', 500)
+        }
+
+        if ((usedCount || 0) >= promo.max_users) {
+          return errorResponse('This promo code has reached its usage limit', 400)
+        }
+      }
+
+      appliedPromo = promo
+      isFreePromo = promo.promo_type === 'free'
     }
 
-    let customerId = user.stripe_customer_id
+    const supabase = getServerSupabase(request)
 
-    // Create Stripe customer if doesn't exist
-    if (!customerId) {
-      console.log('[Stripe] Creating new customer for:', user.email)
-      try {
-        const customer = await stripe.customers.create({
-          email: user.email,
-          name: user.name || undefined,
-          metadata: {
-            user_id: userId
-          }
-        })
-        customerId = customer.id
-        console.log('[Stripe] Customer created:', customerId)
+    // Stripe is required for non-FREE promos and for normal paid subscriptions.
+    let customerId: string | null = null
+    let stripePriceId: string | null = null
+    let stripeSubscription: Stripe.Subscription | null = null
+    if (!isFreePromo) {
+      // Get or create Stripe customer
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('stripe_customer_id, email, name')
+        .eq('id', userId)
+        .single()
 
-        // Update user with Stripe customer ID
-        // Use admin client to bypass RLS since we've already authenticated the user
-        await supabaseAdmin
-          .from('users')
-          .update({ stripe_customer_id: customerId })
-          .eq('id', userId)
-      } catch (stripeError: any) {
-        console.error('[Stripe] Customer creation failed:', stripeError.message)
-        console.error('[Stripe] Error details:', stripeError)
-        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      if (userError || !user) {
+        console.error('[Subscription Create] User not found:', userError)
+        return errorResponse('User not found', 404)
+      }
+
+      customerId = user.stripe_customer_id
+
+      // Create Stripe customer if doesn't exist
+      if (!customerId) {
+        console.log('[Stripe] Creating new customer for:', user.email)
+        try {
+          const stripe = getStripeClient()
+          const customer = await stripe.customers.create({
+            email: user.email,
+            name: user.name || undefined,
+            metadata: {
+              user_id: userId,
+            },
+          })
+          customerId = customer.id
+          console.log('[Stripe] Customer created:', customerId)
+
+          // Update user with Stripe customer ID
+          await supabaseAdmin
+            .from('users')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', userId)
+        } catch (stripeError: any) {
+          console.error('[Stripe] Customer creation failed:', stripeError.message)
+          console.error('[Stripe] Error details:', stripeError)
+          return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+        }
       }
     }
 
@@ -172,108 +290,156 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Pricing] Using ${type} pricing: $${pricing.amount / 100}`)
 
-    // Create a new Stripe price for this subscription
-    // Always create new prices to ensure they match current admin pricing
-    let stripePriceId: string
-    
-    console.log(`[Stripe] Creating new price for ${type} at $${pricing.amount / 100}`)
-    try {
-      const price = await stripe.prices.create({
-        currency: pricing.currency,
-        unit_amount: pricing.amount,
-        recurring: {
-          interval: 'month'
-        },
-        product_data: {
-          name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`
-        }
-      })
-      stripePriceId = price.id
-      console.log(`[Stripe] Price created: ${stripePriceId} for $${pricing.amount / 100}`)
-    } catch (stripeError: any) {
-      console.error('[Stripe] Price creation failed:', stripeError.message)
-      console.error('[Stripe] Error details:', stripeError)
-      return errorResponse(`Stripe error: ${stripeError.message}`, 500)
-    }
+    // Create subscription record:
+    // - FREE promo => skip Stripe entirely, subscription starts with price_amount = 0
+    // - other promos => keep existing Stripe flow
+    let subscription: any
 
-    // Attach payment method if provided
-    if (paymentMethodId) {
-      console.log(`[Stripe] Attaching payment method: ${paymentMethodId}`)
+    if (isFreePromo) {
+      const now = new Date()
+      const fallbackPeriodEnd = new Date(now)
+      fallbackPeriodEnd.setMonth(fallbackPeriodEnd.getMonth() + 1)
+
+      // For FREE promos, dashboard uses promo start/end; these timestamps are just for UI/billing metadata.
+      const periodEnd = appliedPromo?.use_end_date && appliedPromo?.end_date
+        ? new Date(`${appliedPromo.end_date}T23:59:59.999Z`)
+        : fallbackPeriodEnd
+
+      const { data: subData, error: subscriptionError } = await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          user_id: userId,
+          type: type,
+          status: 'active',
+          app_status: 'pending_verification',
+          stripe_subscription_id: null,
+          stripe_customer_id: null,
+          stripe_price_id: null,
+          price_amount: 0,
+          currency: pricing.currency,
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          next_billing_date: periodEnd.toISOString(),
+        })
+        .select()
+        .single()
+
+      if (subscriptionError || !subData) {
+        console.error('[Subscription Create] ❌ Database error creating FREE subscription:', subscriptionError)
+        return errorResponse(`Failed to create subscription: ${subscriptionError?.message || 'Unknown error'}`, 500)
+      }
+
+      subscription = subData
+    } else {
+      const stripe = getStripeClient()
+
+      // Create a new Stripe price for this subscription
+      // Always create new prices to ensure they match current admin pricing
+      console.log(`[Stripe] Creating new price for ${type} at $${pricing.amount / 100}`)
       try {
-        await stripe.paymentMethods.attach(paymentMethodId, {
-          customer: customerId
+        const price = await stripe.prices.create({
+          currency: pricing.currency,
+          unit_amount: pricing.amount,
+          recurring: {
+            interval: 'month',
+          },
+          product_data: {
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} Subscription`,
+          },
         })
-
-        // Set as default payment method
-        await stripe.customers.update(customerId, {
-          invoice_settings: {
-            default_payment_method: paymentMethodId
-          }
-        })
-        console.log('[Stripe] Payment method attached successfully')
+        stripePriceId = price.id
+        console.log(`[Stripe] Price created: ${stripePriceId} for $${pricing.amount / 100}`)
       } catch (stripeError: any) {
-        console.error('[Stripe] Payment method attach failed:', stripeError.message)
+        console.error('[Stripe] Price creation failed:', stripeError.message)
         console.error('[Stripe] Error details:', stripeError)
         return errorResponse(`Stripe error: ${stripeError.message}`, 500)
       }
-    }
 
-    // Create Stripe subscription
-    console.log(`[Stripe] Creating subscription for customer: ${customerId}`)
-    let stripeSubscription: Stripe.Subscription
-    try {
-      stripeSubscription = await stripe.subscriptions.create({
-        customer: customerId,
-        items: [{ price: stripePriceId }],
-        payment_behavior: 'default_incomplete',
-        payment_settings: {
-          save_default_payment_method: 'on_subscription'
-        },
-        expand: ['latest_invoice.payment_intent'],
-        metadata: {
-          user_id: userId,
-          subscription_type: type
+      // Attach payment method if provided
+      if (paymentMethodId) {
+        console.log(`[Stripe] Attaching payment method: ${paymentMethodId}`)
+        try {
+          await stripe.paymentMethods.attach(paymentMethodId, {
+            customer: customerId,
+          })
+
+          // Set as default payment method
+          await stripe.customers.update(customerId, {
+            invoice_settings: {
+              default_payment_method: paymentMethodId,
+            },
+          })
+          console.log('[Stripe] Payment method attached successfully')
+        } catch (stripeError: any) {
+          console.error('[Stripe] Payment method attach failed:', stripeError.message)
+          console.error('[Stripe] Error details:', stripeError)
+          return errorResponse(`Stripe error: ${stripeError.message}`, 500)
         }
-      })
-      console.log(`[Stripe] Subscription created: ${stripeSubscription.id}`)
-    } catch (stripeError: any) {
-      console.error('[Stripe] Subscription creation failed:', stripeError.message)
-      console.error('[Stripe] Error details:', stripeError)
-      return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      }
+
+      // Create Stripe subscription
+      console.log(`[Stripe] Creating subscription for customer: ${customerId}`)
+      try {
+        stripeSubscription = await stripe.subscriptions.create({
+          customer: customerId!,
+          items: [{ price: stripePriceId! }],
+          payment_behavior: 'default_incomplete',
+          payment_settings: {
+            save_default_payment_method: 'on_subscription',
+          },
+          expand: ['latest_invoice.payment_intent'],
+          metadata: {
+            user_id: userId,
+            subscription_type: type,
+          },
+        })
+        console.log(`[Stripe] Subscription created: ${stripeSubscription.id}`)
+      } catch (stripeError: any) {
+        console.error('[Stripe] Subscription creation failed:', stripeError.message)
+        console.error('[Stripe] Error details:', stripeError)
+        return errorResponse(`Stripe error: ${stripeError.message}`, 500)
+      }
+
+      const { data: subData, error: subscriptionError } = await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          user_id: userId,
+          type: type,
+          status: 'active',
+          app_status: 'pending_verification',
+          stripe_subscription_id: stripeSubscription!.id,
+          stripe_customer_id: customerId!,
+          stripe_price_id: stripePriceId!,
+          price_amount: pricing.amount / 100, // Convert cents to dollars
+          currency: pricing.currency,
+          current_period_start: new Date(stripeSubscription!.current_period_start * 1000).toISOString(),
+          current_period_end: new Date(stripeSubscription!.current_period_end * 1000).toISOString(),
+          next_billing_date: new Date(stripeSubscription!.current_period_end * 1000).toISOString(),
+        })
+        .select()
+        .single()
+
+      if (subscriptionError || !subData) {
+        console.error('[Subscription Create] ❌ Database error creating subscription:', subscriptionError)
+        console.error('[Subscription Create] Error code:', subscriptionError?.code)
+        console.error('[Subscription Create] Error message:', subscriptionError?.message)
+        console.error('[Subscription Create] Error details:', subscriptionError?.details)
+        console.error('[Subscription Create] Error hint:', subscriptionError?.hint)
+
+        // Rollback: Cancel Stripe subscription
+        if (stripeSubscription?.id) {
+          await stripe.subscriptions.cancel(stripeSubscription.id)
+        }
+
+        return errorResponse(
+          `Failed to create subscription: ${subscriptionError?.message || subscriptionError?.details || 'Unknown error'}`,
+          500,
+        )
+      }
+
+      subscription = subData
     }
 
-    // Create subscription record in database
-    // Use admin client to bypass RLS since we've already authenticated the user
-    const { data: subscription, error: subscriptionError } = await supabaseAdmin
-      .from('subscriptions')
-      .insert({
-        user_id: userId,
-        type: type,
-        status: 'active',
-        app_status: 'pending_verification',
-        stripe_subscription_id: stripeSubscription.id,
-        stripe_customer_id: customerId,
-        stripe_price_id: stripePriceId,
-        price_amount: pricing.amount / 100, // Convert cents to dollars
-        currency: pricing.currency,
-        current_period_start: new Date(stripeSubscription.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
-        next_billing_date: new Date(stripeSubscription.current_period_end * 1000).toISOString()
-      })
-      .select()
-      .single()
-
-    if (subscriptionError) {
-      console.error('[Subscription Create] ❌ Database error creating subscription:', subscriptionError)
-      console.error('[Subscription Create] Error code:', subscriptionError.code)
-      console.error('[Subscription Create] Error message:', subscriptionError.message)
-      console.error('[Subscription Create] Error details:', subscriptionError.details)
-      console.error('[Subscription Create] Error hint:', subscriptionError.hint)
-      // Rollback: Cancel Stripe subscription
-      await stripe.subscriptions.cancel(stripeSubscription.id)
-      return errorResponse(`Failed to create subscription: ${subscriptionError.message || subscriptionError.details || 'Unknown error'}`, 500)
-    }
-    
     console.log('[Subscription Create] ✅ Subscription created successfully:', subscription.id)
 
     // Create entity-specific record based on type
@@ -335,7 +501,10 @@ export async function POST(request: NextRequest) {
       console.error(`[Subscription Create] Data sent:`, JSON.stringify(data, null, 2))
       // Rollback: Delete subscription and cancel Stripe subscription
       await supabaseAdmin.from('subscriptions').delete().eq('id', subscription.id)
-      await stripe.subscriptions.cancel(stripeSubscription.id)
+      if (stripeSubscription?.id) {
+        const stripe = getStripeClient()
+        await stripe.subscriptions.cancel(stripeSubscription.id)
+      }
       return errorResponse(`Failed to create ${type} record: ${entityError.message || entityError.details || 'Unknown error'}`, 500)
     }
     
@@ -438,16 +607,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get payment intent client secret if needed
-    const latestInvoice: any = stripeSubscription.latest_invoice
-    const clientSecret = latestInvoice?.payment_intent?.client_secret
+    // Record promo redemption so the dashboard can show the monthly discount
+    if (appliedPromo) {
+      const { error: redemptionError } = await supabaseAdmin
+        .from('promo_code_redemptions')
+        .insert({
+          promo_code_id: appliedPromo.id,
+          user_id: userId,
+          subscription_id: subscription.id,
+          normal_price_cents: pricing.amount,
+          status: 'active',
+        })
 
-    return successResponse({
-      subscription,
-      entity: entityRecord,
-      clientSecret, // For completing payment on frontend if needed
-      requiresAction: stripeSubscription.status === 'incomplete'
-    }, 'Subscription created successfully')
+      if (redemptionError) {
+        console.error('[Promo] Failed to insert redemption:', redemptionError)
+        return errorResponse('Failed to apply promo code', 500)
+      }
+    }
+
+    // Get payment intent client secret if needed (non-FREE promos only)
+    let clientSecret: string | null = null
+    let requiresAction = false
+    if (!isFreePromo && stripeSubscription) {
+      const latestInvoice: any = stripeSubscription.latest_invoice
+      clientSecret = latestInvoice?.payment_intent?.client_secret || null
+      requiresAction = stripeSubscription.status === 'incomplete'
+    }
+
+    return successResponse(
+      {
+        subscription,
+        entity: entityRecord,
+        clientSecret,
+        requiresAction,
+      },
+      'Subscription created successfully',
+    )
 
   } catch (error: any) {
     console.error('Create subscription error:', error)
