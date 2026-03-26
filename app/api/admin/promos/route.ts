@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, successResponse, errorResponse, parseRequestBody } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
+import { getSupabaseAdmin } from '@/lib/admin-helpers'
 
 type PromoType = 'free' | 'fixed' | 'percentage'
 type AppliesTo = 'mosque' | 'business'
@@ -50,7 +51,10 @@ export async function GET(request: NextRequest) {
 
     let usageByPromoId: Record<string, number> = {}
     if (promoIds.length > 0) {
-      const { data: redemptions, error: redemptionsError } = await supabase
+      // Counts must use service role: RLS on promo_code_redemptions only allows users to see their own rows,
+      // so the admin JWT client would return an empty set and show 0 usage for all promos.
+      const supabaseAdmin = getSupabaseAdmin()
+      const { data: redemptions, error: redemptionsError } = await supabaseAdmin
         .from('promo_code_redemptions')
         .select('promo_code_id, status')
         .in('promo_code_id', promoIds)

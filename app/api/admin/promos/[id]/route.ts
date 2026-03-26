@@ -131,3 +131,43 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authResult = await requireAuth(request)
+    if (authResult.error) return authResult.error
+
+    if (authResult.user.role !== 'admin') {
+      return errorResponse('Unauthorized - Admin access required', 403)
+    }
+
+    const resolvedParams = await params
+    const promoId = resolvedParams.id
+    if (!promoId) return errorResponse('Missing promo id', 400)
+
+    const supabaseAdmin = getSupabaseAdmin()
+
+    const { data, error } = await supabaseAdmin
+      .from('promo_codes')
+      .delete()
+      .eq('id', promoId)
+      .select('id')
+
+    if (error) {
+      console.error('[Admin Promo Codes] DELETE error:', error)
+      return errorResponse(error.message || 'Failed to delete promo code', 500)
+    }
+
+    if (!data?.length) {
+      return errorResponse('Promo code not found', 404)
+    }
+
+    return successResponse({ deleted: true }, 'Promo code deleted')
+  } catch (error: any) {
+    console.error('[Admin Promo Codes] DELETE exception:', error)
+    return errorResponse(error.message || 'Internal server error', 500)
+  }
+}
+
