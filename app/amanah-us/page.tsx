@@ -98,6 +98,10 @@ export default function AmanahUsPage() {
               through transparent giving.
             </p>
 
+            <p className="mx-auto mb-8 max-w-2xl text-lg text-muted-foreground md:text-xl">
+              Nonprofit organization. EIN 41-3030153.
+            </p>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button 
                 size="lg" 
@@ -633,10 +637,7 @@ export default function AmanahUsPage() {
       <footer className="bg-secondary/30 border-t py-8">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} Amanah US. Approved nonprofit organization. EIN 41-3030153.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            This page is hosted on the Amanah platform until AmanahUs.org launches.
+            &copy; {new Date().getFullYear()} Amanah US. Nonprofit organization. EIN 41-3030153.
           </p>
         </div>
       </footer>
