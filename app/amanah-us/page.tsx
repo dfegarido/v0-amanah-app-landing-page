@@ -525,9 +525,9 @@ export default function AmanahUsPage() {
 
               <div className="bg-amber-50/30 border-l-4 border-amber-500/60 p-6 rounded">
                 <p className="text-foreground leading-relaxed">
-                  <strong className="text-amber-600">Amanah US</strong> is a separate nonprofit entity 
-                  (501(c)(3) pending) dedicated to the mission of strengthening the Muslim community through 
-                  responsible, transparent giving. We believe in accountability at every step.
+                  <strong className="text-amber-600">Amanah US</strong> is a separate approved nonprofit
+                  organization (EIN 41-3030153) dedicated to the mission of strengthening the Muslim
+                  community through responsible, transparent giving. We believe in accountability at every step.
                 </p>
               </div>
             </CardContent>
@@ -633,7 +633,7 @@ export default function AmanahUsPage() {
       <footer className="bg-secondary/30 border-t py-8">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} Amanah US. A 501(c)(3) nonprofit organization (pending).
+            &copy; {new Date().getFullYear()} Amanah US. Approved nonprofit organization. EIN 41-3030153.
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             This page is hosted on the Amanah platform until AmanahUs.org launches.
