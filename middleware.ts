@@ -11,9 +11,12 @@ export async function middleware(req: NextRequest) {
     cookie.name.includes('sb-') && cookie.name.includes('-auth-token') && cookie.value
   )
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/auth/login', '/member/register', '/', '/login']
-  const isPublicRoute = publicRoutes.some((route) => req.nextUrl.pathname === route || req.nextUrl.pathname.startsWith(route))
+  // Public routes that don't require authentication (all pages under /auth/ are public)
+  const pathname = req.nextUrl.pathname
+  const publicRoutes = ['/member/register', '/', '/login']
+  const isPublicRoute =
+    pathname.startsWith('/auth/') ||
+    publicRoutes.some((route) => pathname === route || pathname.startsWith(route))
   
   // Protected routes
   const protectedRoutes = ['/admin', '/member']

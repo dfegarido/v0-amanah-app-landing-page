@@ -85,6 +85,9 @@ ALTER TABLE public.promo_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.promo_code_redemptions ENABLE ROW LEVEL SECURITY;
 
 -- Admin can manage promo codes
+DROP POLICY IF EXISTS "Admins can view all promo codes" ON public.promo_codes;
+DROP POLICY IF EXISTS "Admins can insert promo codes" ON public.promo_codes;
+
 CREATE POLICY "Admins can view all promo codes"
   ON public.promo_codes
   FOR SELECT
@@ -106,6 +109,7 @@ CREATE POLICY "Admins can insert promo codes"
   );
 
 -- Users can view promo codes they've redeemed (so the app can compute dashboard pricing)
+DROP POLICY IF EXISTS "Users can view redeemed promo codes" ON public.promo_codes;
 CREATE POLICY "Users can view redeemed promo codes"
   ON public.promo_codes
   FOR SELECT
@@ -119,14 +123,15 @@ CREATE POLICY "Users can view redeemed promo codes"
   );
 
 -- Users can view their own promo redemptions
+DROP POLICY IF EXISTS "Users can view own promo redemptions" ON public.promo_code_redemptions;
 CREATE POLICY "Users can view own promo redemptions"
   ON public.promo_code_redemptions
   FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Users can insert their own redemptions (MVP: usually inserted by server with service role)
+DROP POLICY IF EXISTS "Users can insert own promo redemptions" ON public.promo_code_redemptions;
 CREATE POLICY "Users can insert own promo redemptions"
   ON public.promo_code_redemptions
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
-
