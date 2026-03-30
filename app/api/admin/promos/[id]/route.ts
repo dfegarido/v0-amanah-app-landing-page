@@ -20,6 +20,11 @@ interface UpdatePromoCodeRequest {
   endDate?: string
 
   maxUsers?: string | number | null
+
+  useRedeemByDate: boolean
+  redeemByDate?: string
+
+  benefitMonths?: string | number | null
 }
 
 export async function PATCH(
@@ -97,6 +102,32 @@ export async function PATCH(
       maxUsers = Math.floor(parsed)
     }
 
+    const useRedeemByDate = Boolean(body.useRedeemByDate)
+    let redeemByDateVal: string | null = null
+    if (useRedeemByDate) {
+      const raw = body.redeemByDate?.trim()
+      if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return errorResponse('redeemByDate must be YYYY-MM-DD when useRedeemByDate is enabled', 400)
+      }
+      redeemByDateVal = raw
+    }
+
+    let benefitMonthsVal: number | null = null
+    if (
+      body.benefitMonths !== undefined &&
+      body.benefitMonths !== null &&
+      String(body.benefitMonths).trim() !== ''
+    ) {
+      const parsed =
+        typeof body.benefitMonths === 'string'
+          ? parseInt(body.benefitMonths, 10)
+          : Number(body.benefitMonths)
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 120) {
+        return errorResponse('benefitMonths must be between 1 and 120 (or leave empty for legacy rules)', 400)
+      }
+      benefitMonthsVal = Math.floor(parsed)
+    }
+
     const supabaseAdmin = getSupabaseAdmin()
 
     const { data, error } = await supabaseAdmin
@@ -113,6 +144,9 @@ export async function PATCH(
         use_end_date: useEndDate,
         end_date: endDate,
         max_users: maxUsers,
+        use_redeem_by_date: useRedeemByDate,
+        redeem_by_date: redeemByDateVal,
+        benefit_months: benefitMonthsVal,
         updated_at: new Date().toISOString(),
       })
       .eq('id', promoId)

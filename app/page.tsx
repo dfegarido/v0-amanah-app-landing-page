@@ -68,6 +68,9 @@ const translations = {
     ctaSubtitle: "Download Amanah today and stay connected with your faith, your mosque, and your ummah.",
     addMosqueTitle: "Looking to list your business, mosque, or feature a coupon?",
     addMosqueSubtitle: "Create an account to get started and join the Amanah network.",
+    scheduleOnboarding: "Schedule onboarding",
+    scheduleOnboardingDesc:
+      "Prefer to talk with our team first? Book a time and we’ll help you get started.",
   },
   ar: {
     heroTitle: "أمانة ليست مجرد تطبيق",
@@ -111,6 +114,9 @@ const translations = {
     ctaSubtitle: "حمّل أمانة اليوم وابقَ على اتصال بإيمانك ومسجدك وأمَّتِك.",
     addMosqueTitle: "تبحث عن إدراج عملك أو مسجدك أو عرض قسيمة؟",
     addMosqueSubtitle: "أنشئ حسابًا للبدء والانضمام إلى شبكة أمانة.",
+    scheduleOnboarding: "جدولة التسجيل",
+    scheduleOnboardingDesc:
+      "تفضّل التحدث مع فريقنا أولاً؟ احجز موعدًا وسنساعدك على البدء.",
   },
 }
 
@@ -210,6 +216,17 @@ export default function AmanahLanding() {
               >
                 <Link href="/member/register">
                   {language === "en" ? "Register" : "إنشاء حساب"}
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="secondary"
+                className="text-lg px-8 py-6 w-full sm:w-auto"
+                asChild
+              >
+                <Link href="/book-onboarding">
+                  <Calendar className="mr-2 h-5 w-5" />
+                  {t.scheduleOnboarding}
                 </Link>
               </Button>
               <Button
@@ -487,9 +504,18 @@ export default function AmanahLanding() {
           <Plus className="mx-auto h-12 w-12 text-primary mb-4" />
           <h3 className="mb-4 text-2xl font-bold text-foreground md:text-3xl">{t.addMosqueTitle}</h3>
           <p className="mb-6 text-muted-foreground leading-relaxed">{t.addMosqueSubtitle}</p>
-          <Button size="lg" asChild>
-            <Link href="/member/register">{language === "en" ? "Create Account" : "إنشاء حساب"}</Link>
-          </Button>
+          <p className="mb-6 text-muted-foreground leading-relaxed max-w-xl mx-auto">{t.scheduleOnboardingDesc}</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center sm:items-center">
+            <Button size="lg" asChild>
+              <Link href="/member/register">{language === "en" ? "Create Account" : "إنشاء حساب"}</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/book-onboarding">
+                <Calendar className="mr-2 h-5 w-5" />
+                {t.scheduleOnboarding}
+              </Link>
+            </Button>
+          </div>
           <p className="mt-4 text-sm text-muted-foreground">
             {language === "en" ? "Already have an account? " : "لديك حساب بالفعل؟ "}
             <Link href="/login" className="text-primary hover:underline">

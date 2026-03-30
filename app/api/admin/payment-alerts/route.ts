@@ -176,11 +176,44 @@ export async function GET(request: NextRequest) {
       console.warn(`[Payment Alerts API] Found ${orphanedCount} orphaned subscriptions (subscriptions exist but entity records are missing)`)
     }
 
-    console.log('[Payment Alerts API] Returning alerts:', validAlerts.length)
+    // Dedupe new-submission alerts that represent accidental duplicate signups
+    // (same member + type + same display name). Keep the newest record for review.
+    const dedupedAlerts = new Map<string, any>()
+    for (const alert of validAlerts) {
+      if (alert.alertType !== 'new_submission') {
+        dedupedAlerts.set(`id:${alert.id}`, alert)
+        continue
+      }
+
+      const key = [
+        'new_submission',
+        alert.memberId,
+        alert.subscriptionType,
+        String(alert.subscriptionName || '').trim().toLowerCase(),
+      ].join('|')
+
+      const existing = dedupedAlerts.get(key)
+      if (!existing) {
+        dedupedAlerts.set(key, alert)
+        continue
+      }
+
+      const existingTs = new Date(existing.createdAt || 0).getTime()
+      const currentTs = new Date(alert.createdAt || 0).getTime()
+      if (currentTs >= existingTs) {
+        dedupedAlerts.set(key, alert)
+      }
+    }
+
+    const alerts = Array.from(dedupedAlerts.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    )
+
+    console.log('[Payment Alerts API] Returning alerts:', alerts.length)
 
     return successResponse({ 
-      alerts: validAlerts,
-      total: validAlerts.length 
+      alerts,
+      total: alerts.length 
     })
 
   } catch (error: any) {

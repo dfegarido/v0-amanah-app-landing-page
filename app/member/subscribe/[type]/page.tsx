@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import NextImage from "next/image"
 import { useParams, useRouter } from "next/navigation"
@@ -24,8 +24,6 @@ import { supabase } from "@/lib/supabase"
 import { loadStripe } from "@stripe/stripe-js"
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js"
 import { useAuth } from "@/lib/auth-context"
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 // Helper function to get the correct table name for a subscription type
 const getTableName = (type: string): string => {
@@ -65,10 +63,12 @@ const subscriptionInfo = {
 // Payment confirmation form component
 function PaymentConfirmationForm({ 
   clientSecret, 
+  confirmationType = 'payment_intent',
   onSuccess, 
   onCancel 
 }: { 
   clientSecret: string
+  confirmationType?: 'payment_intent' | 'setup_intent'
   onSuccess: () => void
   onCancel: () => void
 }) {
@@ -87,26 +87,50 @@ function PaymentConfirmationForm({
     setIsLoading(true)
 
     try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: window.location.href,
-        },
-        redirect: 'if_required',
-      })
+      if (confirmationType === 'setup_intent') {
+        const { error } = await stripe.confirmSetup({
+          elements,
+          confirmParams: {
+            return_url: window.location.href,
+          },
+          redirect: 'if_required',
+        })
 
-      if (error) {
-        toast({
-          title: 'Payment failed',
-          description: error.message,
-          variant: 'destructive',
-        })
+        if (error) {
+          toast({
+            title: 'Could not save payment method',
+            description: error.message,
+            variant: 'destructive',
+          })
+        } else {
+          toast({
+            title: 'Card saved',
+            description: 'Your subscription is set up. You will not be charged while your promo is active.',
+          })
+          onSuccess()
+        }
       } else {
-        toast({
-          title: 'Payment successful!',
-          description: 'Your subscription has been activated.',
+        const { error } = await stripe.confirmPayment({
+          elements,
+          confirmParams: {
+            return_url: window.location.href,
+          },
+          redirect: 'if_required',
         })
-        onSuccess()
+
+        if (error) {
+          toast({
+            title: 'Payment failed',
+            description: error.message,
+            variant: 'destructive',
+          })
+        } else {
+          toast({
+            title: 'Payment successful!',
+            description: 'Your subscription has been activated.',
+          })
+          onSuccess()
+        }
       }
     } catch (err: any) {
       toast({
@@ -118,6 +142,15 @@ function PaymentConfirmationForm({
       setIsLoading(false)
     }
   }
+
+  const submitLabel =
+    confirmationType === 'setup_intent'
+      ? isLoading
+        ? 'Processing...'
+        : 'Save card & continue'
+      : isLoading
+        ? 'Processing...'
+        : 'Complete Payment'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -132,7 +165,7 @@ function PaymentConfirmationForm({
         </Button>
         <Button type="submit" disabled={!stripe || isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading ? 'Processing...' : 'Complete Payment'}
+          {submitLabel}
         </Button>
       </div>
     </form>
@@ -143,8 +176,23 @@ export default function SubscribePage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const type = params.type as "mosque" | "business" | "coupon" | "nonprofit"
+
+  const stripePromise = useMemo(() => {
+    const publishableKey =
+      type === "nonprofit"
+        ? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_NONPROFIT
+        : process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    if (!publishableKey) {
+      console.error(
+        type === "nonprofit"
+          ? "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_NONPROFIT is not set (required for nonprofit listings)"
+          : "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set",
+      )
+    }
+    return loadStripe(publishableKey ?? "")
+  }, [type])
 
   const [step, setStep] = useState(1)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -161,13 +209,15 @@ export default function SubscribePage() {
   const [committeeCount, setCommitteeCount] = useState<number>(1) // Start with 1 committee member field
   const [committeeMembers, setCommitteeMembers] = useState<{ name: string; title: string; photo: string; uploading?: boolean }[]>([{ name: '', title: '', photo: '' }])
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
-  
+  const pendingSubscriptionIdRef = useRef<string | null>(null)
+
   // Date picker state for coupons
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   
   // Stripe payment state
   const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [confirmationType, setConfirmationType] = useState<'payment_intent' | 'setup_intent'>('payment_intent')
   const [paymentMethod, setPaymentMethod] = useState<any>(null)
   const [useSavedPaymentMethod, setUseSavedPaymentMethod] = useState(false)
   const [promoPreview, setPromoPreview] = useState<any>(null)
@@ -418,62 +468,80 @@ export default function SubscribePage() {
     setIsMounted(true)
   }, [])
 
-  // Fetch active mosques on mount
+  // Fetch public directory lists for affiliation / optional donations (not "my" mosques only).
+  // Wait for auth (same as donate page): authenticatedGet needs a session; running on first paint
+  // often throws before Supabase restores the session → empty lists.
   useEffect(() => {
+    if (authLoading) return
+
+    if (!user) {
+      setAvailableMosques([])
+      setAvailableNonprofits([])
+      return
+    }
+
     const fetchMosques = async () => {
       try {
-        console.log('[Frontend] Fetching approved mosques for type:', type)
-        // Use API endpoint to get only approved mosques (server-side filtering)
-        const response: any = await authenticatedGet('/api/mosques/approved')
-        
-        console.log('[Frontend] API response:', response)
-        
-        if (response.success && response.data && response.data.mosques) {
-          console.log('[Frontend] Approved mosques fetched:', response.data.mosques.length, 'mosques')
-          console.log('[Frontend] Mosque list:', response.data.mosques.map((m: any) => `#${m.mosque_code} - ${m.name}`))
-          setAvailableMosques(response.data.mosques)
+        const response: any = await authenticatedGet(
+          '/api/directory/mosques?limit=500&status=active'
+        )
+        if (response.success && response.data?.mosques) {
+          const list = (response.data.mosques as any[]).filter((m) => m.status === 'active')
+          list.sort((a, b) => (Number(a.mosque_code) || 0) - (Number(b.mosque_code) || 0))
+          setAvailableMosques(
+            list.map((m) => ({
+              id: m.id,
+              name: m.name,
+              mosque_code: m.mosque_code,
+              status: m.status,
+              subscription_id: m.subscription_id,
+            }))
+          )
         } else {
-          console.error('[Frontend] Failed to fetch approved mosques:', response.error)
           setAvailableMosques([])
         }
       } catch (error) {
-        console.error('[Frontend] Error fetching mosques:', error)
+        console.error('[Subscribe] Error fetching directory mosques:', error)
         setAvailableMosques([])
       }
     }
 
-    // Only fetch if type is business, coupon, or nonprofit (they need mosque affiliation)
     if (type === 'business' || type === 'coupon' || type === 'nonprofit') {
       fetchMosques()
     } else {
       setAvailableMosques([])
     }
 
-    // Fetch nonprofits for donation dropdown
     const fetchNonprofits = async () => {
       try {
-        const { data, error } = await supabase
-          .from('nonprofits')
-          .select('id, name, subscription_id')
-          .eq('status', 'active')
-          .order('name', { ascending: true })
-        
-        if (!error && data) {
-          setAvailableNonprofits(data)
+        const response: any = await authenticatedGet(
+          '/api/directory/nonprofits?limit=500&status=active'
+        )
+        if (response.success && response.data?.nonprofits) {
+          const list = (response.data.nonprofits as any[]).filter((n) => n.status === 'active')
+          list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }))
+          setAvailableNonprofits(
+            list.map((n) => ({
+              id: n.id,
+              name: n.name,
+              subscription_id: n.subscription_id,
+            }))
+          )
         } else {
-          if (error) {
-            console.error('Error fetching nonprofits:', error)
-          }
           setAvailableNonprofits([])
         }
       } catch (error) {
-        console.error('Error fetching nonprofits:', error)
+        console.error('[Subscribe] Error fetching directory nonprofits:', error)
         setAvailableNonprofits([])
       }
     }
 
-    fetchNonprofits()
-  }, [type])
+    if (type === 'business') {
+      fetchNonprofits()
+    } else {
+      setAvailableNonprofits([])
+    }
+  }, [type, user, authLoading])
 
   // Get next mosque code (for display only)
   useEffect(() => {
@@ -980,12 +1048,18 @@ export default function SubscribePage() {
       })
 
       if (response.success) {
-        setCreatedSubscriptionId(response.data.subscription.id)
+        const newSubId = response.data.subscription.id as string
+        pendingSubscriptionIdRef.current = newSubId
+        setCreatedSubscriptionId(newSubId)
+
+        const confType =
+          (response.data.confirmationType as 'payment_intent' | 'setup_intent') || 'payment_intent'
         
         // If clientSecret is returned, we need to confirm the payment
         if (response.data.clientSecret && (!useSavedPaymentMethod || !paymentMethod)) {
           // Show payment form
           setClientSecret(response.data.clientSecret)
+          setConfirmationType(confType)
           // Wait for payment confirmation (handled by PaymentConfirmationForm)
           return
         } else if (response.data.clientSecret && useSavedPaymentMethod && paymentMethod) {
@@ -995,12 +1069,26 @@ export default function SubscribePage() {
             throw new Error('Stripe not loaded')
           }
 
-          const { error: confirmError } = await stripe.confirmCardPayment(response.data.clientSecret, {
-            payment_method: paymentMethod.id,
-          })
+          if (confType === 'setup_intent') {
+            const { error: confirmError } = await stripe.confirmSetup({
+              clientSecret: response.data.clientSecret,
+              confirmParams: {
+                payment_method: paymentMethod.id,
+                return_url: window.location.href,
+              },
+              redirect: 'if_required',
+            })
+            if (confirmError) {
+              throw confirmError
+            }
+          } else {
+            const { error: confirmError } = await stripe.confirmCardPayment(response.data.clientSecret, {
+              payment_method: paymentMethod.id,
+            })
 
-          if (confirmError) {
-            throw confirmError
+            if (confirmError) {
+              throw confirmError
+            }
           }
         }
         
@@ -1096,14 +1184,34 @@ export default function SubscribePage() {
     previewPromo()
   }, [step, promoCode, type, loadingPricing, pricing])
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     setClientSecret(null)
+    setConfirmationType('payment_intent')
     setStep(3)
     setIsProcessing(false)
+
+    const subId = pendingSubscriptionIdRef.current || createdSubscriptionId
+    if (subId) {
+      try {
+        await authenticatedPost('/api/notifications/send', {
+          type: 'new_subscription',
+          subscriptionId: subId,
+          subscriptionType: type,
+          entityName: formData.name || formData.title || formData.orgName || 'Unnamed'
+        })
+      } catch (notifError) {
+        console.error('Failed to send notification:', notifError)
+      }
+      toast({
+        title: "Subscription Created!",
+        description: `Your ${type} subscription has been successfully created.`,
+      })
+    }
   }
 
   const handlePaymentCancel = () => {
     setClientSecret(null)
+    setConfirmationType('payment_intent')
     setIsProcessing(false)
   }
 
@@ -3513,6 +3621,17 @@ export default function SubscribePage() {
                     Promo not applied: {promoPreviewError}
                   </div>
                 )}
+                {promoPreview?.promo?.benefitSchedule && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This promo pricing applies for {promoPreview.promo.benefitSchedule.months} months after signup
+                    (through {promoPreview.promo.benefitSchedule.pricingEndsOnInclusive} inclusive, in your timezone).
+                  </p>
+                )}
+                {promoPreview?.promo?.redeemByDate && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This code must be redeemed on or before {promoPreview.promo.redeemByDate}.
+                  </p>
+                )}
                 {(type === "business" || type === "coupon" || type === "nonprofit") &&
                   affiliatedMosqueCode &&
                   affiliatedMosqueCode !== "none" && (
@@ -3620,7 +3739,7 @@ export default function SubscribePage() {
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4 mr-2" />
-                      {promoPreview?.promo?.promoType === 'free' ? 'Create Subscription' : 'Continue to Payment'}
+                      Continue to Payment
                     </>
                   )}
                 </Button>
@@ -3633,8 +3752,14 @@ export default function SubscribePage() {
         {step === 2 && clientSecret && (
           <Card>
             <CardHeader>
-              <CardTitle>Complete Payment</CardTitle>
-              <CardDescription>Enter your payment details to activate your subscription</CardDescription>
+              <CardTitle>
+                {confirmationType === 'setup_intent' ? 'Add payment method' : 'Complete Payment'}
+              </CardTitle>
+              <CardDescription>
+                {confirmationType === 'setup_intent'
+                  ? 'Your plan is $0 during the promotional period. Add a card on file for when regular billing begins.'
+                  : 'Enter your payment details to activate your subscription'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Elements
@@ -3648,6 +3773,7 @@ export default function SubscribePage() {
               >
                 <PaymentConfirmationForm
                   clientSecret={clientSecret}
+                  confirmationType={confirmationType}
                   onSuccess={handlePaymentSuccess}
                   onCancel={handlePaymentCancel}
                 />

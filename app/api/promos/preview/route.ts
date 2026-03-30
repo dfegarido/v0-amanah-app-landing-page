@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAuth, successResponse, errorResponse, parseRequestBody } from '@/lib/api-helpers'
 import { getSupabaseAdmin } from '@/lib/admin-helpers'
+import { computeBenefitEndsOnInclusive, isPromoRedemptionAllowed } from '@/lib/promo-benefit'
 
 interface PromoPreviewRequest {
   code: string
@@ -23,12 +24,6 @@ function getLocalDateISO(timeZone: string, date: Date = new Date()): string {
 
   if (!year || !month || !day) return date.toISOString().split('T')[0]
   return `${year}-${month}-${day}`
-}
-
-function isPromoActiveForLocalDate(promo: any, localDateISO: string): boolean {
-  if (promo.use_start_date && promo.start_date && localDateISO < promo.start_date) return false
-  if (promo.use_end_date && promo.end_date && localDateISO > promo.end_date) return false
-  return true
 }
 
 export async function POST(request: NextRequest) {
@@ -75,8 +70,11 @@ export async function POST(request: NextRequest) {
     }
 
     const localToday = getLocalDateISO(body.timezone)
-    if (!isPromoActiveForLocalDate(promo, localToday)) {
-      return errorResponse('This promo code is not active for today', 400)
+    if (!isPromoRedemptionAllowed(promo, localToday)) {
+      return errorResponse(
+        'This promo code cannot be applied today (not started yet, past signup deadline, or inactive)',
+        400
+      )
     }
 
     const userId = authResult.user.id
@@ -120,11 +118,25 @@ export async function POST(request: NextRequest) {
       discountCents = baseCents - effectiveCents
     }
 
+    const benefitMonthsNum =
+      promo.benefit_months != null && promo.benefit_months !== ''
+        ? Number(promo.benefit_months)
+        : NaN
+    const benefitSchedule =
+      Number.isFinite(benefitMonthsNum) && benefitMonthsNum >= 1
+        ? {
+            months: Math.floor(benefitMonthsNum),
+            pricingEndsOnInclusive: computeBenefitEndsOnInclusive(localToday, Math.floor(benefitMonthsNum)),
+          }
+        : null
+
     return successResponse({
       promo: {
         id: promo.id,
         code: promo.code,
         promoType: promo.promo_type,
+        redeemByDate: promo.use_redeem_by_date ? promo.redeem_by_date : null,
+        benefitSchedule,
       },
       pricing: {
         basePriceCents: baseCents,

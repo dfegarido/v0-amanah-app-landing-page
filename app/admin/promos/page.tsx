@@ -59,6 +59,12 @@ function formatDateButtonLabel(iso: string): string | null {
   return d ? format(d, "PPP") : null
 }
 
+function defaultThreeMonthsFromToday(): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + 3)
+  return formatLocalDateOnly(d)
+}
+
 export default function AdminPromosPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -87,6 +93,11 @@ export default function AdminPromosPage() {
   // Empty => unlimited
   const [maxUsers, setMaxUsers] = useState<string>("")
 
+  const [useRedeemByDate, setUseRedeemByDate] = useState(true)
+  const [redeemByDate, setRedeemByDate] = useState(() => defaultThreeMonthsFromToday())
+  const [redeemByDateOpen, setRedeemByDateOpen] = useState(false)
+  const [benefitMonths, setBenefitMonths] = useState("12")
+
   const [promoPendingDelete, setPromoPendingDelete] = useState<{ id: string; code: string } | null>(null)
   const [deletingPromo, setDeletingPromo] = useState(false)
 
@@ -99,9 +110,29 @@ export default function AdminPromosPage() {
     }
     if (useStartDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) missing.push("Start date (YYYY-MM-DD)")
     if (useEndDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) missing.push("End date (YYYY-MM-DD)")
+    if (useRedeemByDate && !/^\d{4}-\d{2}-\d{2}$/.test(redeemByDate)) missing.push("Signup deadline (redeem-by date)")
+    if (benefitMonths.trim()) {
+      const n = Number(benefitMonths.trim())
+      if (!Number.isFinite(n) || n < 1 || n > 120 || !Number.isInteger(n)) {
+        missing.push("Benefit months (integer 1–120, or empty for legacy)")
+      }
+    }
     if (maxUsers.trim() && (!/^\d+$/.test(maxUsers.trim()) || Number(maxUsers.trim()) <= 0)) missing.push("Max users (positive integer)")
     return missing
-  }, [code, fixedAmount, percentageValue, promoType, useStartDate, startDate, useEndDate, endDate, maxUsers])
+  }, [
+    code,
+    fixedAmount,
+    percentageValue,
+    promoType,
+    useStartDate,
+    startDate,
+    useEndDate,
+    endDate,
+    useRedeemByDate,
+    redeemByDate,
+    benefitMonths,
+    maxUsers,
+  ])
 
   useEffect(() => {
     if (loading) return
@@ -157,6 +188,9 @@ export default function AdminPromosPage() {
     setPromoType("free")
     setAppliesTo("mosque")
     setEditingPromoId(null)
+    setUseRedeemByDate(true)
+    setRedeemByDate(defaultThreeMonthsFromToday())
+    setBenefitMonths("12")
   }
 
   const submit = async () => {
@@ -182,6 +216,9 @@ export default function AdminPromosPage() {
         useEndDate,
         endDate: useEndDate ? endDate : undefined,
         maxUsers: maxUsers.trim() ? maxUsers : null,
+        useRedeemByDate,
+        redeemByDate: useRedeemByDate ? redeemByDate : undefined,
+        benefitMonths: benefitMonths.trim() ? benefitMonths : null,
       }
 
       const request = editingPromoId
@@ -264,6 +301,12 @@ export default function AdminPromosPage() {
     setEndDate(p.end_date ?? "")
 
     setMaxUsers(p.max_users === null || p.max_users === undefined ? "" : String(p.max_users))
+
+    setUseRedeemByDate(Boolean(p.use_redeem_by_date))
+    setRedeemByDate(p.redeem_by_date ?? "")
+    setBenefitMonths(
+      p.benefit_months !== null && p.benefit_months !== undefined ? String(p.benefit_months) : ""
+    )
   }
 
   const getAppliesIcon = (type: AppliesTo) => {
@@ -306,7 +349,10 @@ export default function AdminPromosPage() {
               <Ticket className="h-5 w-5" />
               Create Promo Code
             </CardTitle>
-            <CardDescription>Set enabled/disabled, optional start/end dates, limit, and promo type.</CardDescription>
+            <CardDescription>
+              Signup deadline controls how long new customers can apply the code. Benefit months set how long pricing
+              stays discounted after redemption (independent of when they sign up within that window).
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
@@ -364,6 +410,62 @@ export default function AdminPromosPage() {
                   onChange={(e) => setEnabled(e.target.checked)}
                 />
               </Label>
+            </div>
+
+            <Separator className="md:col-span-2" />
+
+            <div className="space-y-2 md:col-span-2">
+              <Label className="flex items-center justify-between gap-3">
+                <span>Signup deadline (must apply code on or before this day)</span>
+                <input
+                  type="checkbox"
+                  checked={useRedeemByDate}
+                  onChange={(e) => setUseRedeemByDate(e.target.checked)}
+                />
+              </Label>
+              {useRedeemByDate && (
+                <Popover open={redeemByDateOpen} onOpenChange={setRedeemByDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !redeemByDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formatDateButtonLabel(redeemByDate) ?? <span>Pick signup deadline</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarPicker
+                      mode="single"
+                      selected={parseLocalDateOnly(redeemByDate)}
+                      onSelect={(date) => {
+                        if (date) {
+                          setRedeemByDate(formatLocalDateOnly(date))
+                          setRedeemByDateOpen(false)
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label>Benefit duration after redemption (months)</Label>
+              <Input
+                value={benefitMonths}
+                onChange={(e) => setBenefitMonths(e.target.value)}
+                placeholder="e.g., 12 for one year of promo pricing; leave empty for legacy date rules only"
+              />
+              <p className="text-xs text-muted-foreground">
+                Customers keep this pricing for the full period from their signup date, even if they redeem on the last
+                day of the signup window.
+              </p>
             </div>
 
             <Separator className="md:col-span-2" />
@@ -497,11 +599,23 @@ export default function AdminPromosPage() {
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {p.promo_type === "free" && <>FREE per month</>}
-                        {p.promo_type === "fixed" && <>Fixed: ${Math.round((p.fixed_amount_cents || 0)) / 100}/mo</>}
+                        {p.promo_type === "fixed" && <>Fixed: ${(p.fixed_amount_cents || 0) / 100}/mo</>}
                         {p.promo_type === "percentage" && <>Percent: {p.percentage_value}%</>}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Dates:{" "}
+                        Signup by:{" "}
+                        {p.use_redeem_by_date && p.redeem_by_date
+                          ? p.redeem_by_date
+                          : "off (uses legacy end date if set)"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Benefit after signup:{" "}
+                        {p.benefit_months != null && p.benefit_months !== undefined
+                          ? `${p.benefit_months} month(s), then list price`
+                          : "legacy — promo start/end dates only"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Campaign dates:{" "}
                         {p.use_start_date ? `Start ${p.start_date}` : "Start (off)"}{" • "}
                         {p.use_end_date ? `End ${p.end_date}` : "End (off)"}
                       </div>

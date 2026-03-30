@@ -23,6 +23,13 @@ interface CreatePromoCodeRequest {
 
   // null means unlimited
   maxUsers?: string | number | null
+
+  /** Last day customers may apply the code (inclusive); separate from benefit_months */
+  useRedeemByDate: boolean
+  redeemByDate?: string
+
+  /** Months of promo pricing after redemption; omit/null = legacy date-window-only behavior */
+  benefitMonths?: string | number | null
 }
 
 export async function GET(request: NextRequest) {
@@ -153,6 +160,32 @@ export async function POST(request: NextRequest) {
       maxUsers = Math.floor(parsed)
     }
 
+    const useRedeemByDate = Boolean(body.useRedeemByDate)
+    let redeemByDateVal: string | null = null
+    if (useRedeemByDate) {
+      const raw = body.redeemByDate?.trim()
+      if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return errorResponse('redeemByDate must be YYYY-MM-DD when useRedeemByDate is enabled', 400)
+      }
+      redeemByDateVal = raw
+    }
+
+    let benefitMonthsVal: number | null = null
+    if (
+      body.benefitMonths !== undefined &&
+      body.benefitMonths !== null &&
+      String(body.benefitMonths).trim() !== ''
+    ) {
+      const parsed =
+        typeof body.benefitMonths === 'string'
+          ? parseInt(body.benefitMonths, 10)
+          : Number(body.benefitMonths)
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 120) {
+        return errorResponse('benefitMonths must be between 1 and 120 (or leave empty for legacy rules)', 400)
+      }
+      benefitMonthsVal = Math.floor(parsed)
+    }
+
     const supabase = getServerSupabase(request)
     const { data, error } = await supabase
       .from('promo_codes')
@@ -168,6 +201,9 @@ export async function POST(request: NextRequest) {
         use_end_date: useEndDate,
         end_date: endDate,
         max_users: maxUsers,
+        use_redeem_by_date: useRedeemByDate,
+        redeem_by_date: redeemByDateVal,
+        benefit_months: benefitMonthsVal,
         updated_at: new Date().toISOString(),
       })
       .select()

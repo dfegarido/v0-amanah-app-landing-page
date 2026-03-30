@@ -1,11 +1,7 @@
 import { NextRequest } from 'next/server'
 import { successResponse, errorResponse, requireAuth } from '@/lib/api-helpers'
 import { getServerSupabase } from '@/lib/auth'
-import Stripe from 'stripe'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia'
-})
+import { getStripe, getStripeNonprofit } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +38,10 @@ export async function POST(request: NextRequest) {
     for (const sub of subscriptions) {
       try {
         if (!sub.stripe_subscription_id) continue
+        const stripe =
+          sub.type === 'nonprofit' && process.env.STRIPE_SECRET_KEY_NONPROFIT
+            ? getStripeNonprofit()
+            : getStripe()
         const stripeSubscription = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
         
         // Get the price from the first item

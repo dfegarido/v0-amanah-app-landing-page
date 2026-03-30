@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server'
 import { headers } from 'next/headers'
 import { getSupabaseAdmin } from '@/lib/admin-helpers'
-
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+import { getStripe, getStripeNonprofit } from '@/lib/stripe'
+import type Stripe from 'stripe'
 
 /**
  * Stripe Webhook Handler
- * Automatically processes mosque kickbacks when subscription payments succeed
+ * Automatically processes mosque kickbacks when subscription payments succeed (platform account).
+ * Nonprofit Stripe account: same URL; verified with STRIPE_WEBHOOK_SECRET_NONPROFIT — no Connect kickbacks.
  */
 export async function POST(request: NextRequest) {
   console.log('[Stripe Webhook] Received webhook')
@@ -21,23 +22,40 @@ export async function POST(request: NextRequest) {
   }
 
   let event: any
+  let stripeForApi: Stripe = getStripe()
+  let webhookSource: 'platform' | 'nonprofit' = 'platform'
 
   try {
-    // Verify webhook signature
-    event = stripe.webhooks.constructEvent(
+    event = stripeForApi.webhooks.constructEvent(
       body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET!,
     )
-    console.log('[Stripe Webhook] Event verified:', event.type)
-  } catch (err: any) {
-    console.error('[Stripe Webhook] Signature verification failed:', err.message)
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 })
+    console.log('[Stripe Webhook] Event verified (platform):', event.type)
+  } catch (primaryErr: any) {
+    const nonprofitSecret = process.env.STRIPE_WEBHOOK_SECRET_NONPROFIT
+    if (!nonprofitSecret || !process.env.STRIPE_SECRET_KEY_NONPROFIT) {
+      console.error('[Stripe Webhook] Signature verification failed:', primaryErr.message)
+      return new Response(`Webhook Error: ${primaryErr.message}`, { status: 400 })
+    }
+    try {
+      stripeForApi = getStripeNonprofit()
+      event = stripeForApi.webhooks.constructEvent(body, sig, nonprofitSecret)
+      webhookSource = 'nonprofit'
+      console.log('[Stripe Webhook] Event verified (nonprofit):', event.type)
+    } catch (secondaryErr: any) {
+      console.error(
+        '[Stripe Webhook] Signature verification failed (platform + nonprofit):',
+        primaryErr.message,
+        secondaryErr.message,
+      )
+      return new Response(`Webhook Error: ${secondaryErr.message}`, { status: 400 })
+    }
   }
 
   // Handle the event
   if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid') {
-    await handleInvoicePaymentSucceeded(event.data.object)
+    await handleInvoicePaymentSucceeded(stripeForApi, event.data.object, webhookSource)
   } else if (event.type === 'account.updated') {
     await handleAccountUpdated(event.data.object)
   } else {
@@ -51,7 +69,11 @@ export async function POST(request: NextRequest) {
  * Handle successful subscription payment
  * Automatically transfer 10% kickback to affiliated mosque
  */
-async function handleInvoicePaymentSucceeded(invoice: any) {
+async function handleInvoicePaymentSucceeded(
+  stripe: Stripe,
+  invoice: any,
+  webhookSource: 'platform' | 'nonprofit',
+) {
   console.log('[Stripe Webhook] Processing invoice payment:', invoice.id)
   console.log('[Stripe Webhook] Invoice subscription field:', invoice.subscription)
   console.log('[Stripe Webhook] Invoice lines:', invoice.lines?.data?.[0]?.subscription)
@@ -97,6 +119,13 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
     console.log('[Stripe Webhook] Found subscription:', subscription.type, subscription.id)
 
+    if (webhookSource === 'nonprofit') {
+      console.log(
+        '[Stripe Webhook] Nonprofit Stripe payout: funds stay in the nonprofit account. Skipping platform Connect transfers (mosque connected accounts belong to the main Stripe account).',
+      )
+      return
+    }
+
     // Get the affiliated mosque code based on subscription type
     let mosqueCode: number | null = null
     let entityName = ''
@@ -118,6 +147,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
         
         if (donationMosqueCode) {
           await processAdditionalDonation(
+            stripe,
             supabaseAdmin,
             subscription,
             entityName,
@@ -269,6 +299,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
  * Transfers donation amount to mosque's Stripe connected account
  */
 async function processAdditionalDonation(
+  stripe: Stripe,
   supabaseAdmin: any,
   subscription: any,
   entityName: string,

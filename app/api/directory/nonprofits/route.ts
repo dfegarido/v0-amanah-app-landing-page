@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse } from '@/lib/api-helpers'
+import { getSupabaseAdmin } from '@/lib/admin-helpers'
 
 export async function GET(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[directory/nonprofits] SUPABASE_SERVICE_ROLE_KEY is not set')
+      return errorResponse('Directory unavailable', 503)
+    }
+
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
@@ -12,11 +17,24 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * limit
 
-    // Build query
+    const supabase = getSupabaseAdmin()
+
     let query = supabase
       .from('nonprofits')
-      .select('*', { count: 'exact' })
+      .select(
+        `*,
+        subscription:subscriptions!inner(
+          id,
+          type,
+          app_status,
+          status
+        )`,
+        { count: 'exact' }
+      )
+      .eq('subscription.type', 'nonprofit')
       .eq('status', status)
+      .eq('subscription.app_status', 'active')
+      .eq('subscription.status', 'active')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 

@@ -65,6 +65,7 @@ import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { authenticatedGet, authenticatedPost } from "@/lib/api-client"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/lib/auth-context"
 
 // Define interfaces for clarity
 interface PushNotificationRequest {
@@ -149,6 +150,7 @@ const formatDate = (dateString: string | null | undefined): string => {
 export default function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { user, loading: authLoading } = useAuth()
   const { id } = use(params)
   const subscriptionId = id as string
 
@@ -435,24 +437,37 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
-  // Fetch available mosques and nonprofits for editing
+  // Fetch public directory orgs for donation targets (same as subscribe/donate flows).
   const fetchAvailableOrganizations = async () => {
     try {
-      // Fetch mosques
-      const mosquesResponse: any = await authenticatedGet('/api/mosques/approved')
+      const mosquesResponse: any = await authenticatedGet(
+        '/api/directory/mosques?limit=500&status=active'
+      )
       if (mosquesResponse.success && mosquesResponse.data?.mosques) {
-        setAvailableMosques(mosquesResponse.data.mosques)
+        const list = (mosquesResponse.data.mosques as any[]).filter((m) => m.status === 'active')
+        setAvailableMosques(
+          list.map((m) => ({
+            id: m.id,
+            name: m.name,
+            mosque_code: m.mosque_code,
+            status: m.status,
+            subscription_id: m.subscription_id,
+          }))
+        )
       }
 
-      // Fetch nonprofits
-      const { data: nonprofits } = await supabase
-        .from('nonprofits')
-        .select('id, name, subscription_id')
-        .eq('status', 'active')
-        .order('name', { ascending: true })
-      
-      if (nonprofits) {
-        setAvailableNonprofits(nonprofits)
+      const nonprofitsResponse: any = await authenticatedGet(
+        '/api/directory/nonprofits?limit=500&status=active'
+      )
+      if (nonprofitsResponse.success && nonprofitsResponse.data?.nonprofits) {
+        const list = (nonprofitsResponse.data.nonprofits as any[]).filter((n) => n.status === 'active')
+        setAvailableNonprofits(
+          list.map((n) => ({
+            id: n.id,
+            name: n.name,
+            subscription_id: n.subscription_id,
+          }))
+        )
       }
     } catch (error) {
       console.error('Error fetching organizations:', error)
@@ -464,8 +479,12 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     fetchSubscription()
     fetchPendingChangeRequests()
     fetchAdditionalDonations()
-    fetchAvailableOrganizations()
   }, [subscriptionId, toast])
+
+  useEffect(() => {
+    if (authLoading || !user) return
+    fetchAvailableOrganizations()
+  }, [subscriptionId, user, authLoading])
 
   // Reinitialize services and committee when entering edit mode
   useEffect(() => {

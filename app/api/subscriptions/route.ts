@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getServerSupabase } from '@/lib/auth'
 import { successResponse, errorResponse, requireAuth } from '@/lib/api-helpers'
+import { isSubscriptionBenefitActive } from '@/lib/promo-benefit'
 
 function getLocalDateISO(timeZone: string, date: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -16,12 +17,6 @@ function getLocalDateISO(timeZone: string, date: Date = new Date()): string {
 
   if (!year || !month || !day) return date.toISOString().split('T')[0]
   return `${year}-${month}-${day}`
-}
-
-function isPromoActiveForLocalDate(promo: any, localDateISO: string): boolean {
-  if (promo.use_start_date && promo.start_date && localDateISO < promo.start_date) return false
-  if (promo.use_end_date && promo.end_date && localDateISO > promo.end_date) return false
-  return true
 }
 
 // GET /api/subscriptions - Get user's subscriptions
@@ -156,7 +151,7 @@ export async function GET(request: NextRequest) {
       }
 
       const normalCents = redemption.normal_price_cents
-      const promoActive = Boolean(promo.enabled) && isPromoActiveForLocalDate(promo, localTodayISO)
+      const promoActive = isSubscriptionBenefitActive(redemption, promo, localTodayISO)
 
       let effectiveCents = normalCents
       if (promoActive) {
