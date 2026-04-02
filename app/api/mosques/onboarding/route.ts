@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { errorResponse } from '@/lib/api-helpers'
 import { getSupabaseAdmin } from '@/lib/admin-helpers'
 import { fetchLiveMosques, parseOnboardingMosqueCodes } from '@/lib/live-mosques'
+import { isMosquePickerOrderDisabled } from '@/lib/mosque-picker-order-flag'
 
 /**
  * GET /api/mosques/onboarding
@@ -11,6 +12,7 @@ import { fetchLiveMosques, parseOnboardingMosqueCodes } from '@/lib/live-mosques
  * - If admin_settings.onboarding_mosque_codes is non-empty, those codes are listed first (in order),
  *   then any other live mosques sorted by mosque_code.
  * - If onboarding_mosque_codes is [] or missing, returns all live mosques sorted by mosque_code.
+ * - When NEXT_PUBLIC_DISABLE_MOSQUE_PICKER_ORDER is set, curated order is ignored (always sort by code only).
  *
  * No auth required. Native apps use the production base URL; the site calls this route same-origin.
  */
@@ -31,14 +33,16 @@ export async function GET(request: NextRequest) {
     const byCode = new Map(live.map((m) => [m.mosque_code, m]))
 
     let curated: number[] = []
-    const { data: settings, error: settingsErr } = await supabase
-      .from('admin_settings')
-      .select('onboarding_mosque_codes')
-      .limit(1)
-      .maybeSingle()
+    if (!isMosquePickerOrderDisabled()) {
+      const { data: settings, error: settingsErr } = await supabase
+        .from('admin_settings')
+        .select('onboarding_mosque_codes')
+        .limit(1)
+        .maybeSingle()
 
-    if (!settingsErr && settings) {
-      curated = parseOnboardingMosqueCodes(settings.onboarding_mosque_codes)
+      if (!settingsErr && settings) {
+        curated = parseOnboardingMosqueCodes(settings.onboarding_mosque_codes)
+      }
     }
 
     const ordered: typeof live = []
@@ -72,6 +76,7 @@ export async function GET(request: NextRequest) {
       meta: {
         total: ordered.length,
         curated_first: curated.length > 0,
+        order_disabled: isMosquePickerOrderDisabled(),
       },
     }
 

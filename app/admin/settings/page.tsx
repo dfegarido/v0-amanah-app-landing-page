@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { authenticatedGet, authenticatedPut, authenticatedPost } from "@/lib/api-client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { isMosquePickerOrderDisabled } from "@/lib/mosque-picker-order-flag"
 
 interface AdminSettings {
   platform_name: string
@@ -125,26 +126,33 @@ export default function AdminSettingsPage() {
     setIsSaving(true)
     try {
       // Convert dollars to cents before saving to database
+      const orderOff = isMosquePickerOrderDisabled()
+
       const onboardingCodes: number[] = []
-      const seenCodes = new Set<number>()
-      for (const part of onboardingMosqueCodesText.split(/[\n,]+/)) {
-        const n = parseInt(part.trim(), 10)
-        if (!Number.isFinite(n) || seenCodes.has(n)) continue
-        seenCodes.add(n)
-        onboardingCodes.push(n)
+      if (!orderOff) {
+        const seenCodes = new Set<number>()
+        for (const part of onboardingMosqueCodesText.split(/[\n,]+/)) {
+          const n = parseInt(part.trim(), 10)
+          if (!Number.isFinite(n) || seenCodes.has(n)) continue
+          seenCodes.add(n)
+          onboardingCodes.push(n)
+        }
       }
 
-      const settingsToSave = {
+      const settingsToSave: Record<string, unknown> = {
         ...settings,
         pricing_mosque: Math.round(settings.pricing_mosque * 100),
         pricing_business: Math.round(settings.pricing_business * 100),
         pricing_coupon: Math.round(settings.pricing_coupon * 100),
         pricing_nonprofit: Math.round(settings.pricing_nonprofit * 100),
-        onboarding_mosque_codes: onboardingCodes,
+      }
+      delete settingsToSave.onboarding_mosque_codes
+      if (!orderOff) {
+        settingsToSave.onboarding_mosque_codes = onboardingCodes
       }
       
       console.log('Saving settings (converted to cents):', settingsToSave)
-      const response = await authenticatedPut('/api/admin/settings', settingsToSave) as any
+      const response = await authenticatedPut('/api/admin/settings', settingsToSave as AdminSettings & { onboarding_mosque_codes?: number[] }) as any
       
       if (response.success) {
         toast({
@@ -308,42 +316,44 @@ export default function AdminSettingsPage() {
           </TabsList>
 
           <TabsContent value="general" className="space-y-6">
-            <Card className="border-primary/40 ring-1 ring-primary/20">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Smartphone className="h-5 w-5 text-primary" />
-                  Mosque picker order
-                </CardTitle>
-                <CardDescription>
-                  Which mosque codes appear first in website and app dropdowns (subscribe, donate, add-ons). Only live,
-                  approved mosques are listed. Click Save Changes at the top when done.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-xs break-all">
-                  <span className="text-muted-foreground font-sans text-xs block mb-1">
-                    Public API (mobile apps; website uses this automatically)
-                  </span>
-                  <code className="text-foreground">
-                    {typeof window !== "undefined" ? window.location.origin : ""}/api/mosques/onboarding
-                  </code>
-                </div>
-                <div className="space-y-2">
-                  <Label>Mosque codes to show first (one per line or commas)</Label>
-                  <Textarea
-                    value={onboardingMosqueCodesText}
-                    onChange={(e) => setOnboardingMosqueCodesText(e.target.value)}
-                    placeholder={"12\n5\n18"}
-                    rows={6}
-                    className="font-mono text-sm min-h-[120px]"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty to show every live mosque, sorted by code. Requires DB migration 057
-                    (onboarding_mosque_codes column).
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            {!isMosquePickerOrderDisabled() && (
+              <Card className="border-primary/40 ring-1 ring-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Smartphone className="h-5 w-5 text-primary" />
+                    Mosque picker order
+                  </CardTitle>
+                  <CardDescription>
+                    Which mosque codes appear first in website and app dropdowns (subscribe, donate, add-ons). Only live,
+                    approved mosques are listed. Click Save Changes at the top when done.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-xs break-all">
+                    <span className="text-muted-foreground font-sans text-xs block mb-1">
+                      Public API (mobile apps; website uses this automatically)
+                    </span>
+                    <code className="text-foreground">
+                      {typeof window !== "undefined" ? window.location.origin : ""}/api/mosques/onboarding
+                    </code>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mosque codes to show first (one per line or commas)</Label>
+                    <Textarea
+                      value={onboardingMosqueCodesText}
+                      onChange={(e) => setOnboardingMosqueCodesText(e.target.value)}
+                      placeholder={"12\n5\n18"}
+                      rows={6}
+                      className="font-mono text-sm min-h-[120px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to show every live mosque, sorted by code. Requires DB migration 057
+                      (onboarding_mosque_codes column).
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
