@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
+import { fetchOnboardingMosquesClient } from "@/lib/onboarding-mosques-client"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
 import { loadStripe } from "@stripe/stripe-js"
@@ -210,6 +211,8 @@ export default function SubscribePage() {
   const [committeeMembers, setCommitteeMembers] = useState<{ name: string; title: string; photo: string; uploading?: boolean }[]>([{ name: '', title: '', photo: '' }])
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState<string | null>(null)
   const pendingSubscriptionIdRef = useRef<string | null>(null)
+  /** Prevents double /subscriptions/create from rapid double-clicks (duplicate Stripe charges). */
+  const submitInFlightRef = useRef(false)
 
   // Date picker state for coupons
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
@@ -468,9 +471,8 @@ export default function SubscribePage() {
     setIsMounted(true)
   }, [])
 
-  // Fetch public directory lists for affiliation / optional donations (not "my" mosques only).
-  // Wait for auth (same as donate page): authenticatedGet needs a session; running on first paint
-  // often throws before Supabase restores the session → empty lists.
+  // Fetch live mosque list (curated order via /api/mosques/onboarding) for affiliation / optional donations.
+  // Wait for auth: page is member-only; nonprofits still use authenticated directory API.
   useEffect(() => {
     if (authLoading) return
 
@@ -482,26 +484,17 @@ export default function SubscribePage() {
 
     const fetchMosques = async () => {
       try {
-        const response: any = await authenticatedGet(
-          '/api/directory/mosques?limit=500&status=active'
+        const list = await fetchOnboardingMosquesClient()
+        setAvailableMosques(
+          list.map((m) => ({
+            id: m.id,
+            name: m.name,
+            mosque_code: m.mosque_code,
+            status: "active" as const,
+          })),
         )
-        if (response.success && response.data?.mosques) {
-          const list = (response.data.mosques as any[]).filter((m) => m.status === 'active')
-          list.sort((a, b) => (Number(a.mosque_code) || 0) - (Number(b.mosque_code) || 0))
-          setAvailableMosques(
-            list.map((m) => ({
-              id: m.id,
-              name: m.name,
-              mosque_code: m.mosque_code,
-              status: m.status,
-              subscription_id: m.subscription_id,
-            }))
-          )
-        } else {
-          setAvailableMosques([])
-        }
       } catch (error) {
-        console.error('[Subscribe] Error fetching directory mosques:', error)
+        console.error("[Subscribe] Error fetching onboarding mosques:", error)
         setAvailableMosques([])
       }
     }
@@ -989,6 +982,10 @@ export default function SubscribePage() {
       return
     }
 
+    if (submitInFlightRef.current) {
+      return
+    }
+    submitInFlightRef.current = true
     setIsProcessing(true)
     
     try {
@@ -1025,6 +1022,45 @@ export default function SubscribePage() {
           })
           setIsProcessing(false)
           return
+        }
+      }
+
+      // If checkout was started then canceled (payment UI closed), we still have a pending Stripe sub.
+      // Resume the same subscription instead of creating another one (avoids double charge).
+      const existingPendingId = pendingSubscriptionIdRef.current || createdSubscriptionId
+      if (existingPendingId) {
+        try {
+          const resume: any = await authenticatedPost(
+            `/api/subscriptions/${existingPendingId}/resume-payment`,
+            {},
+          )
+          if (resume.success && resume.data?.clientSecret) {
+            setClientSecret(resume.data.clientSecret)
+            setConfirmationType(resume.data.confirmationType || 'payment_intent')
+            return
+          }
+        } catch (resumeErr: any) {
+          const status = resumeErr?.status as number | undefined
+          const msg = String(resumeErr?.message || '')
+          if (status === 410 || msg.includes('expired')) {
+            pendingSubscriptionIdRef.current = null
+            setCreatedSubscriptionId(null)
+          } else if (msg.includes('already active')) {
+            toast({
+              title: 'Subscription already active',
+              description: 'Open your member dashboard to manage your listing.',
+            })
+            return
+          } else {
+            toast({
+              title: 'Could not resume checkout',
+              description:
+                msg ||
+                'If you already completed payment, check your subscriptions. Do not pay again until you confirm.',
+              variant: 'destructive',
+            })
+            return
+          }
         }
       }
 
@@ -1124,6 +1160,7 @@ export default function SubscribePage() {
       })
     } finally {
       setIsProcessing(false)
+      submitInFlightRef.current = false
     }
   }
 

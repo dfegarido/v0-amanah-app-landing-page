@@ -19,7 +19,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/lib/auth-context"
-import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
+import { authenticatedPost } from "@/lib/api-client"
+import { fetchOnboardingMosquesClient } from "@/lib/onboarding-mosques-client"
 import { useToast } from "@/hooks/use-toast"
 import PaymentForm from "@/components/payment-form"
 
@@ -60,17 +61,12 @@ export default function DonatePage() {
     }
   }, [user, authLoading, router])
 
-  // Load mosques for selection
+  // Load mosques for selection (same curated live list as mobile / subscribe flow)
   useEffect(() => {
     const loadMosques = async () => {
       try {
-        const response: any = await authenticatedGet("/api/directory/mosques")
-        if (response.success && response.data) {
-          // The API returns { mosques: [], pagination: {} }
-          const mosquesData = response.data.mosques || []
-          // API already filters by status='active', but we filter again to be safe
-          setMosques(mosquesData.filter((m: any) => m.status === "active"))
-        }
+        const list = await fetchOnboardingMosquesClient()
+        setMosques(list.map((m) => ({ id: m.id, name: m.name, mosque_code: m.mosque_code })))
       } catch (error) {
         console.error("Error loading mosques:", error)
       } finally {

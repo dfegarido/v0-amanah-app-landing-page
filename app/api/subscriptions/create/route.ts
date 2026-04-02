@@ -213,9 +213,16 @@ export async function POST(request: NextRequest) {
     let stripePriceId: string | null = null
     let stripeSubscription: Stripe.Subscription | null = null
 
+    // Only select stripe_customer_id_nonprofit for nonprofit flows — avoids Postgres 42703 if migration 056
+    // has not been applied yet (business/mosque/coupon do not need that column).
+    const userColumns =
+      type === 'nonprofit'
+        ? 'stripe_customer_id, stripe_customer_id_nonprofit, email, name'
+        : 'stripe_customer_id, email, name'
+
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('stripe_customer_id, stripe_customer_id_nonprofit, email, name')
+      .select(userColumns)
       .eq('id', userId)
       .single()
 

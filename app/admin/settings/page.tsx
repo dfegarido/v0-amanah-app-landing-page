@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Mail, Bell, Shield, Home, DollarSign, Loader2 } from "lucide-react"
+import { ArrowLeft, Save, Mail, Bell, Shield, Home, DollarSign, Loader2, Smartphone } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { authenticatedGet, authenticatedPut, authenticatedPost } from "@/lib/api-client"
 import { useRouter } from "next/navigation"
@@ -31,6 +32,8 @@ interface AdminSettings {
   notify_subscription_cancelled: boolean
   notify_push_requests: boolean
   notify_member_updates: boolean
+  /** Present when loaded from API; not edited via main form fields */
+  onboarding_mosque_codes?: number[]
 }
 
 export default function AdminSettingsPage() {
@@ -39,6 +42,8 @@ export default function AdminSettingsPage() {
   const { user, loading: authLoading } = useAuth()
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  /** One mosque_code per line (or comma-separated). Empty = site + app show all live mosques by code. */
+  const [onboardingMosqueCodesText, setOnboardingMosqueCodesText] = useState("")
   const [settings, setSettings] = useState<AdminSettings>({
     platform_name: 'Amanah',
     support_email: 'support@amanah.app',
@@ -89,6 +94,10 @@ export default function AdminSettingsPage() {
             pricing_nonprofit: response.data.pricing_nonprofit / 100
           }
           setSettings(loadedSettings)
+          const codes = response.data.onboarding_mosque_codes
+          setOnboardingMosqueCodesText(
+            Array.isArray(codes) && codes.length > 0 ? codes.map((c: number) => String(c)).join("\n") : "",
+          )
           console.log('Settings loaded successfully (converted cents to dollars for UI)')
         }
       } catch (error: any) {
@@ -116,12 +125,22 @@ export default function AdminSettingsPage() {
     setIsSaving(true)
     try {
       // Convert dollars to cents before saving to database
+      const onboardingCodes: number[] = []
+      const seenCodes = new Set<number>()
+      for (const part of onboardingMosqueCodesText.split(/[\n,]+/)) {
+        const n = parseInt(part.trim(), 10)
+        if (!Number.isFinite(n) || seenCodes.has(n)) continue
+        seenCodes.add(n)
+        onboardingCodes.push(n)
+      }
+
       const settingsToSave = {
         ...settings,
         pricing_mosque: Math.round(settings.pricing_mosque * 100),
         pricing_business: Math.round(settings.pricing_business * 100),
         pricing_coupon: Math.round(settings.pricing_coupon * 100),
-        pricing_nonprofit: Math.round(settings.pricing_nonprofit * 100)
+        pricing_nonprofit: Math.round(settings.pricing_nonprofit * 100),
+        onboarding_mosque_codes: onboardingCodes,
       }
       
       console.log('Saving settings (converted to cents):', settingsToSave)
@@ -270,15 +289,62 @@ export default function AdminSettingsPage() {
 
       <main className="p-6 max-w-4xl mx-auto">
         <Tabs defaultValue="general" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="pricing">Pricing</TabsTrigger>
-            <TabsTrigger value="emails">Email Templates</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsList className="inline-flex h-auto min-h-9 w-full max-w-full flex-wrap justify-start gap-1 p-1">
+            <TabsTrigger value="general" className="shrink-0 flex-none">
+              General
+            </TabsTrigger>
+            <TabsTrigger value="pricing" className="shrink-0 flex-none">
+              Pricing
+            </TabsTrigger>
+            <TabsTrigger value="emails" className="shrink-0 flex-none">
+              Email Templates
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="shrink-0 flex-none">
+              Notifications
+            </TabsTrigger>
+            <TabsTrigger value="security" className="shrink-0 flex-none">
+              Security
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-6">
+            <Card className="border-primary/40 ring-1 ring-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                  Mosque picker order
+                </CardTitle>
+                <CardDescription>
+                  Which mosque codes appear first in website and app dropdowns (subscribe, donate, add-ons). Only live,
+                  approved mosques are listed. Click Save Changes at the top when done.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-md border border-border bg-muted/40 p-3 font-mono text-xs break-all">
+                  <span className="text-muted-foreground font-sans text-xs block mb-1">
+                    Public API (mobile apps; website uses this automatically)
+                  </span>
+                  <code className="text-foreground">
+                    {typeof window !== "undefined" ? window.location.origin : ""}/api/mosques/onboarding
+                  </code>
+                </div>
+                <div className="space-y-2">
+                  <Label>Mosque codes to show first (one per line or commas)</Label>
+                  <Textarea
+                    value={onboardingMosqueCodesText}
+                    onChange={(e) => setOnboardingMosqueCodesText(e.target.value)}
+                    placeholder={"12\n5\n18"}
+                    rows={6}
+                    className="font-mono text-sm min-h-[120px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to show every live mosque, sorted by code. Requires DB migration 057
+                    (onboarding_mosque_codes column).
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Platform Information</CardTitle>

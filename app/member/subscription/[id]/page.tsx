@@ -64,6 +64,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { authenticatedGet, authenticatedPost } from "@/lib/api-client"
+import { fetchOnboardingMosquesClient } from "@/lib/onboarding-mosques-client"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
 
@@ -440,21 +441,15 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   // Fetch public directory orgs for donation targets (same as subscribe/donate flows).
   const fetchAvailableOrganizations = async () => {
     try {
-      const mosquesResponse: any = await authenticatedGet(
-        '/api/directory/mosques?limit=500&status=active'
+      const mosqueList = await fetchOnboardingMosquesClient()
+      setAvailableMosques(
+        mosqueList.map((m) => ({
+          id: m.id,
+          name: m.name,
+          mosque_code: m.mosque_code,
+          status: "active" as const,
+        })),
       )
-      if (mosquesResponse.success && mosquesResponse.data?.mosques) {
-        const list = (mosquesResponse.data.mosques as any[]).filter((m) => m.status === 'active')
-        setAvailableMosques(
-          list.map((m) => ({
-            id: m.id,
-            name: m.name,
-            mosque_code: m.mosque_code,
-            status: m.status,
-            subscription_id: m.subscription_id,
-          }))
-        )
-      }
 
       const nonprofitsResponse: any = await authenticatedGet(
         '/api/directory/nonprofits?limit=500&status=active'

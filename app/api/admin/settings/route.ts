@@ -26,6 +26,9 @@ interface AdminSettings {
   notify_subscription_cancelled?: boolean
   notify_push_requests?: boolean
   notify_member_updates?: boolean
+
+  /** JSON array of mosque_code (integers) for onboarding/affiliation list order (web + mobile); [] = all live by code */
+  onboarding_mosque_codes?: number[]
 }
 
 // GET admin settings
@@ -70,11 +73,17 @@ export async function GET(request: NextRequest) {
         notify_payment_failed: true,
         notify_subscription_cancelled: true,
         notify_push_requests: true,
-        notify_member_updates: true
+        notify_member_updates: true,
+        onboarding_mosque_codes: [],
       })
     }
 
-    return successResponse(settings)
+    return successResponse({
+      ...settings,
+      onboarding_mosque_codes: Array.isArray(settings.onboarding_mosque_codes)
+        ? settings.onboarding_mosque_codes
+        : [],
+    })
   } catch (error: any) {
     console.error('Get settings error:', error)
     return errorResponse('Internal server error', 500)
