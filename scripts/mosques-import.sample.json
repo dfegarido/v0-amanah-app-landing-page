@@ -1,0 +1,20 @@
+{
+  "dry_run": true,
+  "mosques": [
+    {
+      "name": "Islamic Society of Central Jersey",
+      "address": "4145 US-1",
+      "city": "Monmouth Junction",
+      "state": "NJ",
+      "phone": "(732) 329-6995",
+      "website": "https://iscj.org"
+    },
+    {
+      "name": "Muslim Center of Greater Princeton",
+      "city": "West Windsor Township",
+      "state": "NJ",
+      "phone": "(609) 336-7602"
+    }
+  ]
+}
+

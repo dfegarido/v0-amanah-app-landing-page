@@ -176,35 +176,38 @@ export default function MemberDashboard() {
   // Fetch messages and unread count
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!user) return
-      
+      if (!user || loading) return
+
       try {
         setLoadingMessages(true)
         const response: any = await authenticatedGet('/api/messages?folder=all&page=1&limit=50')
         if (response.success && response.data) {
           setMessages(response.data.messages || [])
-          
+
           // Calculate unread count
           const unread = (response.data.messages || []).filter(
             (msg: any) => msg.recipient_id === user.id && !msg.read_at
           ).length
           setUnreadMessageCount(unread)
         }
-      } catch (error) {
-        console.error('Error fetching messages:', error)
+      } catch (error: any) {
+        // During initial session restore, a transient 401 can happen; avoid noisy console errors.
+        if (error?.status !== 401) {
+          console.error('Error fetching messages:', error)
+        }
       } finally {
         setLoadingMessages(false)
       }
     }
 
-    if (user) {
+    if (!loading && user) {
       fetchMessages()
     }
-  }, [user])
+  }, [user, loading])
 
   // Set up real-time subscription for new messages
   useEffect(() => {
-    if (!user) return
+    if (loading || !user) return
 
     const channel = supabase
       .channel('dashboard-messages')
@@ -228,7 +231,9 @@ export default function MemberDashboard() {
                 setUnreadMessageCount(unread)
               }
             })
-            .catch(console.error)
+            .catch((error: any) => {
+              if (error?.status !== 401) console.error(error)
+            })
         }
       )
       .on(
@@ -251,7 +256,9 @@ export default function MemberDashboard() {
                 setUnreadMessageCount(unread)
               }
             })
-            .catch(console.error)
+            .catch((error: any) => {
+              if (error?.status !== 401) console.error(error)
+            })
         }
       )
       .subscribe()
@@ -259,7 +266,7 @@ export default function MemberDashboard() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user])
+  }, [user, loading])
 
   // Fetch subscriptions
   useEffect(() => {

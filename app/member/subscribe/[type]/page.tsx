@@ -19,7 +19,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { authenticatedPost, authenticatedGet } from "@/lib/api-client"
-import { fetchOnboardingMosquesClient } from "@/lib/onboarding-mosques-client"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
 import { loadStripe } from "@stripe/stripe-js"
@@ -471,8 +470,8 @@ export default function SubscribePage() {
     setIsMounted(true)
   }, [])
 
-  // Fetch live mosque list (curated order via /api/mosques/onboarding) for affiliation / optional donations.
-  // Wait for auth: page is member-only; nonprofits still use authenticated directory API.
+  // Fetch full active mosque directory for affiliation / optional donations.
+  // This keeps "Add Business" mosque affiliation exhaustive and selectable.
   useEffect(() => {
     if (authLoading) return
 
@@ -484,17 +483,25 @@ export default function SubscribePage() {
 
     const fetchMosques = async () => {
       try {
-        const list = await fetchOnboardingMosquesClient()
-        setAvailableMosques(
-          list.map((m) => ({
+        const response: any = await authenticatedGet(
+          '/api/directory/mosques?limit=1000&include_all_active=1&include_all_statuses=1'
+        )
+        if (response.success && response.data?.mosques) {
+          const list = response.data.mosques as any[]
+          list.sort((a, b) => (Number(a.mosque_code) || 0) - (Number(b.mosque_code) || 0))
+          setAvailableMosques(
+            list.map((m) => ({
             id: m.id,
             name: m.name,
             mosque_code: m.mosque_code,
             status: "active" as const,
-          })),
-        )
+            })),
+          )
+        } else {
+          setAvailableMosques([])
+        }
       } catch (error) {
-        console.error("[Subscribe] Error fetching onboarding mosques:", error)
+        console.error("[Subscribe] Error fetching directory mosques:", error)
         setAvailableMosques([])
       }
     }

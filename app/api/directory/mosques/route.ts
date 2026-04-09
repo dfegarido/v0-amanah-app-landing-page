@@ -15,31 +15,45 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const mosqueCode = searchParams.get('mosque_code') || ''
     const status = searchParams.get('status') || 'active'
+    const includeAllStatuses = searchParams.get('include_all_statuses') === '1'
+    const includeAllActive = searchParams.get('include_all_active') === '1'
 
     const offset = (page - 1) * limit
 
     const supabase = getSupabaseAdmin()
 
-    // Service role + live subscription filter (same idea as public coupons API).
-    // Anon client RLS in server routes was unreliable for directory-shaped reads.
-    let query = supabase
-      .from('mosques')
-      .select(
-        `*,
-        subscription:subscriptions!inner(
-          id,
-          type,
-          app_status,
-          status
-        )`,
-        { count: 'exact' }
-      )
-      .eq('subscription.type', 'mosque')
-      .eq('status', status)
-      .eq('subscription.app_status', 'active')
-      .eq('subscription.status', 'active')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Default behavior keeps directory limited to "live" mosques (active + active subscription).
+    // For member affiliation dropdowns:
+    // - include_all_active=1 returns all active mosque entities
+    // - include_all_statuses=1 returns all mosque entities regardless of status
+    let query = includeAllActive
+      ? supabase
+          .from('mosques')
+          .select('*', { count: 'exact' })
+          .order('mosque_code', { ascending: true })
+          .range(offset, offset + limit - 1)
+      : supabase
+          .from('mosques')
+          .select(
+            `*,
+            subscription:subscriptions!inner(
+              id,
+              type,
+              app_status,
+              status
+            )`,
+            { count: 'exact' }
+          )
+          .eq('subscription.type', 'mosque')
+          .eq('status', status)
+          .eq('subscription.app_status', 'active')
+          .eq('subscription.status', 'active')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1)
+
+    if (includeAllActive && !includeAllStatuses) {
+      query = query.eq('status', status)
+    }
 
     // Apply filters
     if (search) {
