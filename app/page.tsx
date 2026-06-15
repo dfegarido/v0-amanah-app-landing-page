@@ -14,10 +14,12 @@ import {
   Plus,
   TrendingUp,
   ArrowRight,
+  LayoutGrid,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { LanguageToggle } from "@/components/language-toggle"
+import { BusinessDirectoryModal } from "@/components/business-directory-modal"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
 const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
@@ -71,6 +73,8 @@ const translations = {
     scheduleOnboarding: "Schedule onboarding",
     scheduleOnboardingDesc:
       "Prefer to talk with our team first? Book a time and we’ll help you get started.",
+    directory: "Directory",
+    directoryDesc: "Browse Muslim-owned business listings.",
   },
   ar: {
     heroTitle: "أمانة ليست مجرد تطبيق",
@@ -117,6 +121,8 @@ const translations = {
     scheduleOnboarding: "جدولة التسجيل",
     scheduleOnboardingDesc:
       "تفضّل التحدث مع فريقنا أولاً؟ احجز موعدًا وسنساعدك على البدء.",
+    directory: "الدليل",
+    directoryDesc: "تصفح قوائم الأعمال المملوكة للمسلمين.",
   },
 }
 
@@ -130,6 +136,7 @@ export default function AmanahLanding() {
     additionalDonations: 0
   })
   const [loadingFunding, setLoadingFunding] = useState(true)
+  const [directoryOpen, setDirectoryOpen] = useState(false)
   const t = translations[language]
   const isRTL = language === "ar"
 
@@ -163,6 +170,11 @@ export default function AmanahLanding() {
   return (
     <div className={`min-h-screen bg-background ${isRTL ? "rtl" : "ltr"}`} dir={isRTL ? "rtl" : "ltr"}>
       <LanguageToggle language={language} onToggle={toggleLanguage} />
+      <BusinessDirectoryModal
+        open={directoryOpen}
+        onOpenChange={setDirectoryOpen}
+        language={language}
+      />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-background to-secondary/30 px-4 py-20 md:py-32">
@@ -195,6 +207,16 @@ export default function AmanahLanding() {
                 <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer">
                   {t.downloadAndroid}
                 </a>
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                variant="secondary"
+                className="text-lg px-8 py-6 w-full sm:w-auto gap-2"
+                onClick={() => setDirectoryOpen(true)}
+              >
+                <LayoutGrid className="h-5 w-5" />
+                {t.directory}
               </Button>
             </div>
 
@@ -276,13 +298,25 @@ export default function AmanahLanding() {
               <p className="text-muted-foreground leading-relaxed">{t.connectMosqueDesc}</p>
             </Card>
 
-            {/* Feature 2 */}
-            <Card className="p-8 transition-all hover:shadow-lg">
+            {/* Feature 2 — opens external business directory */}
+            <Card
+              className="p-8 transition-all hover:shadow-lg cursor-pointer hover:border-primary/40"
+              role="button"
+              tabIndex={0}
+              onClick={() => setDirectoryOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setDirectoryOpen(true)
+                }
+              }}
+            >
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10">
                 <Store className="h-7 w-7 text-primary" />
               </div>
               <h4 className="mb-3 text-xl font-bold text-card-foreground">{t.businessDirectory}</h4>
               <p className="text-muted-foreground leading-relaxed">{t.businessDirectoryDesc}</p>
+              <p className="mt-4 text-sm font-medium text-primary">{t.directory} →</p>
             </Card>
 
             {/* Feature 3 */}

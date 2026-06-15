@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getBrowserSession } from './auth-session'
 
 /**
  * Helper function to make authenticated API requests
@@ -9,7 +9,7 @@ export async function authenticatedFetch(
   options: RequestInit = {}
 ): Promise<Response> {
   // Get the current session
-  const { data: { session } } = await supabase.auth.getSession()
+  const { session } = await getBrowserSession()
   
   if (!session?.access_token) {
     throw new Error('Not authenticated. Please login again.')

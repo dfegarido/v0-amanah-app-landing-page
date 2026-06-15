@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
+import { clearStaleLocalAuth, getBrowserSession } from './auth-session'
 
 export interface User {
   id: string
@@ -32,20 +33,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initAuth = async () => {
+      const { session, stale } = await getBrowserSession()
+      if (stale) {
+        setSession(null)
+        setUser(null)
+        setLoading(false)
+        return
+      }
       setSession(session)
       if (session) {
-        fetchUserProfile(session.user.id)
+        await fetchUserProfile(session.user.id)
       } else {
         setLoading(false)
       }
-    })
+    }
+
+    void initAuth()
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        await clearStaleLocalAuth()
+        setSession(null)
+        setUser(null)
+        setLoading(false)
+        return
+      }
       setSession(session)
       if (session) {
         fetchUserProfile(session.user.id)
