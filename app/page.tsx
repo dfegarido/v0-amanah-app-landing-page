@@ -313,7 +313,7 @@ export default function AmanahLanding() {
 
       <main>
       {/* ===================== HERO ===================== */}
-      <section className="relative overflow-hidden px-4 pt-24 pb-20 md:pt-28 md:pb-28">
+      <section className="relative isolate overflow-hidden px-4 pt-24 pb-20 md:pt-28 md:pb-28">
         {/* Ambient layers */}
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="am-aurora am-aurora-1 left-[-10%] top-[-10%] h-[420px] w-[420px] bg-primary/25" />
@@ -345,7 +345,7 @@ export default function AmanahLanding() {
               </span>
             </div>
 
-            <div className={`mb-6 flex justify-center ${isRTL ? "lg:justify-end" : "lg:justify-start"}`}>
+            <div className="mb-6 flex justify-center">
               <img
                 src="/images/logo-20amanaah.png"
                 alt="Amanah"
@@ -530,7 +530,7 @@ export default function AmanahLanding() {
       </section>
 
       {/* ===================== ABOUT / WHY ===================== */}
-      <section className="relative overflow-hidden px-4 py-24">
+      <section className="relative isolate overflow-hidden px-4 py-24">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <StarMotif className="am-spin-slow absolute -left-20 top-1/2 h-[520px] w-[520px] -translate-y-1/2 text-primary/[0.05]" />
         </div>
@@ -630,7 +630,7 @@ export default function AmanahLanding() {
       </section>
 
       {/* ===================== TRUST + GIVING ===================== */}
-      <section className="relative overflow-hidden px-4 py-24">
+      <section className="relative isolate overflow-hidden px-4 py-24">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-primary/[0.04] to-transparent" />
         <div className="mx-auto max-w-5xl">
           <div className="flex flex-col items-center text-center" data-reveal>
@@ -698,7 +698,7 @@ export default function AmanahLanding() {
       )}
 
       {/* ===================== PHONE SHOWCASE ===================== */}
-      <section className="relative overflow-hidden px-4 py-24">
+      <section className="relative isolate overflow-hidden px-4 py-24">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="am-aurora am-aurora-1 left-1/2 top-1/3 h-[400px] w-[400px] -translate-x-1/2 bg-primary/15" />
         </div>
@@ -798,8 +798,7 @@ export default function AmanahLanding() {
       </section>
 
       {/* ===================== CTA ===================== */}
-      <section className="relative overflow-hidden px-4 py-24">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-primary to-amber-600" />
+      <section className="relative isolate overflow-hidden bg-gradient-to-br from-primary to-amber-600 px-4 py-24">
         <div className="pointer-events-none absolute inset-0 -z-10 opacity-20">
           <StarMotif className="am-spin-slow absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 text-black" />
         </div>
