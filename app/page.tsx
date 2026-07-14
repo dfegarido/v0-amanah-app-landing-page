@@ -274,6 +274,14 @@ export default function AmanahLanding() {
     return () => mq.removeEventListener?.("change", onChange)
   }, [])
 
+  // Keep the document element in sync with the toggle. layout.tsx renders a static
+  // <html lang="en">, so without this the <html> element stays English/LTR even when
+  // the page is showing Arabic — screen readers and crawlers both get it wrong.
+  useEffect(() => {
+    document.documentElement.lang = language
+    document.documentElement.dir = isRTL ? "rtl" : "ltr"
+  }, [language, isRTL])
+
   // Scroll-reveal: add `.am-in` to [data-reveal] elements as they enter the viewport
   useEffect(() => {
     const root = rootRef.current
@@ -303,6 +311,7 @@ export default function AmanahLanding() {
       <LanguageToggle language={language} onToggle={toggleLanguage} />
       <BusinessDirectoryModal open={directoryOpen} onOpenChange={setDirectoryOpen} language={language} />
 
+      <main>
       {/* ===================== HERO ===================== */}
       <section className="relative overflow-hidden px-4 pt-24 pb-20 md:pt-28 md:pb-28">
         {/* Ambient layers */}
@@ -324,7 +333,7 @@ export default function AmanahLanding() {
 
         <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
           {/* Left: copy */}
-          <div className={`text-center lg:text-${isRTL ? "right" : "left"}`}>
+          <div className={`text-center ${isRTL ? "lg:text-right" : "lg:text-left"}`}>
             <div
               className={`mb-6 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 ${
                 isRTL ? "flex-row-reverse" : ""
@@ -336,8 +345,14 @@ export default function AmanahLanding() {
               </span>
             </div>
 
-            <div className="mb-6 flex justify-center lg:justify-start">
-              <img src="/images/logo-20amanaah.png" alt="Amanah Logo" className="h-20 w-auto drop-shadow-[0_0_24px_rgba(238,194,90,0.35)] md:h-24" />
+            <div className={`mb-6 flex justify-center ${isRTL ? "lg:justify-end" : "lg:justify-start"}`}>
+              <img
+                src="/images/logo-20amanaah.png"
+                alt="Amanah"
+                width={181}
+                height={227}
+                className="h-20 w-auto drop-shadow-[0_0_24px_rgba(238,194,90,0.35)] md:h-24"
+              />
             </div>
 
             <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-6xl lg:text-7xl">
@@ -372,7 +387,7 @@ export default function AmanahLanding() {
               <Button
                 size="lg"
                 variant="outline"
-                className="h-14 gap-3 rounded-xl border-border bg-transparent px-6 text-base font-semibold hover:border-primary/50 hover:bg-primary/5"
+                className="h-14 gap-3 rounded-xl border-border bg-transparent px-6 text-base font-semibold transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
                 asChild
               >
                 <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer">
@@ -502,6 +517,7 @@ export default function AmanahLanding() {
       {/* ===================== MISSION ===================== */}
       <section className="relative px-4 py-24">
         <div className="mx-auto max-w-4xl text-center" data-reveal>
+          <h2 className="sr-only">{t.missionTitle}</h2>
           <Eyebrow isRTL={isRTL} text={t.missionTitle} />
           <p className="mt-8 whitespace-pre-line text-start text-lg leading-relaxed text-muted-foreground md:text-xl">{t.missionText}</p>
           <div className="mx-auto mt-8 flex max-w-md items-center justify-center gap-4">
@@ -647,6 +663,10 @@ export default function AmanahLanding() {
       </section>
 
       {/* ===================== COMMUNITY IMPACT TRACKER ===================== */}
+      {/* Only rendered once funds have actually been given back. A "$0.00 given back"
+          counter undercuts the entire trust proposition, so the section stays hidden
+          until totalGivenBack > 0, then appears on its own. */}
+      {!loadingFunding && communityFunding.totalGivenBack > 0 && (
       <section className="border-y border-primary/20 bg-gradient-to-br from-primary/10 to-primary/[0.03] px-4 py-20">
         <div className="mx-auto max-w-4xl text-center" data-reveal>
           <div className="mb-4 inline-flex items-center gap-2">
@@ -661,11 +681,7 @@ export default function AmanahLanding() {
 
           <div className="am-gold-border mx-auto inline-block rounded-3xl px-12 py-10">
             <div className="am-gold-text text-5xl font-extrabold md:text-6xl">
-              {loadingFunding ? (
-                <span className="text-2xl text-muted-foreground">{isRTL ? "جارٍ التحميل..." : "Loading..."}</span>
-              ) : (
-                `$${communityFunding.totalGivenBack.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              )}
+              {`$${communityFunding.totalGivenBack.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </div>
             <p className="mt-3 font-semibold text-foreground/80">
               {isRTL ? "إجمالي الأموال المعادة للمجتمع المسلم" : "Given Back to Community"}
@@ -679,6 +695,7 @@ export default function AmanahLanding() {
           </p>
         </div>
       </section>
+      )}
 
       {/* ===================== PHONE SHOWCASE ===================== */}
       <section className="relative overflow-hidden px-4 py-24">
@@ -718,7 +735,7 @@ export default function AmanahLanding() {
                             <source src={p.video} type="video/mp4" />
                           </video>
                         ) : (
-                          <img src={p.src} alt={isRTL ? p.ar : p.en} className="h-full w-full object-cover" />
+                          <img src={p.src} alt={isRTL ? p.ar : p.en} width={600} height={1300} className="h-full w-full object-cover" />
                         )}
                         <div className="absolute left-1/2 top-2 z-10 h-4 w-20 -translate-x-1/2 rounded-full bg-black" />
                       </div>
@@ -974,11 +991,13 @@ export default function AmanahLanding() {
         </div>
       </section>
 
+      </main>
+
       {/* ===================== FOOTER ===================== */}
       <footer className="border-t border-border bg-secondary/20 px-4 py-14">
         <div className="mx-auto max-w-5xl">
           <div className="flex flex-col items-center gap-6 text-center">
-            <img src="/images/logo-20amanaah.png" alt="Amanah" className="h-14 w-auto opacity-90" />
+            <img src="/images/logo-20amanaah.png" alt="Amanah" width={181} height={227} className="h-14 w-auto opacity-90" />
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
               <a href={IOS_APP_URL} target="_blank" rel="noopener noreferrer" className="text-foreground/80 hover:text-primary">App Store</a>
               <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer" className="text-foreground/80 hover:text-primary">Google Play</a>
