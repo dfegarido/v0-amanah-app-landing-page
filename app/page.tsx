@@ -125,20 +125,6 @@ const translations = {
   },
 }
 
-/* Eight-point Islamic star motif — the page's signature ambient mark */
-function StarMotif({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 200 200" className={className} fill="none" aria-hidden="true">
-      <g stroke="currentColor" strokeWidth="1" opacity="0.9">
-        <rect x="40" y="40" width="120" height="120" rx="6" />
-        <rect x="40" y="40" width="120" height="120" rx="6" transform="rotate(45 100 100)" />
-        <circle cx="100" cy="100" r="84" />
-        <circle cx="100" cy="100" r="58" />
-      </g>
-    </svg>
-  )
-}
-
 function StarMark({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden="true">
@@ -328,7 +314,6 @@ export default function AmanahLanding() {
               WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent)",
             }}
           />
-          <StarMotif className="am-spin-slow absolute left-1/2 top-[44%] h-[680px] w-[680px] -translate-x-1/2 -translate-y-1/2 text-primary/[0.07]" />
         </div>
 
         <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
@@ -345,7 +330,7 @@ export default function AmanahLanding() {
               </span>
             </div>
 
-            <div className="mb-6 flex justify-center">
+            <div className="mx-auto mb-6 flex max-w-lg justify-center lg:mx-0">
               <img
                 src="/images/logo-20amanaah.png"
                 alt="Amanah"
@@ -531,9 +516,6 @@ export default function AmanahLanding() {
 
       {/* ===================== ABOUT / WHY ===================== */}
       <section className="relative isolate overflow-hidden px-4 py-24">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <StarMotif className="am-spin-slow absolute -left-20 top-1/2 h-[520px] w-[520px] -translate-y-1/2 text-primary/[0.05]" />
-        </div>
         <div className="mx-auto max-w-4xl" data-reveal>
           <div className="text-center">
             <Eyebrow isRTL={isRTL} text={isRTL ? "من نحن" : "About us"} />
@@ -785,7 +767,6 @@ export default function AmanahLanding() {
       <section className="px-4 py-20">
         <div className="mx-auto max-w-4xl" data-reveal>
           <div className="am-gold-border relative overflow-hidden rounded-3xl p-10 text-center md:p-14">
-            <StarMotif className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 text-primary/[0.06]" />
             <div className="mx-auto mb-6 font-serif text-6xl leading-none text-primary/40">&ldquo;</div>
             <h2 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">{t.hadithTitle}</h2>
             <blockquote className="mb-6">
@@ -799,9 +780,6 @@ export default function AmanahLanding() {
 
       {/* ===================== CTA ===================== */}
       <section className="relative isolate overflow-hidden bg-gradient-to-br from-primary to-amber-600 px-4 py-24">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-20">
-          <StarMotif className="am-spin-slow absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 text-black" />
-        </div>
         <div className="mx-auto max-w-4xl text-center" data-reveal>
           <h2 className="text-balance text-3xl font-extrabold text-primary-foreground md:text-5xl">{t.ctaTitle}</h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-primary-foreground/90">{t.ctaSubtitle}</p>
