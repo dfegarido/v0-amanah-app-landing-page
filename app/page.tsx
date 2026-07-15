@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { LanguageToggle } from "@/components/language-toggle"
-import { BusinessDirectoryModal } from "@/components/business-directory-modal"
+import { BUSINESS_DIRECTORY_URL } from "@/lib/business-directory-external"
 
 const IOS_APP_URL = "https://apps.apple.com/us/app/amanah/id6755299369"
 const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=com.mobileappcity.amanah"
@@ -217,7 +217,11 @@ export default function AmanahLanding() {
     additionalDonations: 0,
   })
   const [loadingFunding, setLoadingFunding] = useState(true)
-  const [directoryOpen, setDirectoryOpen] = useState(false)
+  const openDirectory = () => {
+    if (typeof window !== "undefined") {
+      window.open(BUSINESS_DIRECTORY_URL, "_blank", "noopener,noreferrer")
+    }
+  }
   const [reduceMotion, setReduceMotion] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const t = translations[language]
@@ -295,7 +299,6 @@ export default function AmanahLanding() {
       dir={isRTL ? "rtl" : "ltr"}
     >
       <LanguageToggle language={language} onToggle={toggleLanguage} />
-      <BusinessDirectoryModal open={directoryOpen} onOpenChange={setDirectoryOpen} language={language} />
 
       <main>
       {/* ===================== HERO ===================== */}
@@ -388,7 +391,7 @@ export default function AmanahLanding() {
                 size="lg"
                 variant="secondary"
                 className="h-14 gap-2 rounded-xl px-6 text-base font-semibold"
-                onClick={() => setDirectoryOpen(true)}
+                onClick={() => openDirectory()}
               >
                 <LayoutGrid className="h-5 w-5" />
                 {isRTL ? "تصفّح الدليل" : "Browse Directory"}
@@ -578,13 +581,13 @@ export default function AmanahLanding() {
                   style={{ transitionDelay: `${(i % 3) * 90}ms` }}
                   role={interactive ? "button" : undefined}
                   tabIndex={interactive ? 0 : undefined}
-                  onClick={interactive ? () => setDirectoryOpen(true) : undefined}
+                  onClick={interactive ? () => openDirectory() : undefined}
                   onKeyDown={
                     interactive
                       ? (e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault()
-                            setDirectoryOpen(true)
+                            openDirectory()
                           }
                         }
                       : undefined
