@@ -29,7 +29,7 @@ const translations = {
     heroSubtitle: "It's a movement to rebuild trust, inspire excellence, and uplift communities through innovation.",
     downloadIOS: "Download for iOS",
     downloadAndroid: "Download for Android",
-    missionTitle: "Mission Statement",
+    missionTitle: "Ownership & Trademark",
     missionText:
       "Amanah US Inc. (EIN 41-3030153) is dedicated to uplifting and certifying honest Muslim businesses across America by upholding the teachings of Islam in commerce, character, and integrity. Through the Amanah Certification Program, the organization evaluates and approves businesses that demonstrate honesty, fairness, and ethical conduct in accordance with Islamic principles. Certified participants display the Amanah mark as a symbol of trust and accountability, helping consumers identify enterprises that meet these standards.\n\nBeyond certification, Amanah US Inc. also supports education by providing Muslim youth with interest-free loans, scholarships, and mentorship to help them succeed academically and professionally. Together, these efforts strengthen our community, promote Islamic education, and raise a generation that sees Islam practiced with excellence in business and takes pride in its Muslim identity.",
     missionCTA: "Join the movement. Build trust. Empower your community.",
@@ -80,7 +80,7 @@ const translations = {
     heroSubtitle: "إنها حركة لإعادة بناء الثقة، وإلهام التميُّز، ورفع المجتمعات من خلال التخطيط الجمعي الخلّاق.",
     downloadIOS: "تحميل لـ iOS",
     downloadAndroid: "تحميل لـ Android",
-    missionTitle: "بيان المهمة",
+    missionTitle: "الملكية والعلامة التجارية",
     missionText:
       "تكرّس مؤسسة أمانة الأمريكية (Amanah US Inc.) — رقم التعريف الضريبي 41-3030153 — جهودها للارتقاء بالأعمال الإسلامية النزيهة في جميع أنحاء أمريكا واعتمادها، من خلال التمسّك بتعاليم الإسلام في التجارة والأخلاق والنزاهة. ومن خلال برنامج أمانة للاعتماد، تقوم المؤسسة بتقييم واعتماد الأعمال التي تُظهر الصدق والإنصاف والسلوك الأخلاقي وفقًا للمبادئ الإسلامية. ويعرض المشاركون المعتمدون علامة أمانة رمزًا للثقة والمساءلة، مما يساعد المستهلكين على تمييز المنشآت التي تستوفي هذه المعايير.\n\nوإلى جانب الاعتماد، تدعم مؤسسة أمانة الأمريكية التعليمَ أيضًا عبر تزويد الشباب المسلم بقروض حسنة بلا فوائد، ومِنح دراسية، وإرشاد ومتابعة لمساعدتهم على النجاح أكاديميًا ومهنيًا. وتعمل هذه الجهود مجتمعةً على تقوية مجتمعنا، وتعزيز التعليم الإسلامي، وتنشئة جيل يرى الإسلام مُطبَّقًا بإتقان في مجال الأعمال ويعتزّ بهويته الإسلامية.",
     missionCTA: "انضم إلى الحركة. ابنِ الثقة. مكّن مجتمعك.",
@@ -204,6 +204,136 @@ function CountUp({ value, suffix = "", className = "" }: { value: number; suffix
       {n}
       {suffix}
     </span>
+  )
+}
+
+type OwnershipBlock =
+  | { k: "p"; t: string }
+  | { k: "h"; t: string }
+  | { k: "note"; t: string }
+  | { k: "list"; lead: string; items: string[] }
+  | { k: "contact"; rows: { label: string; org: string; email: string }[] }
+
+const OWNERSHIP_CONTENT: Record<"en" | "ar", { intro: string; blocks: OwnershipBlock[] }> = {
+  en: {
+    intro:
+      "The Amanah Logo, Amanah Certification Seal, and all related brand elements are the exclusive property of Amanah US Inc. (EIN 41-3030153), a registered nonprofit organization in the United States.",
+    blocks: [
+      { k: "list", lead: "Amanah US Inc. is solely responsible for:", items: ["The Amanah mission", "Certification standards", "Community programs", "Youth and scholarship initiatives", "Masjid support", "All nonprofit activities associated with the Amanah brand"] },
+      { k: "list", lead: "All rights to the logo, certification seal, and brand identity are reserved for the purpose of:", items: ["Promoting honesty and integrity in Muslim business", "Certifying businesses based on Islamic ethical principles", "Supporting masajid, youth programs, scholarships, and community development"] },
+      { k: "note", t: "Unauthorized use of the Amanah Logo or Certification Seal is strictly prohibited." },
+      { k: "h", t: "Technology & Platform Management" },
+      { k: "p", t: "While the Amanah brand and certification program belong entirely to Amanah US Inc., the Amanah Biz platform and app are owned and operated by NajBee LLC." },
+      { k: "list", lead: "NajBee LLC provides:", items: ["IT infrastructure", "Platform development", "Website and app management", "Technical support", "System security and maintenance"] },
+      { k: "p", t: "This structure allows Amanah US Inc. to stay fully focused on serving the community, while NajBee LLC ensures the technology behind Amanah Biz is reliable, secure, and scalable." },
+      { k: "note", t: "Together, they make the Amanah movement possible." },
+      { k: "h", t: "Purpose of This Structure" },
+      { k: "list", lead: "This partnership ensures:", items: ["The nonprofit remains mission-driven", "The technology remains modern and professionally managed", "Donations and community funds are protected", "The directory and certification system run smoothly", "Amanah US can focus on Mosque, youth, and community support", "NajBee can focus on building and maintaining the platform"] },
+      { k: "p", t: "This separation of roles is intentional, transparent, and designed to protect the integrity of the Amanah brand." },
+      { k: "h", t: "Use of the Amanah Certification Seal" },
+      { k: "list", lead: "The Amanah Certification Seal may only be used by businesses that:", items: ["Have been approved by Amanah US Inc.", "Meet Islamic ethical business standards", "Maintain honesty, transparency, and integrity in their operations"] },
+      { k: "list", lead: "Any misuse, misrepresentation, or unauthorized display of the seal may result in:", items: ["Removal from the directory", "Revocation of certification", "Legal action if necessary"] },
+      { k: "h", t: "Use of the Amanah Biz Platform" },
+      { k: "list", lead: "By using the Amanah Biz platform, businesses agree to:", items: ["Provide accurate information", "Uphold Islamic business ethics", "Avoid fraudulent or deceptive practices", "Respect the integrity of the Amanah brand"] },
+      { k: "p", t: "NajBee LLC maintains the right to suspend or remove listings that violate these principles." },
+      { k: "h", t: "Intellectual Property Rights" },
+      { k: "p", t: "All content on the Amanah website and app — including text, graphics, logos, icons, and software — is protected by copyright and trademark laws." },
+      { k: "list", lead: "You may not:", items: ["Copy", "Reproduce", "Modify", "Distribute", "Display", "Use the Amanah brand for commercial purposes"] },
+      { k: "p", t: "… without written permission from Amanah US Inc." },
+      { k: "h", t: "Contact Information" },
+      { k: "contact", rows: [{ label: "For trademark, certification, or legal inquiries:", org: "Amanah US Inc.", email: "info@amanahus.org" }, { label: "For technical or platform-related inquiries:", org: "NajBee LLC", email: "info@amanahbiz.com" }] },
+    ],
+  },
+  ar: {
+    intro:
+      "شعار أمانة، وخاتم اعتماد أمانة، وجميع عناصر العلامة التجارية ذات الصلة هي ملكية حصرية لمؤسسة أمانة الأمريكية (Amanah US Inc.) — رقم التعريف الضريبي 41-3030153 — وهي منظمة غير ربحية مسجّلة في الولايات المتحدة.",
+    blocks: [
+      { k: "list", lead: "مؤسسة أمانة الأمريكية هي المسؤولة الوحيدة عن:", items: ["رسالة أمانة", "معايير الاعتماد", "البرامج المجتمعية", "مبادرات الشباب والمِنَح الدراسية", "دعم المساجد", "جميع الأنشطة غير الربحية المرتبطة بعلامة أمانة"] },
+      { k: "list", lead: "جميع الحقوق المتعلقة بالشعار وخاتم الاعتماد وهوية العلامة التجارية محفوظة لأغراض:", items: ["تعزيز الصدق والنزاهة في الأعمال الإسلامية", "اعتماد الأعمال بناءً على المبادئ الأخلاقية الإسلامية", "دعم المساجد وبرامج الشباب والمِنَح الدراسية والتنمية المجتمعية"] },
+      { k: "note", t: "يُمنع منعًا باتًا الاستخدام غير المصرّح به لشعار أمانة أو خاتم الاعتماد." },
+      { k: "h", t: "التقنية وإدارة المنصّة" },
+      { k: "p", t: "بينما تعود علامة أمانة وبرنامج الاعتماد بالكامل إلى مؤسسة أمانة الأمريكية، فإن منصّة أمانة بيز (Amanah Biz) وتطبيقها مملوكان ومُشغَّلان من قِبل شركة NajBee LLC." },
+      { k: "list", lead: "توفّر شركة NajBee LLC ما يلي:", items: ["البنية التحتية لتقنية المعلومات", "تطوير المنصّة", "إدارة الموقع والتطبيق", "الدعم الفني", "أمن النظام وصيانته"] },
+      { k: "p", t: "يتيح هذا الهيكل لمؤسسة أمانة الأمريكية التركيز الكامل على خدمة المجتمع، بينما تضمن شركة NajBee LLC أن تكون التقنية التي تقف خلف أمانة بيز موثوقة وآمنة وقابلة للتوسّع." },
+      { k: "note", t: "معًا، يجعلان حركة أمانة ممكنة." },
+      { k: "h", t: "الغرض من هذا الهيكل" },
+      { k: "list", lead: "تضمن هذه الشراكة ما يلي:", items: ["بقاء المنظمة غير الربحية مدفوعة برسالتها", "بقاء التقنية حديثة ومُدارة باحترافية", "حماية التبرعات وأموال المجتمع", "تشغيل الدليل ونظام الاعتماد بسلاسة", "تمكين أمانة الأمريكية من التركيز على دعم المساجد والشباب والمجتمع", "تمكين NajBee من التركيز على بناء المنصّة وصيانتها"] },
+      { k: "p", t: "إن فصل الأدوار هذا مقصود وشفّاف ومُصمَّم لحماية نزاهة علامة أمانة." },
+      { k: "h", t: "استخدام خاتم اعتماد أمانة" },
+      { k: "list", lead: "لا يجوز استخدام خاتم اعتماد أمانة إلا للأعمال التي:", items: ["حصلت على موافقة مؤسسة أمانة الأمريكية", "تستوفي معايير الأعمال الأخلاقية الإسلامية", "تحافظ على الصدق والشفافية والنزاهة في عملياتها"] },
+      { k: "list", lead: "قد يؤدي أي سوء استخدام أو تحريف أو عرض غير مصرّح به للخاتم إلى:", items: ["الإزالة من الدليل", "إلغاء الاعتماد", "اتخاذ إجراءات قانونية عند الضرورة"] },
+      { k: "h", t: "استخدام منصّة أمانة بيز" },
+      { k: "list", lead: "باستخدام منصّة أمانة بيز، توافق الأعمال على:", items: ["تقديم معلومات دقيقة", "الالتزام بأخلاقيات الأعمال الإسلامية", "تجنّب الممارسات الاحتيالية أو المُضلِّلة", "احترام نزاهة علامة أمانة"] },
+      { k: "p", t: "تحتفظ شركة NajBee LLC بالحق في تعليق أو إزالة القوائم التي تخالف هذه المبادئ." },
+      { k: "h", t: "حقوق الملكية الفكرية" },
+      { k: "p", t: "جميع المحتويات الموجودة على موقع أمانة وتطبيقها — بما في ذلك النصوص والرسومات والشعارات والأيقونات والبرمجيات — محمية بموجب قوانين حقوق النشر والعلامات التجارية." },
+      { k: "list", lead: "لا يجوز لك:", items: ["النسخ", "إعادة الإنتاج", "التعديل", "التوزيع", "العرض", "استخدام علامة أمانة لأغراض تجارية"] },
+      { k: "p", t: "… دون إذن كتابي من مؤسسة أمانة الأمريكية." },
+      { k: "h", t: "معلومات التواصل" },
+      { k: "contact", rows: [{ label: "للاستفسارات المتعلقة بالعلامة التجارية أو الاعتماد أو الشؤون القانونية:", org: "مؤسسة أمانة الأمريكية (Amanah US Inc.)", email: "info@amanahus.org" }, { label: "للاستفسارات التقنية أو المتعلقة بالمنصّة:", org: "NajBee LLC", email: "info@amanahbiz.com" }] },
+    ],
+  },
+}
+
+function OwnershipTrademark({ isRTL }: { isRTL: boolean }) {
+  const c = OWNERSHIP_CONTENT[isRTL ? "ar" : "en"]
+  return (
+    <div className="mt-10 space-y-6 text-start">
+      <p className="text-lg leading-relaxed text-muted-foreground md:text-xl">{c.intro}</p>
+      {c.blocks.map((b, i) => {
+        if (b.k === "h") {
+          return (
+            <h3 key={i} className="pt-4 text-xl font-bold text-primary md:text-2xl">
+              {b.t}
+            </h3>
+          )
+        }
+        if (b.k === "p") {
+          return (
+            <p key={i} className="leading-relaxed text-muted-foreground">
+              {b.t}
+            </p>
+          )
+        }
+        if (b.k === "note") {
+          return (
+            <p key={i} className="border-s-2 border-primary/60 ps-4 font-semibold text-foreground">
+              {b.t}
+            </p>
+          )
+        }
+        if (b.k === "list") {
+          return (
+            <div key={i} className="space-y-2">
+              <p className="font-medium text-foreground">{b.lead}</p>
+              <ul className="space-y-1.5">
+                {b.items.map((it, j) => (
+                  <li key={j} className="flex gap-2.5 text-muted-foreground">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <span className="leading-relaxed">{it}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        }
+        return (
+          <div key={i} className="mt-2 space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-6">
+            {b.rows.map((r, j) => (
+              <div key={j} className="space-y-1">
+                <p className="text-sm text-muted-foreground">{r.label}</p>
+                <p className="font-semibold text-foreground">
+                  {r.org} —{" "}
+                  <a href={`mailto:${r.email}`} className="text-primary hover:underline">
+                    {r.email}
+                  </a>
+                </p>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -502,18 +632,14 @@ export default function AmanahLanding() {
         </div>
       </section>
 
-      {/* ===================== MISSION ===================== */}
+      {/* ===================== OWNERSHIP & TRADEMARK ===================== */}
       <section className="relative px-4 py-24">
-        <div className="mx-auto max-w-4xl text-center" data-reveal>
-          <h2 className="sr-only">{t.missionTitle}</h2>
-          <Eyebrow isRTL={isRTL} text={t.missionTitle} />
-          <p className="mt-8 whitespace-pre-line text-start text-lg leading-relaxed text-muted-foreground md:text-xl">{t.missionText}</p>
-          <div className="mx-auto mt-8 flex max-w-md items-center justify-center gap-4">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-primary/40" />
-            <StarMark className="h-5 w-5 text-primary" />
-            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-primary/40" />
+        <div className="mx-auto max-w-4xl" data-reveal>
+          <div className="text-center">
+            <h2 className="sr-only">{t.missionTitle}</h2>
+            <Eyebrow isRTL={isRTL} text={t.missionTitle} />
           </div>
-          <p className="mt-6 text-lg font-bold text-primary md:text-xl">{t.missionCTA}</p>
+          <OwnershipTrademark isRTL={isRTL} />
         </div>
       </section>
 
