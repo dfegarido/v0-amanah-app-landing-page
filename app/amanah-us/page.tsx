@@ -116,6 +116,28 @@ export default function AmanahUsPage() {
         </div>
       </section>
 
+      {/* Mission Statement Section */}
+      <section className="container mx-auto px-4 py-16 md:py-24">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-foreground md:text-4xl mb-4">
+              Mission Statement
+            </h2>
+            <div className="w-20 h-1 bg-amber-500 mx-auto mb-6"></div>
+          </div>
+          <Card className="border-border shadow-lg">
+            <CardContent className="p-8 md:p-12 space-y-6">
+              <p className="text-muted-foreground leading-relaxed md:text-lg">
+                Amanah US Inc. (EIN 41-3030153) is dedicated to uplifting and certifying honest Muslim businesses across America by upholding the teachings of Islam in commerce, character, and integrity. Through the Amanah Certification Program, the organization evaluates and approves businesses that demonstrate honesty, fairness, and ethical conduct in accordance with Islamic principles. Certified participants display the Amanah mark as a symbol of trust and accountability, helping consumers identify enterprises that meet these standards.
+              </p>
+              <p className="text-muted-foreground leading-relaxed md:text-lg">
+                Beyond certification, Amanah US Inc. also supports education by providing Muslim youth with interest-free loans, scholarships, and mentorship to help them succeed academically and professionally. Together, these efforts strengthen our community, promote Islamic education, and raise a generation that sees Islam practiced with excellence in business and takes pride in its Muslim identity.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
       {/* What Is Amanah US Section */}
       <section className="container mx-auto px-4 py-16 md:py-24">
         <div className="mx-auto max-w-4xl">
